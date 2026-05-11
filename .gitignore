@@ -13,8 +13,8 @@ position.txt
 halshow.preferences
 autosave.halscope
 
-# Not referenced by ethercat_mill.ini (duplicate of probe_basic/user_dro_display)
-user_dro_display/
+# Duplicate tree at repo root only (INI uses probe_basic/user_dro_display/)
+/user_dro_display/
 
 # Orphan file in repo root (real table is probe_basic/tool.tbl)
 /tool.tbl
