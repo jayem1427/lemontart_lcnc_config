@@ -1,0 +1,9 @@
+G21          ; Set units to mm
+G90          ; Absolute positioning
+G0 X0        ; Start at zero
+
+G1 X15 F30000 ; Move to 15mm at 1000mm/min
+G4 P0.5      ; Dwell 0.5s
+G1 X0 F30000  ; Return to 0
+
+M2           ; End program

@@ -1,0 +1,182 @@
+# =========================================================
+# 1. CORE MOTION CONTROLLER
+# =========================================================
+loadrt [KINS]KINEMATICS
+loadrt [EMCMOT]EMCMOT servo_period_nsec=[EMCMOT]SERVO_PERIOD num_joints=[KINS]JOINTS
+
+# =========================================================
+# 2. ETHERCAT DRIVER & HELPERS
+# =========================================================
+# lcec_conf is loaded in ethercat_loadusr.hal (# NOTWOPASS, first HALFILE in ini).
+loadrt lcec
+loadrt cia402 count=4
+loadrt conv_float_s32 count=4
+loadrt conv_s32_float count=4
+loadrt mult2 count=12
+loadrt ilowpass count=4
+loadrt limit1 count=4
+loadrt div2 count=4
+loadrt not count=1
+loadrt and2 count=1
+loadrt near count=1
+
+# =========================================================
+# 3. THREAD EXECUTION ORDER (Read -> Compute -> Write)
+# =========================================================
+addf lcec.read-all servo-thread
+addf cia402.0.read-all servo-thread
+addf cia402.1.read-all servo-thread
+addf cia402.2.read-all servo-thread
+addf cia402.3.read-all servo-thread
+
+# Convert Feedback & Read Inputs
+addf conv-s32-float.0 servo-thread
+addf conv-s32-float.1 servo-thread
+addf conv-s32-float.2 servo-thread
+addf conv-s32-float.3 servo-thread
+addf div2.0 servo-thread
+addf div2.1 servo-thread
+addf div2.2 servo-thread
+addf div2.3 servo-thread
+addf and2.0 servo-thread
+setp and2.0.in0 0
+setp and2.0.in1 0
+
+# Pendant jog conditioning: limit scale, smooth counts
+addf limit1.0 servo-thread
+addf mult2.8 servo-thread
+addf ilowpass.0 servo-thread
+addf limit1.1 servo-thread
+addf mult2.9 servo-thread
+addf ilowpass.1 servo-thread
+addf limit1.2 servo-thread
+addf mult2.10 servo-thread
+addf ilowpass.2 servo-thread
+addf limit1.3 servo-thread
+addf mult2.11 servo-thread
+addf ilowpass.3 servo-thread
+
+# Core Motion Compute
+addf motion-command-handler servo-thread
+addf motion-controller servo-thread
+
+# Convert Command (Inches -> Counts)
+addf mult2.0 servo-thread
+addf mult2.1 servo-thread
+addf mult2.2 servo-thread
+addf mult2.3 servo-thread
+addf conv-float-s32.0 servo-thread
+addf conv-float-s32.1 servo-thread
+addf conv-float-s32.2 servo-thread
+addf conv-float-s32.3 servo-thread
+
+# Write to Drives
+addf cia402.0.write-all servo-thread
+addf cia402.1.write-all servo-thread
+addf cia402.2.write-all servo-thread
+addf cia402.3.write-all servo-thread
+addf lcec.write-all servo-thread
+
+# =========================================================
+# 4. HARDWARE PIN ROUTING & STATE MACHINES
+# =========================================================
+
+# --- X AXIS (Slave 0) ---
+setp mult2.0.in1 [JOINT_0]SCALE
+net x-pos-float-cmd joint.0.motor-pos-cmd => mult2.0.in0
+net x-pos-scaled-cmd mult2.0.out => conv-float-s32.0.in
+net x-pos-s32-cmd   conv-float-s32.0.out  => lcec.0.0.pos-cmd
+
+setp div2.0.in1 [JOINT_0]SCALE
+net x-pos-s32-fb    lcec.0.0.pos-fb       => conv-s32-float.0.in
+net x-pos-float-fb-raw conv-s32-float.0.out => div2.0.in0
+net x-pos-float-fb  div2.0.out  => joint.0.motor-pos-fb
+
+net x-status-word   lcec.0.0.status-word  => cia402.0.statusword
+net x-ctrl-word     cia402.0.controlword  => lcec.0.0.ctrl-word
+net x-amp-enable    joint.0.amp-enable-out => cia402.0.enable
+# If the machine faults at enable with no drive alarm, comment these four drv-fault nets out.
+net x-amp-fault     cia402.0.drv-fault => joint.0.amp-fault-in
+
+# --- Y AXIS (Slave 1) ---
+setp mult2.1.in1 [JOINT_1]SCALE
+net y-pos-float-cmd joint.1.motor-pos-cmd => mult2.1.in0
+net y-pos-scaled-cmd mult2.1.out => conv-float-s32.1.in
+net y-pos-s32-cmd   conv-float-s32.1.out  => lcec.0.1.pos-cmd
+
+setp div2.1.in1 [JOINT_1]SCALE
+net y-pos-s32-fb    lcec.0.1.pos-fb       => conv-s32-float.1.in
+net y-pos-float-fb-raw conv-s32-float.1.out => div2.1.in0
+net y-pos-float-fb  div2.1.out  => joint.1.motor-pos-fb
+
+net y-status-word   lcec.0.1.status-word  => cia402.1.statusword
+net y-ctrl-word     cia402.1.controlword  => lcec.0.1.ctrl-word
+net y-amp-enable    joint.1.amp-enable-out => cia402.1.enable
+net y-amp-fault     cia402.1.drv-fault => joint.1.amp-fault-in
+
+# --- Z AXIS (Slave 2) ---
+setp mult2.2.in1 [JOINT_2]SCALE
+net z-pos-float-cmd joint.2.motor-pos-cmd => mult2.2.in0
+net z-pos-scaled-cmd mult2.2.out => conv-float-s32.2.in
+net z-pos-s32-cmd   conv-float-s32.2.out  => lcec.0.2.pos-cmd
+
+setp div2.2.in1 [JOINT_2]SCALE
+net z-pos-s32-fb    lcec.0.2.pos-fb       => conv-s32-float.2.in
+net z-pos-float-fb-raw conv-s32-float.2.out => div2.2.in0
+net z-pos-float-fb  div2.2.out  => joint.2.motor-pos-fb
+
+net z-status-word   lcec.0.2.status-word  => cia402.2.statusword
+net z-ctrl-word     cia402.2.controlword  => lcec.0.2.ctrl-word
+net z-amp-enable    joint.2.amp-enable-out => cia402.2.enable
+net z-amp-fault     cia402.2.drv-fault => joint.2.amp-fault-in
+
+# --- A AXIS (Slave 3) ---
+setp mult2.3.in1 [JOINT_3]SCALE
+net a-pos-float-cmd joint.3.motor-pos-cmd => mult2.3.in0
+net a-pos-scaled-cmd mult2.3.out => conv-float-s32.3.in
+net a-pos-s32-cmd   conv-float-s32.3.out  => lcec.0.3.pos-cmd
+
+setp div2.3.in1 [JOINT_3]SCALE
+net a-pos-s32-fb    lcec.0.3.pos-fb       => conv-s32-float.3.in
+net a-pos-float-fb-raw conv-s32-float.3.out => div2.3.in0
+net a-pos-float-fb  div2.3.out  => joint.3.motor-pos-fb
+
+net a-status-word   lcec.0.3.status-word  => cia402.3.statusword
+net a-ctrl-word     cia402.3.controlword  => lcec.0.3.ctrl-word
+net a-amp-enable    joint.3.amp-enable-out => cia402.3.enable
+net a-amp-fault     cia402.3.drv-fault => joint.3.amp-fault-in
+
+# =========================================================
+# 5. TOOL PREP / MANUAL TOOL CHANGE (Probe Basic postgui)
+# =========================================================
+# The dummy estop loop is removed because we use a physical switch below
+net tool-prep-loop iocontrol.0.tool-prepare => iocontrol.0.tool-prepared
+# Manual tool change: iocontrol <-> qtpyvcp_manualtoolchange (see probe_basic_postgui.hal)
+net tool-change-request <= iocontrol.0.tool-change
+net tool-change-confirmed => iocontrol.0.tool-changed
+net tool-number <= iocontrol.0.tool-prep-number
+
+# =========================================================
+# 6. PHYSICAL LIMIT & HOME SWITCH WIRING
+# =========================================================
+#
+# --- BREAKOUT OFF (temporary): fake home + limits inactive ---
+# and2.0 has both inputs 0 -> out is FALSE. Single net drives every joint home/limit pin.
+# REVERT: comment out the net below and uncomment "NORMAL LIMIT/HOME WIRING".
+#
+net lims-home-all-off and2.0.out => joint.0.home-sw-in joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in joint.1.home-sw-in joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in joint.2.home-sw-in joint.2.neg-lim-sw-in joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
+
+# --- NORMAL LIMIT/HOME WIRING (restore when breakout works) ---
+# X: home switch at negative end, separate shared limit chain for +/- limits.
+# net x-home       lcec.0.0.di-4 => joint.0.home-sw-in
+# net x-limit      lcec.0.0.di-3 => joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in
+# Y: only home switch present (negative end) on Y drive DI1.
+# net y-home       lcec.0.1.di-1 => joint.1.home-sw-in
+# Z: only home switch present (positive end) on Z drive DI1.
+# net z-home       lcec.0.2.di-1 => joint.2.home-sw-in
+# net yz-lims-off  and2.0.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in joint.2.neg-lim-sw-in joint.2.pos-lim-sw-in
+# A axis home on slave 3 DI3:
+# net a-home-sw    lcec.0.3.di-3 => joint.3.home-sw-in
+
+# Standard Software GUI E-Stop Loop (Physical Master E-Stop cuts Mains Power)
+net estop-loop iocontrol.0.user-enable-out => iocontrol.0.emc-enable-in

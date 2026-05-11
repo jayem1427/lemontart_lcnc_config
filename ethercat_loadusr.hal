@@ -1,0 +1,3 @@
+#NOTWOPASS
+# TWOPASS can invoke loadusr twice during discovery; lcec_conf must register only once.
+loadusr -W lcec_conf ethercat-conf.xml

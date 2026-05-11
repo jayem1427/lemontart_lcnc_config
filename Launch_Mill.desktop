@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=EtherCAT Mill (Lemontart)
+Comment=LinuxCNC + Probe Basic — set Path below to this folder after you clone it
+# Freedesktop: Path must be the absolute directory containing ethercat_mill.ini
+Path=/CHANGE_ME_TO_FULL_PATH_OF_THIS_REPO
+Exec=env QT_QUICK_BACKEND=software linuxcnc ethercat_mill.ini
+Icon=/usr/share/icons/hicolor/48x48/apps/linuxcncicon.png
+Terminal=false
+Categories=Application;

@@ -1,0 +1,34 @@
+loadrt time
+# loadrt not (already loaded in ethercat_mill.hal)
+
+addf time.0 servo-thread
+addf not.0 servo-thread
+
+# Cycle timer: xhc-whb04b-6.hal already owns halui.program.is-idle on this signal.
+net pdnt.program.is-idle => not.0.in
+net pdnt.program.is-paused time.0.pause
+net cycle-timer time.0.start <= not.0.out
+net cycle-seconds qtpyvcp.timerseconds.in <= time.0.seconds
+net cycle-minutes qtpyvcp.timerminutes.in <= time.0.minutes
+net cycle-hours qtpyvcp.timerhours.in <= time.0.hours
+# *** Time items required for Probe Basic to run ***
+
+#  ---manual tool change signals---
+net tool-change-request => qtpyvcp_manualtoolchange.change
+net tool-change-confirmed <= qtpyvcp_manualtoolchange.changed
+net tool-number => qtpyvcp_manualtoolchange.number
+
+# *** Probe graphic simulation + motion G38 probe input ***
+net probe-in => qtpyvcp.probe-in.out
+net probe-in <= qtpyvcp.probe-led.on
+net probe-in motion.probe-input
+
+# *** Set line below for actual spindle readout from your hal file ***
+net spindle-speed-in => qtpyvcp.spindle-encoder-rpm.in
+
+# *** Spindle Load % Calculation ***
+# Assuming max spindle current is ~4.2A. To read 100%, 100 / 4.2 = 23.81 multiplier.
+addf mult2.7 servo-thread
+setp mult2.7.in1 23.81
+net spindle-current => mult2.7.in0
+net spindle-load-percent mult2.7.out => qtpyvcp.spindle-load-indicator.in-f

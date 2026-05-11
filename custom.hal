@@ -1,0 +1,46 @@
+# 1. Load the Modbus driver
+loadusr -W mb2hal config=h100.mb2hal
+
+# 2. Frequency Scaling (RPM to 0.1Hz units)
+# Note: mult2 is already loaded in ethercat_mill.hal. We are using the 5th instance (mult2.4)
+addf mult2.4 servo-thread
+setp mult2.4.in1 0.166666
+
+net pdnt.spindle-speed-abs => mult2.4.in0
+net spindle-speed-final mult2.4.out => mb2hal.freq_set.00.float
+
+# 3. Control Logic (1=FWD, 2=REV, 0=Stop)
+loadrt mux4 names=vfd_run_mux
+addf vfd_run_mux servo-thread
+setp vfd_run_mux.in0 8.0 # Stop (Bit 3)
+setp vfd_run_mux.in1 3.0 # FWD (Bit 0 Start + Bit 1 Fwd)
+setp vfd_run_mux.in2 5.0 # REV (Bit 0 Start + Bit 2 Rev)
+setp vfd_run_mux.in3 8.0 # Stop (invalid state)
+
+# M3/M4 swap vs VFD wiring (forward/reverse inverted). REVERT: fwd->sel0 rev->sel1
+net spindle-fwd spindle.0.forward => vfd_run_mux.sel1
+net spindle-rev spindle.0.reverse => vfd_run_mux.sel0
+net spindle-modbus-run vfd_run_mux.out => mb2hal.vfd_ctrl.00.float
+
+# 4. Spindle At-Speed Feedback
+addf mult2.5 servo-thread
+addf near.0 servo-thread
+
+# Scale 0.1Hz feedback back to RPM (1 / 0.166666 = 6.0)
+setp mult2.5.in1 6.0
+net spindle-freq-fb mb2hal.freq_fb.00.float => mult2.5.in0
+net spindle-speed-in mult2.5.out => spindle.0.speed-in
+
+# Compare command vs feedback
+setp near.0.scale 1.0
+setp near.0.difference 50.0  # Allow 50 RPM tolerance
+net pdnt.spindle-speed-abs => near.0.in1
+net spindle-speed-in => near.0.in2
+net spindle-at-speed near.0.out => spindle.0.at-speed
+
+# 5. Output Current Monitoring
+addf mult2.6 servo-thread
+setp mult2.6.in1 0.01
+net spindle-current-raw mb2hal.freq_fb.02.float => mult2.6.in0
+net spindle-current mult2.6.out
+
