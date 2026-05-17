@@ -2,7 +2,7 @@ G21          ; Set units to mm
 G90          ; Absolute positioning
 G0 Y0        ; Start at zero
 
-G1 Y15 F30000 ; Move to 15mm at 1000mm/min
+G1 Y15 F30000 ; Move to 15mm at 30000mm/min
 G4 P0.5      ; Dwell 0.5s
 G1 Y0 F30000  ; Return to 0
 
