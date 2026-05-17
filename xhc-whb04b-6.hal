@@ -9,7 +9,9 @@ loadusr -W xhc-whb04b-6 -HsfB
 # ######################################################################
 
 # On/Off signals
-net machine.is-on                         halui.machine.is-on                   whb.halui.machine.is-on
+# WHB gates wheel jogs on per-axis "is homed". With breakout homing/limit wiring disabled, joints may
+# stay unreferenced — Z was blocked here. Tie MPG homed inputs to machine-on (motion still uses real joint.* flags).
+net machine.is-on                         halui.machine.is-on                   whb.halui.machine.is-on                   whb.halui.joint.x.is-homed                whb.halui.joint.y.is-homed                whb.halui.joint.z.is-homed                whb.halui.joint.a.is-homed
 net pdnt.machine.on                       whb.halui.machine.on                  halui.machine.on
 net pdnt.machine.off                      whb.halui.machine.off                 halui.machine.off
 
@@ -33,12 +35,6 @@ net pdnt.mode.is-manual                   halui.mode.is-manual                  
 net pdnt.mode.is-mdi                      halui.mode.is-mdi                     whb.halui.mode.is-mdi
 net pdnt.mode.is-joint                    halui.mode.is-joint                   whb.halui.mode.is-joint
 net pdnt.mode.is-teleop                   halui.mode.is-teleop                  whb.halui.mode.is-teleop
-
-# "is-homed" axis signal for allowing pendant when machine is not homed
-net pdnt.axis.X.is-homed                  halui.joint.0.is-homed                whb.halui.joint.x.is-homed
-net pdnt.axis.Y.is-homed                  halui.joint.1.is-homed                whb.halui.joint.y.is-homed
-net pdnt.axis.Z.is-homed                  halui.joint.2.is-homed                whb.halui.joint.z.is-homed
-net pdnt.axis.A.is-homed                  halui.joint.3.is-homed                whb.halui.joint.a.is-homed
 
 # "selected axis" signals
 net pdnt.axis.X.select                    whb.halui.axis.x.select               halui.axis.x.select
