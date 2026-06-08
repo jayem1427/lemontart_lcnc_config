@@ -18,10 +18,8 @@ net tool-change-request => qtpyvcp_manualtoolchange.change
 net tool-change-confirmed <= qtpyvcp_manualtoolchange.changed
 net tool-number => qtpyvcp_manualtoolchange.number
 
-# *** Probe graphic simulation + motion G38 probe input ***
-net probe-in => qtpyvcp.probe-in.out
-net probe-in <= qtpyvcp.probe-led.on
-net probe-in motion.probe-input
+# *** Touch probe is wired in ethercat_mill.hal (direct to motion.probe-input). ***
+# Leave Probe Basic's probe-in HAL widget unconnected to avoid net driver conflicts.
 
 # *** Set line below for actual spindle readout from your hal file ***
 net spindle-speed-in => qtpyvcp.spindle-encoder-rpm.in
