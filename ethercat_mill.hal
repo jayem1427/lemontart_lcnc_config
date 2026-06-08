@@ -16,8 +16,8 @@ loadrt mult2 count=12
 loadrt ilowpass count=4
 loadrt limit1 count=4
 loadrt div2 count=4
-loadrt not count=1
-loadrt and2 count=1
+loadrt not count=6
+loadrt and2 count=2
 loadrt near count=1
 
 # =========================================================
@@ -39,6 +39,13 @@ addf div2.1 servo-thread
 addf div2.2 servo-thread
 addf div2.3 servo-thread
 addf and2.0 servo-thread
+addf and2.1 servo-thread
+# not.0 is reserved by probe_basic_postgui.hal.
+addf not.1 servo-thread
+addf not.2 servo-thread
+addf not.3 servo-thread
+addf not.4 servo-thread
+addf not.5 servo-thread
 setp and2.0.in0 0
 setp and2.0.in1 0
 
@@ -160,23 +167,33 @@ net tool-number <= iocontrol.0.tool-prep-number
 # 6. PHYSICAL LIMIT & HOME SWITCH WIRING
 # =========================================================
 #
-# --- BREAKOUT OFF (temporary): fake home + limits inactive ---
-# and2.0 has both inputs 0 -> out is FALSE. Single net drives every joint home/limit pin.
-# REVERT: comment out the net below and uncomment "NORMAL LIMIT/HOME WIRING".
+# --- BREAKOUT OFF (temporary): fake home + limits inactive for Z/A only ---
+# and2.0 has both inputs 0 -> out is FALSE.
+# REVERT (full breakout): uncomment lims-home-all-off below and comment out X/Y + Z/A sections.
 #
-net lims-home-all-off and2.0.out => joint.0.home-sw-in joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in joint.1.home-sw-in joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in joint.2.home-sw-in joint.2.neg-lim-sw-in joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
+#net lims-home-all-off and2.0.out => joint.0.home-sw-in joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in joint.1.home-sw-in joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in joint.2.home-sw-in joint.2.neg-lim-sw-in joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
 
-# --- NORMAL LIMIT/HOME WIRING (restore when breakout works) ---
-# X: home switch at negative end, separate shared limit chain for +/- limits.
-# net x-home       lcec.0.0.di-4 => joint.0.home-sw-in
-# net x-limit      lcec.0.0.di-3 => joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in
-# Y: only home switch present (negative end) on Y drive DI1.
-# net y-home       lcec.0.1.di-1 => joint.1.home-sw-in
+# --- X/Y LIMIT/HOME WIRING (Slave 0 CN1, active-low NC switches) ---
+# Drive 0 CN1: DI1=X limit, DI2=Y limit, DI4=X home, DI5=Y home.
+net x-home-raw   lcec.0.0.di-4 => not.1.in
+net x-home       not.1.out => joint.0.home-sw-in
+# Suppress X limit chain while homing: backoff only clears home; limit can stay tripped.
+net j0-homing    joint.0.homing => not.5.in
+net j0-lim-on    not.5.out => and2.1.in1
+net x-limit-raw  lcec.0.0.di-1 => not.2.in
+net x-limit-inv  not.2.out => and2.1.in0
+net x-limit      and2.1.out => joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in
+net y-home-raw   lcec.0.0.di-5 => not.3.in
+net y-home       not.3.out => joint.1.home-sw-in
+net y-limit-raw  lcec.0.0.di-2 => not.4.in
+net y-limit      not.4.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in
+
+# --- Z/A still on breakout (no homing yet) ---
 # Z: only home switch present (positive end) on Z drive DI1.
 # net z-home       lcec.0.2.di-1 => joint.2.home-sw-in
-# net yz-lims-off  and2.0.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in joint.2.neg-lim-sw-in joint.2.pos-lim-sw-in
 # A axis home on slave 3 DI3:
 # net a-home-sw    lcec.0.3.di-3 => joint.3.home-sw-in
+net za-lims-home-off and2.0.out => joint.2.home-sw-in joint.2.neg-lim-sw-in joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
 
 # Standard Software GUI E-Stop Loop (Physical Master E-Stop cuts Mains Power)
 net estop-loop iocontrol.0.user-enable-out => iocontrol.0.emc-enable-in

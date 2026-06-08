@@ -44,14 +44,14 @@ net pdnt.axis.A.select                    whb.halui.axis.a.select               
 
 # Scale path: pendant scale -> limit1 (cap) -> mult2(*0.001) -> axis jog-scale
 setp limit1.0.min 0.001
-setp limit1.0.max 0.5
+setp limit1.0.max 1.0
 setp mult2.8.in1 0.001
 net pdnt.axis.x.jog-scale.raw             whb.axis.x.jog-scale                  limit1.0.in
 net pdnt.axis.x.jog-scale.limited         limit1.0.out                          mult2.8.in0
 net pdnt.axis.x.jog-scale                 mult2.8.out                           axis.x.jog-scale
 
 setp limit1.1.min 0.001
-setp limit1.1.max 0.5
+setp limit1.1.max 1.0
 setp mult2.9.in1 0.001
 net pdnt.axis.y.jog-scale.raw             whb.axis.y.jog-scale                  limit1.1.in
 net pdnt.axis.y.jog-scale.limited         limit1.1.out                          mult2.9.in0
