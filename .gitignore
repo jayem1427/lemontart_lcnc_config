@@ -8,6 +8,7 @@ position.txt
 **/sim.var
 **/sim.var.bak
 **/sim.pref
+**/probe_basic.pref
 
 # Editor / scope prefs
 halshow.preferences

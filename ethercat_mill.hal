@@ -16,7 +16,7 @@ loadrt mult2 count=12
 loadrt ilowpass count=4
 loadrt limit1 count=4
 loadrt div2 count=4
-loadrt not count=7
+loadrt not count=9
 loadrt and2 count=2
 loadrt near count=1
 
@@ -47,6 +47,8 @@ addf not.3 servo-thread
 addf not.4 servo-thread
 addf not.5 servo-thread
 addf not.6 servo-thread
+addf not.7 servo-thread
+addf not.8 servo-thread
 setp and2.0.in0 0
 setp and2.0.in1 0
 
@@ -189,12 +191,16 @@ net y-home       not.3.out => joint.1.home-sw-in
 net y-limit-raw  lcec.0.0.di-2 => not.4.in
 net y-limit      not.4.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in
 
-# --- Z/A still on breakout (no homing yet) ---
-# Z: only home switch present (positive end) on Z drive DI1.
-# net z-home       lcec.0.2.di-1 => joint.2.home-sw-in
+# --- Z home on Slave 1 DI4 (+Z); -Z limit on Slave 2 DI2; no +Z limit ---
+net z-home-raw   lcec.0.1.di-4 => not.7.in
+net z-home       not.7.out => joint.2.home-sw-in
+net z-limit-raw  lcec.0.2.di-2 => not.8.in
+net z-limit      not.8.out => joint.2.neg-lim-sw-in
+
+# --- A still on breakout (no homing yet) ---
 # A axis home on slave 3 DI3:
 # net a-home-sw    lcec.0.3.di-3 => joint.3.home-sw-in
-net za-lims-home-off and2.0.out => joint.2.home-sw-in joint.2.neg-lim-sw-in joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
+net za-lims-gagged and2.0.out => joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
 
 # --- TOUCH PROBE (Y drive / Slave 1 DI5, active-low) ---
 net probe-raw    lcec.0.1.di-5 => not.6.in

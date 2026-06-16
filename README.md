@@ -46,6 +46,22 @@ This is a working bench reference, not a guaranteed drop-in. Expect to adjust Et
 | `probe_basic/` | Probe Basic YAML, postgui HAL, DROs, macros, `tool.tbl` |
 | `nc_files/` | Default program search path |
 
+## Current machine behavior (captured config)
+
+- Manual tool changes are **retract-only**: `TOOL_CHANGE_QUILL_UP = 1` and no `TOOL_CHANGE_POSITION`, so LinuxCNC does not command an X/Y move for tool change.
+- Inputs below are wired as active-low NC and inverted in HAL (`not.*`) before going to joint/home/limit pins.
+
+| Drive / EtherCAT slave | DI input | Signal use |
+|------------------------|----------|------------|
+| Slave 0 (X/Y drive IO) | DI4 | X home (`joint.0.home-sw-in`) |
+| Slave 0 (X/Y drive IO) | DI1 | X limit chain (`joint.0.neg-lim-sw-in`, `joint.0.pos-lim-sw-in`) |
+| Slave 0 (X/Y drive IO) | DI5 | Y home (`joint.1.home-sw-in`) |
+| Slave 0 (X/Y drive IO) | DI2 | Y limit chain (`joint.1.neg-lim-sw-in`, `joint.1.pos-lim-sw-in`) |
+| Slave 1 (Z/probe IO) | DI4 | Z home at +Z (`joint.2.home-sw-in`) |
+| Slave 2 (Z/aux IO) | DI2 | Z negative limit (`joint.2.neg-lim-sw-in`) |
+| Slave 1 (Z/probe IO) | DI5 | Touch probe (`motion.probe-input`) |
+| Slave 3 (A axis IO) | DI3 (planned) | A home (currently commented out in HAL) |
+
 ## What was left out of git on purpose
 
 Large servo manual PDFs, simulation logs, QtPyVCP pickles, duplicate `user_dro_display/` at repo root (unused — the INI uses `probe_basic/user_dro_display/`), and personal scratch notes. Add your own vendor PDFs locally.
