@@ -2,10 +2,10 @@
 
 LinuxCNC configuration for a **Lemontart**-class EtherCAT mill:
 
-- 4× closed-loop steppers (Leadshine A6-EC CiA 402 on EtherCAT-Linux)
+- 4× Stepperonline A6 Servos (400W for xyz, 100W for A)
 - **Probe Basic** (QtPyVCP) UI
 - **XHC WHB04B-6** wireless pendant
-- **Huanyang H100-class VFD** over Modbus RTU via `mb2hal` (`h100.mb2hal`)
+- **H100 VFD** over Modbus RTU via `mb2hal` (`h100.mb2hal`)
 
 This is a working bench reference, not a guaranteed drop-in. Expect to adjust EtherCAT XML, scales, limits, serial port, and homing before cutting metal.
 
@@ -13,22 +13,13 @@ This is a working bench reference, not a guaranteed drop-in. Expect to adjust Et
 
 - LinuxCNC built with **EtherCAT / LCEC** (`lcec`, `lcec_conf`)
 - **Probe Basic** / QtPyVCP stack matching your LinuxCNC version
-- Optional: `mb2hal` for the VFD; disable Modbus blocks in `custom.hal` if you run open-loop spindle
+- Optional: `mb2hal` for the VFD
 
 ## Quick start
 
 1. Clone this repository to a path of your choice, e.g. `~/linuxcnc/configs/lemontart_lcnc_config`.
 2. Edit **`ethercat-conf.xml`** so slave types, positions, and PDOs match your chain (and your A6 drive tuning).
 3. Edit **`h100.mb2hal`** — set `SERIAL_PORT` (often `/dev/ttyUSB0`) and confirm register addresses match your VFD manual.
-4. Optionally edit **`Launch_Mill.desktop`**: set `Path=` to the **absolute** directory that contains `ethercat_mill.ini` (see comments in that file). Alternatively run **`./launch.sh`** from the repo root.
-5. Launch:
-   ```bash
-   ./launch.sh
-   ```
-   or from the config directory:
-   ```bash
-   linuxcnc ethercat_mill.ini
-   ```
 
 **`PROGRAM_PREFIX`** points at `nc_files/` (next to the INI). Put your G-code there or change it in `ethercat_mill.ini`.
 
@@ -62,10 +53,10 @@ This is a working bench reference, not a guaranteed drop-in. Expect to adjust Et
 | Slave 1 (Z/probe IO) | DI5 | Touch probe (`motion.probe-input`) |
 | Slave 3 (A axis IO) | DI3 (planned) | A home (currently commented out in HAL) |
 
-## What was left out of git on purpose
+## What was left out of git 
 
 Large servo manual PDFs, simulation logs, QtPyVCP pickles, duplicate `user_dro_display/` at repo root (unused — the INI uses `probe_basic/user_dro_display/`), and personal scratch notes. Add your own vendor PDFs locally.
 
 ## Safety
 
-Verify estop, drives, and spindle before running any programs. Review **breakout** comments in `ethercat_mill.ini` (wide limits / no real homing motion) if you are still on the bench.
+Verify estop, drives, and spindle before running any programs. Review **breakout** comments in `ethercat_mill.ini` if you are still on the bench.
