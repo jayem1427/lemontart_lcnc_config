@@ -29,11 +29,16 @@ If you want to really understand how LinuxCNC works, would HIGHLY recommend star
 
 ## Quick start
 
-1. Clone this repository to a path of your choice, e.g. `~/linuxcnc/configs/lemontart_lcnc_config`.
-2. Edit **`ethercat-conf.xml`** so slave types, positions, and PDOs match your chain (and your A6 drive tuning).
-3. Edit **`h100.mb2hal`** — set `SERIAL_PORT` (often `/dev/ttyUSB0`) and confirm register addresses match your VFD manual.
+1. Install linuxcnc: https://linuxcnc.org/downloads/
+2. Install linuxcnc-ethercat: https://github.com/linuxcnc-ethercat/linuxcnc-ethercat.
+3. Find your corresponding ethernet address using the "ip a" command in terminal.
+5. Edit etc/ethercat.xml so that ethernet address matches the result of previous command.
+6. Copy a default config from the LinuxCNC wizard.
+7. Edit .hal files and .ini files to get motors and homing working. Use my examples as reference.
+8. Paste and edit **`ethercat-conf.xml`** from this repo so slave types, positions, and PDOs match your chain (and your A6 drive tuning).
+9. Paste and edit **`h100.mb2hal`** — set `SERIAL_PORT` (often `/dev/ttyUSB0`) and confirm register addresses match your VFD manual.
 
-**`PROGRAM_PREFIX`** points at `nc_files/` (next to the INI). Put your G-code there or change it in `ethercat_mill.ini`.
+Note: **`PROGRAM_PREFIX`** points at `nc_files/` (next to the INI). Put your G-code there or change it in `ethercat_mill.ini`.
 
 ## Layout
 
