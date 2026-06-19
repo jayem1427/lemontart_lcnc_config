@@ -43,6 +43,3 @@ addf mult2.6 servo-thread
 setp mult2.6.in1 0.01
 net spindle-current-raw mb2hal.freq_fb.02.float => mult2.6.in0
 net spindle-current mult2.6.out
-
-# SERVO-TUNING: keep A axis jog off (pendant + GUI). REVERT on main: remove block.
-setp axis.a.jog-enable 0

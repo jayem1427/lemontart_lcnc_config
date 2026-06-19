@@ -197,11 +197,12 @@ net pdnt.feed-override.decrease           whb.halui.feed-override.decrease      
 net pdnt.axis.x.pos-feedback              halui.axis.x.pos-feedback             whb.halui.axis.x.pos-feedback
 net pdnt.axis.y.pos-feedback              halui.axis.y.pos-feedback             whb.halui.axis.y.pos-feedback
 net pdnt.axis.z.pos-feedback              halui.axis.z.pos-feedback             whb.halui.axis.z.pos-feedback
-net pdnt.axis.a.pos-feedback              halui.axis.a.pos-feedback             whb.halui.axis.a.pos-feedback
+# SERVO-TUNING: A not in COORDINATES=XYZ — no halui.axis.a pins. REVERT on main: restore nets.
+#net pdnt.axis.a.pos-feedback              halui.axis.a.pos-feedback             whb.halui.axis.a.pos-feedback
 
 
 # axis position related signals relative
 net pdnt.axis.x.pos-relative              halui.axis.x.pos-relative             whb.halui.axis.x.pos-relative
 net pdnt.axis.y.pos-relative              halui.axis.y.pos-relative             whb.halui.axis.y.pos-relative
 net pdnt.axis.z.pos-relative              halui.axis.z.pos-relative             whb.halui.axis.z.pos-relative
-net pdnt.axis.a.pos-relative              halui.axis.a.pos-relative             whb.halui.axis.a.pos-relative
+#net pdnt.axis.a.pos-relative              halui.axis.a.pos-relative             whb.halui.axis.a.pos-relative
