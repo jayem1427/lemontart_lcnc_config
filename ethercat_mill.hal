@@ -170,37 +170,40 @@ net tool-number <= iocontrol.0.tool-prep-number
 # 6. PHYSICAL LIMIT & HOME SWITCH WIRING
 # =========================================================
 #
-# --- BREAKOUT OFF (temporary): fake home + limits inactive for Z/A only ---
+# --- SERVO-TUNING: fake home + limits inactive on all joints ---
 # and2.0 has both inputs 0 -> out is FALSE.
-# REVERT (full breakout): uncomment lims-home-all-off below and comment out X/Y + Z/A sections.
+# REVERT on main: comment out lims-home-all-off and restore X/Y + Z/A sections below.
 #
-#net lims-home-all-off and2.0.out => joint.0.home-sw-in joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in joint.1.home-sw-in joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in joint.2.home-sw-in joint.2.neg-lim-sw-in joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
+net lims-home-all-off and2.0.out => joint.0.home-sw-in joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in joint.1.home-sw-in joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in joint.2.home-sw-in joint.2.neg-lim-sw-in joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
 
 # --- X/Y LIMIT/HOME WIRING (Slave 0 CN1, active-low NC switches) ---
+# SERVO-TUNING: disabled — see lims-home-all-off above.
 # Drive 0 CN1: DI1=X limit, DI2=Y limit, DI4=X home, DI5=Y home.
-net x-home-raw   lcec.0.0.di-4 => not.1.in
-net x-home       not.1.out => joint.0.home-sw-in
+#net x-home-raw   lcec.0.0.di-4 => not.1.in
+#net x-home       not.1.out => joint.0.home-sw-in
 # Suppress X limit chain while homing: backoff only clears home; limit can stay tripped.
-net j0-homing    joint.0.homing => not.5.in
-net j0-lim-on    not.5.out => and2.1.in1
-net x-limit-raw  lcec.0.0.di-1 => not.2.in
-net x-limit-inv  not.2.out => and2.1.in0
-net x-limit      and2.1.out => joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in
-net y-home-raw   lcec.0.0.di-5 => not.3.in
-net y-home       not.3.out => joint.1.home-sw-in
-net y-limit-raw  lcec.0.0.di-2 => not.4.in
-net y-limit      not.4.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in
+#net j0-homing    joint.0.homing => not.5.in
+#net j0-lim-on    not.5.out => and2.1.in1
+#net x-limit-raw  lcec.0.0.di-1 => not.2.in
+#net x-limit-inv  not.2.out => and2.1.in0
+#net x-limit      and2.1.out => joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in
+#net y-home-raw   lcec.0.0.di-5 => not.3.in
+#net y-home       not.3.out => joint.1.home-sw-in
+#net y-limit-raw  lcec.0.0.di-2 => not.4.in
+#net y-limit      not.4.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in
 
 # --- Z home on Slave 1 DI4 (+Z); -Z limit on Slave 2 DI2; no +Z limit ---
-net z-home-raw   lcec.0.1.di-4 => not.7.in
-net z-home       not.7.out => joint.2.home-sw-in
-net z-limit-raw  lcec.0.2.di-2 => not.8.in
-net z-limit      not.8.out => joint.2.neg-lim-sw-in
+# SERVO-TUNING: disabled — see lims-home-all-off above.
+#net z-home-raw   lcec.0.1.di-4 => not.7.in
+#net z-home       not.7.out => joint.2.home-sw-in
+#net z-limit-raw  lcec.0.2.di-2 => not.8.in
+#net z-limit      not.8.out => joint.2.neg-lim-sw-in
 
 # --- A still on breakout (no homing yet) ---
+# SERVO-TUNING: disabled — see lims-home-all-off above.
 # A axis home on slave 3 DI3:
 # net a-home-sw    lcec.0.3.di-3 => joint.3.home-sw-in
-net za-lims-gagged and2.0.out => joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
+#net za-lims-gagged and2.0.out => joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
 
 # --- TOUCH PROBE (Y drive / Slave 1 DI5, active-low) ---
 net probe-raw    lcec.0.1.di-5 => not.6.in
