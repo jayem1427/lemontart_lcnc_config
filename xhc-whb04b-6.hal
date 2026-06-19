@@ -40,7 +40,7 @@ net pdnt.mode.is-teleop                   halui.mode.is-teleop                  
 net pdnt.axis.X.select                    whb.halui.axis.x.select               halui.axis.x.select
 net pdnt.axis.y.select                    whb.halui.axis.y.select               halui.axis.y.select
 net pdnt.axis.Z.select                    whb.halui.axis.z.select               halui.axis.z.select
-net pdnt.axis.A.select                    whb.halui.axis.a.select               halui.axis.a.select
+#net pdnt.axis.A.select                    whb.halui.axis.a.select               halui.axis.a.select
 
 # Scale path: pendant scale -> limit1 (cap) -> mult2(*0.001) -> axis jog-scale
 setp limit1.0.min 0.001
@@ -64,12 +64,13 @@ net pdnt.axis.z.jog-scale.raw             whb.axis.z.jog-scale                  
 net pdnt.axis.z.jog-scale.limited         limit1.2.out                          mult2.10.in0
 net pdnt.axis.z.jog-scale                 mult2.10.out                          axis.z.jog-scale
 
-setp limit1.3.min 0.001
-setp limit1.3.max 0.5
-setp mult2.11.in1 0.001
-net pdnt.axis.a.jog-scale.raw             whb.axis.a.jog-scale                  limit1.3.in
-net pdnt.axis.a.jog-scale.limited         limit1.3.out                          mult2.11.in0
-net pdnt.axis.a.jog-scale                 mult2.11.out                          axis.a.jog-scale
+# SERVO-TUNING: A axis jog disabled. REVERT on main: restore nets below.
+#setp limit1.3.min 0.001
+#setp limit1.3.max 0.5
+#setp mult2.11.in1 0.001
+#net pdnt.axis.a.jog-scale.raw             whb.axis.a.jog-scale                  limit1.3.in
+#net pdnt.axis.a.jog-scale.limited         limit1.3.out                          mult2.11.in0
+#net pdnt.axis.a.jog-scale                 mult2.11.out                          axis.a.jog-scale
 
 # Counts path: raw wheel counts -> ilowpass -> axis jog-counts
 setp ilowpass.0.gain 0.01
@@ -87,20 +88,20 @@ setp ilowpass.2.scale 1000
 net pdnt.axis.z.jog-counts.raw            whb.axis.z.jog-counts                 ilowpass.2.in
 net pdnt.axis.z.jog-counts                ilowpass.2.out                        axis.z.jog-counts
 
-setp ilowpass.3.gain 0.01
-setp ilowpass.3.scale 1000
-net pdnt.axis.a.jog-counts.raw            whb.axis.a.jog-counts                 ilowpass.3.in
-net pdnt.axis.a.jog-counts                ilowpass.3.out                        axis.a.jog-counts
+#setp ilowpass.3.gain 0.01
+#setp ilowpass.3.scale 1000
+#net pdnt.axis.a.jog-counts.raw            whb.axis.a.jog-counts                 ilowpass.3.in
+#net pdnt.axis.a.jog-counts                ilowpass.3.out                        axis.a.jog-counts
 
 net pdnt.axis.x.jog-enable                whb.axis.x.jog-enable                 axis.x.jog-enable
 net pdnt.axis.y.jog-enable                whb.axis.y.jog-enable                 axis.y.jog-enable
 net pdnt.axis.z.jog-enable                whb.axis.z.jog-enable                 axis.z.jog-enable
-net pdnt.axis.a.jog-enable                whb.axis.a.jog-enable                 axis.a.jog-enable
+#net pdnt.axis.a.jog-enable                whb.axis.a.jog-enable                 axis.a.jog-enable
 
 net pdnt.axis.x.jog-vel-mode              whb.axis.x.jog-vel-mode               axis.x.jog-vel-mode
 net pdnt.axis.y.jog-vel-mode              whb.axis.y.jog-vel-mode               axis.y.jog-vel-mode
 net pdnt.axis.z.jog-vel-mode              whb.axis.z.jog-vel-mode               axis.z.jog-vel-mode
-net pdnt.axis.a.jog-vel-mode              whb.axis.a.jog-vel-mode               axis.a.jog-vel-mode
+#net pdnt.axis.a.jog-vel-mode              whb.axis.a.jog-vel-mode               axis.a.jog-vel-mode
 
 
 # macro buttons to MDI commands

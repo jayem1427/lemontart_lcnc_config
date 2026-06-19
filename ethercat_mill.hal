@@ -153,7 +153,10 @@ net a-pos-float-fb  div2.3.out  => joint.3.motor-pos-fb
 
 net a-status-word   lcec.0.3.status-word  => cia402.3.statusword
 net a-ctrl-word     cia402.3.controlword  => lcec.0.3.ctrl-word
-net a-amp-enable    joint.3.amp-enable-out => cia402.3.enable
+# SERVO-TUNING: A axis drive disabled. REVERT on main: direct net to cia402.3.enable.
+setp and2.1.in0 0
+net a-amp-enable-cmd joint.3.amp-enable-out => and2.1.in1
+net a-amp-enable and2.1.out => cia402.3.enable
 net a-amp-fault     cia402.3.drv-fault => joint.3.amp-fault-in
 
 # =========================================================
