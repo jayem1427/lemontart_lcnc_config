@@ -43,3 +43,6 @@ addf mult2.6 servo-thread
 setp mult2.6.in1 0.01
 net spindle-current-raw mb2hal.freq_fb.02.float => mult2.6.in0
 net spindle-current mult2.6.out
+
+# SERVO-TUNING: hard block — REF ALL / Home All / pendant home cannot move axes.
+setp motion.homing-inhibit 1
