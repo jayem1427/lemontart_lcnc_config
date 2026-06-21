@@ -59,7 +59,8 @@ Many of these files are connected to eachother. Using a tool like Cursor or Clau
 ## Current machine behavior (captured config)
 
 - Manual tool changes are **retract-only**: `TOOL_CHANGE_QUILL_UP = 1` and no `TOOL_CHANGE_POSITION`, so LinuxCNC does not command an X/Y move for tool change.
-- Inputs below are wired as active-low NC and inverted in HAL (`not.*`) before going to joint/home/limit pins.
+- Home/limit inputs below are wired active-low NC and inverted in HAL (`not.*`).
+- Touch probe is wired NC on Slave 1 DI5 and mapped directly to `motion.probe-input` (no HAL inverter).
 
 | Drive / EtherCAT slave | DI input | Signal use |
 |------------------------|----------|------------|
