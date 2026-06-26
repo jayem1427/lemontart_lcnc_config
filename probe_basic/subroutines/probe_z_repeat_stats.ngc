@@ -1,0 +1,87 @@
+(Metrology helper: repeat Z probing and report statistics)
+
+(Run from MDI:)
+(  o<probe_z_repeat_stats> call       ; defaults to 10 samples)
+(  o<probe_z_repeat_stats> call [3]   ; custom sample count)
+
+(Purpose:)
+(  Touch the same surface repeatedly and report mean plus standard)
+(  deviation for probe repeatability checks.)
+
+(Assumptions before running:)
+(  1. Click Probe Basic "UPDATE PROBE PARAMS" first.)
+(  2. Probe tool is loaded; #3014 must match the current tool.)
+(  3. Start above the test surface within max Z distance #3020.)
+(  4. Units are machine units from the active LinuxCNC config, mm here.)
+
+(Behavior:)
+(  - Forces probe measure-only mode with #3030 = 1.)
+(  - Does not set or rewrite WCO Z.)
+(  - Uses #1009 from probe_z_minus_sub.ngc for each WCS Z sample.)
+(  - Reports count, mean, sample stdev, and population stdev.)
+(  - Stores summary values in #1090..#1093.)
+(  - Restores the prior #3030 value before exiting.)
+(Returns sample standard deviation in the endsub return value.)
+
+o<probe_z_repeat_stats> sub
+
+  (arg1 optional: sample count, defaults to 10)
+  #<sample_count> = #1
+  o100 if [#<sample_count> LE 0]
+    #<sample_count> = 10
+  o100 endif
+
+  (Welford running variance terms)
+  #<count> = 0
+  #<mean> = 0
+  #<m2> = 0
+
+  (Keep the current probe mode, then force measure-only mode)
+  #<saved_probe_mode> = #3030
+  #3030 = 1
+
+  o200 while [#<count> LT #<sample_count>]
+    o<probe_z_minus_sub> call [#3014][#3015][#3016][#3017][#3020][#3021][#3030]
+
+    (probe_z_minus_sub publishes probed Z to #1009)
+    #<z_sample> = #1009
+
+    #<count> = [#<count> + 1]
+    #<delta> = [#<z_sample> - #<mean>]
+    #<mean> = [#<mean> + [#<delta> / #<count>]]
+    #<delta2> = [#<z_sample> - #<mean>]
+    #<m2> = [#<m2> + [#<delta> * #<delta2>]]
+  o200 endwhile
+
+  #3030 = #<saved_probe_mode>
+
+  o300 if [#<count> GT 1]
+    #<variance_sample> = [#<m2> / [#<count> - 1]]
+    #<stddev_sample> = SQRT[#<variance_sample>]
+  o300 else
+    #<variance_sample> = 0
+    #<stddev_sample> = 0
+  o300 endif
+
+  o310 if [#<count> GT 0]
+    #<variance_population> = [#<m2> / #<count>]
+    #<stddev_population> = SQRT[#<variance_population>]
+  o310 else
+    #<variance_population> = 0
+    #<stddev_population> = 0
+  o310 endif
+
+  (Publish summary values for quick re-use)
+  #1090 = #<count>
+  #1091 = #<mean>
+  #1092 = #<stddev_sample>
+  #1093 = #<stddev_population>
+
+  (DEBUG, PROBE Z STATS COUNT = #<count>)
+  (DEBUG, PROBE Z STATS MEAN = #<mean>)
+  (DEBUG, PROBE Z STATS STDEV_SAMPLE = #<stddev_sample>)
+  (DEBUG, PROBE Z STATS STDEV_POP = #<stddev_population>)
+
+o<probe_z_repeat_stats> endsub [#<stddev_sample>]
+
+M2

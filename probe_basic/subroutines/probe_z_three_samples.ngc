@@ -1,0 +1,48 @@
+(Metrology helper: take three Z probe samples)
+
+(Run from MDI:)
+(  o<probe_z_three_samples> call)
+
+(Purpose:)
+(  Touch the same surface three times and print each measured MACHINE Z)
+(  height. This is useful for manually tabulating homing/probing)
+(  repeatability data.)
+
+(Assumptions before running:)
+(  1. Click Probe Basic "UPDATE PROBE PARAMS" first.)
+(  2. Probe tool is loaded; #3014 must match the current tool.)
+(  3. Start above the test surface within max Z distance #3020.)
+(  4. Units are machine units from the active LinuxCNC config, mm here.)
+
+(Behavior:)
+(  - Forces probe measure-only mode with #3030 = 1.)
+(  - Does not set or rewrite WCO Z.)
+(  - Calls probe_z_minus_sub.ngc three times.)
+(  - Reports exactly one DEBUG value per hit: measured MACHINE Z.)
+(  - Restores the prior #3030 value before exiting.)
+
+o<probe_z_three_samples> sub
+
+  (Force measure-only mode so this does not set WCO Z)
+  #<saved_probe_mode> = #3030
+  #3030 = 1
+
+  (Active WCS Z offset; G92 is canceled inside probe_z_minus_sub)
+  #<workspace_z> = #[5203 + [20 * #5220]]
+
+  #<sample> = 1
+  o100 while [#<sample> LE 3]
+    o<probe_z_minus_sub> call [#3014][#3015][#3016][#3017][#3020][#3021][#3030]
+
+    (probe_z_minus_sub publishes the measured WCS Z position to #1009)
+    #<machine_z> = [#1009 + #<workspace_z>]
+    (DEBUG, Z PROBE SAMPLE #<sample> = #<machine_z>)
+
+    #<sample> = [#<sample> + 1]
+  o100 endwhile
+
+  #3030 = #<saved_probe_mode>
+
+o<probe_z_three_samples> endsub
+
+M2
