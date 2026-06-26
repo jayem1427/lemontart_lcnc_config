@@ -61,6 +61,7 @@ Many of these files are connected to eachother. Using a tool like Cursor or Clau
 - Manual tool changes are **retract-only**: `TOOL_CHANGE_QUILL_UP = 1` and no `TOOL_CHANGE_POSITION`, so LinuxCNC does not command an X/Y move for tool change.
 - Home/limit inputs below are wired active-low NC and inverted in HAL (`not.*`).
 - Touch probe is wired NC on Slave 1 DI5 and mapped directly to `motion.probe-input` (no HAL inverter).
+- Software E-stop is wired NC on Slave 3 DI1 / DB15 pin 10 and gates `iocontrol.0.emc-enable-in`.
 
 | Drive / EtherCAT slave | DI input | Signal use |
 |------------------------|----------|------------|
@@ -71,7 +72,24 @@ Many of these files are connected to eachother. Using a tool like Cursor or Clau
 | Slave 1 (Z/probe IO) | DI4 | Z home at +Z (`joint.2.home-sw-in`) |
 | Slave 2 (Z/aux IO) | DI2 | Z negative limit (`joint.2.neg-lim-sw-in`) |
 | Slave 1 (Z/probe IO) | DI5 | Touch probe (`motion.probe-input`) |
+| Slave 3 (A axis IO) | DI1 / DB15 pin 10 | Software E-stop NC switch (`iocontrol.0.emc-enable-in`) |
 | Slave 3 (A axis IO) | DI3 (planned) | A home (currently commented out in HAL) |
+
+### A6 CN1 / DB15 input map
+
+Each StepperOnline A6 EtherCAT drive exposes the same digital input names in HAL
+as `lcec.0.<slave>.di-N`. The current software E-stop switch uses **Slave 3 DI1**,
+which is **CN1 / DB15 pin 10**.
+
+| HAL input example on Slave 3 | A6 input | CN1 / DB15 pin | Typical/default input label |
+|------------------------------|----------|----------------|-----------------------------|
+| `lcec.0.3.di-1` | DI1 | 10 | Positive limit / user input |
+| `lcec.0.3.di-2` | DI2 | 9 | Negative limit / user input |
+| `lcec.0.3.di-3` | DI3 | 8 | Home input |
+| `lcec.0.3.di-4` | DI4 | 7 | TouchProbe2 |
+| `lcec.0.3.di-5` | DI5 | 11 | TouchProbe1 |
+| - | DI common | 13 | COM+ |
+| - | 24 V output | 15 | Internal +24 V supply |
 
 ## Spindle at-speed delay
 

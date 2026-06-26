@@ -17,7 +17,7 @@ loadrt ilowpass count=4
 loadrt limit1 count=4
 loadrt div2 count=4
 loadrt not count=9
-loadrt and2 count=2
+loadrt and2 count=3
 loadrt near count=1
 
 # =========================================================
@@ -40,6 +40,7 @@ addf div2.2 servo-thread
 addf div2.3 servo-thread
 addf and2.0 servo-thread
 addf and2.1 servo-thread
+addf and2.2 servo-thread
 # not.0 is reserved by probe_basic_postgui.hal.
 addf not.1 servo-thread
 addf not.2 servo-thread
@@ -206,4 +207,8 @@ net za-lims-gagged and2.0.out => joint.2.pos-lim-sw-in joint.3.home-sw-in joint.
 net probe-in     lcec.0.1.di-5 => motion.probe-input
 
 # Standard Software GUI E-Stop Loop (Physical Master E-Stop cuts Mains Power)
-net estop-loop iocontrol.0.user-enable-out => iocontrol.0.emc-enable-in
+# Software E-stop switch is NC on Slave 3 DI1 / DB15 pin 10.
+# Closed switch keeps lcec.0.3.di-1 TRUE; opening the switch drops LinuxCNC enable.
+net estop-ui-ok   iocontrol.0.user-enable-out => and2.2.in0
+net estop-sw-ok   lcec.0.3.di-1 => and2.2.in1
+net estop-loop    and2.2.out => iocontrol.0.emc-enable-in
