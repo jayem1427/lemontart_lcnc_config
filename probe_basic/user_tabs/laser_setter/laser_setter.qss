@@ -1,0 +1,205 @@
+/* ============================================================
+ * Laser Tool Setter — stylesheet
+ * Matches Probe Basic dark theme: gray panels, orange accent.
+ * Scope: applied via self.setStyleSheet() in laser_setter.py,
+ * cascades through the LASER_SETTER root QWidget only.
+ * ============================================================ */
+
+QWidget#LASER_SETTER {
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+    font-family: "Roboto", "DejaVu Sans", sans-serif;
+    font-size: 12px;
+}
+
+/* ---------- Header / footer panels ---------- */
+
+QFrame#headerBar,
+QFrame#footerBar {
+    background-color: #262626;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+}
+
+QFrame#headerDivider1,
+QFrame#headerDivider2,
+QFrame#headerDivider3,
+QFrame#resultsDivider,
+QFrame#calDivider {
+    color: #3a3a3a;
+    background-color: #3a3a3a;
+    max-width: 1px;
+}
+
+QLabel#lblTitle {
+    color: #ff7e00;
+    font-family: "Bebas Mono", "Bebas Kai", "Roboto", sans-serif;
+    font-size: 22px;
+    font-weight: bold;
+    letter-spacing: 2px;
+}
+
+QLabel#lblLedLaser,
+QLabel#lblLedAir,
+QLabel#lblMuxMode,
+QLabel#lblActiveTool,
+QLabel#lblStatusBar {
+    color: #c0c0c0;
+    font-family: "Bebas Mono", "Roboto Mono", monospace;
+    font-size: 13px;
+    letter-spacing: 1px;
+}
+
+/* ---------- Status LEDs (placeholder gray; later driven by HAL) ---------- */
+
+QLabel#ledLaserHealthy,
+QLabel#ledAirBlast,
+QLabel#ledMuxMode {
+    background-color: #555555;
+    border: 1px solid #2a2a2a;
+    border-radius: 9px;
+}
+
+/* ---------- Group boxes (column containers) ---------- */
+
+QGroupBox {
+    background-color: #262626;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    margin-top: 16px;
+    padding-top: 6px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 14px;
+    padding: 0 6px;
+    color: #ff7e00;
+    font-family: "Bebas Mono", "Bebas Kai", "Roboto", sans-serif;
+    font-size: 14px;
+    font-weight: bold;
+    letter-spacing: 2px;
+}
+
+/* ---------- Buttons ---------- */
+
+QPushButton {
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    padding: 6px 12px;
+    font-family: "Bebas Mono", "Roboto", sans-serif;
+    font-size: 13px;
+    letter-spacing: 1px;
+}
+
+QPushButton:hover {
+    background-color: #353535;
+    border-color: #ff7e00;
+}
+
+QPushButton:pressed,
+QPushButton:checked {
+    background-color: #ff7e00;
+    color: #1e1e1e;
+    border-color: #ff7e00;
+}
+
+QPushButton:disabled {
+    background-color: #1a1a1a;
+    color: #555555;
+    border-color: #2a2a2a;
+}
+
+QPushButton#btnAbortSafe {
+    border-color: #e44;
+    color: #ff6b6b;
+}
+
+QPushButton#btnAbortSafe:hover {
+    background-color: #4a1a1a;
+    border-color: #ff4444;
+    color: #ffffff;
+}
+
+QPushButton#btnAbortSafe:pressed {
+    background-color: #cc2222;
+    color: #ffffff;
+    border-color: #ff4444;
+}
+
+/* ---------- Line edits (calibration entry) ---------- */
+
+QLineEdit {
+    background-color: #161616;
+    color: #ffd080;
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    padding: 4px 8px;
+    font-family: "Bebas Mono", "Roboto Mono", monospace;
+    font-size: 14px;
+}
+
+QLineEdit:focus {
+    border-color: #ff7e00;
+}
+
+/* ---------- Result / cal value labels (DRO-style) ---------- */
+
+QLabel#lblResLength,
+QLabel#lblResDiam,
+QLabel#lblResRunout,
+QLabel#lblResRpm,
+QLabel#lblResTool,
+QLabel#lblResTime,
+QLabel#lblBeamX,
+QLabel#lblBeamY,
+QLabel#lblBeamZ,
+QLabel#lblZOffset,
+QLabel#lblBeamDia {
+    color: #ffd080;
+    background-color: #161616;
+    border: 1px solid #2a2a2a;
+    border-radius: 3px;
+    padding: 4px 10px;
+    font-family: "Bebas Mono", "Roboto Mono", monospace;
+    font-size: 16px;
+    min-width: 90px;
+}
+
+QLabel#lblResLengthCap,
+QLabel#lblResDiamCap,
+QLabel#lblResRunoutCap,
+QLabel#lblResRpmCap,
+QLabel#lblResToolCap,
+QLabel#lblResTimeCap,
+QLabel#lblBeamXCap,
+QLabel#lblBeamYCap,
+QLabel#lblBeamZCap,
+QLabel#lblZOffsetCap,
+QLabel#lblBeamDiaCap,
+QLabel#lblMasterPinCap,
+QLabel#lblCalRpmCap {
+    color: #909090;
+    font-family: "Bebas Mono", "Roboto", sans-serif;
+    font-size: 11px;
+    letter-spacing: 1px;
+}
+
+QLabel#lblResLengthUnit,
+QLabel#lblResDiamUnit,
+QLabel#lblResRunoutUnit,
+QLabel#lblResRpmUnit,
+QLabel#lblBeamXUnit,
+QLabel#lblBeamYUnit,
+QLabel#lblBeamZUnit,
+QLabel#lblZOffsetUnit,
+QLabel#lblBeamDiaUnit,
+QLabel#lblMasterPinUnit,
+QLabel#lblCalRpmUnit {
+    color: #707070;
+    font-family: "Roboto", sans-serif;
+    font-size: 10px;
+}
