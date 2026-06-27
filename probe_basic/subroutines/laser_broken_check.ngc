@@ -1,0 +1,11 @@
+(author: jayem)
+(date: 2026)
+(SKELETON - NO LOGIC YET)
+(Future: quick in-program check that tool intact - position over beam,)
+(read laser-broken pin, abort program if tool missing/short)
+
+o<laser_broken_check> sub
+    (DEBUG, LASER: broken tool check - SKELETON, no logic yet)
+o<laser_broken_check> endsub
+
+M2

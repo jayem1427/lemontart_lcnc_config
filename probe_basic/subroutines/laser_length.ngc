@@ -1,0 +1,10 @@
+(author: jayem)
+(date: 2026)
+(SKELETON - NO LOGIC YET)
+(Future: probe tool length over laser beam, write Z to tool table)
+
+o<laser_length> sub
+    (DEBUG, LASER: measure length - SKELETON, no logic yet)
+o<laser_length> endsub
+
+M2

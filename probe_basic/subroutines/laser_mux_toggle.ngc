@@ -1,0 +1,12 @@
+(author: jayem)
+(date: 2026)
+(SKELETON - NO LOGIC YET)
+(Future: flip the probe-mux HAL pin between contact probe and laser source.)
+(motion.probe-input can only have one driver so a HAL mux2 selects which)
+(physical input drives it; this macro sets the selector via M64/M65 P<n>)
+
+o<laser_mux_toggle> sub
+    (DEBUG, LASER: probe mux toggle - SKELETON, no HAL mux wired yet)
+o<laser_mux_toggle> endsub
+
+M2

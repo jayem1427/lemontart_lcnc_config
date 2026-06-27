@@ -1,0 +1,10 @@
+(author: jayem)
+(date: 2026)
+(SKELETON - NO LOGIC YET)
+(Future: measure tool edge X at multiple C-axis indexed positions, report runout)
+
+o<laser_runout> sub
+    (DEBUG, LASER: measure runout - SKELETON, no logic yet)
+o<laser_runout> endsub
+
+M2
