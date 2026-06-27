@@ -18,6 +18,7 @@ loadrt limit1 count=4
 loadrt div2 count=4
 loadrt not count=9
 loadrt and2 count=3
+loadrt or2 count=1
 loadrt near count=3
 
 # =========================================================
@@ -41,6 +42,7 @@ addf div2.3 servo-thread
 addf and2.0 servo-thread
 addf and2.1 servo-thread
 addf and2.2 servo-thread
+addf or2.0 servo-thread
 # not.0 is reserved by probe_basic_postgui.hal.
 addf not.1 servo-thread
 addf not.2 servo-thread
@@ -202,9 +204,12 @@ net z-limit      not.8.out => joint.2.neg-lim-sw-in
 # net a-home-sw    lcec.0.3.di-3 => joint.3.home-sw-in
 net za-lims-gagged and2.0.out => joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
 
-# --- TOUCH PROBE (Y drive / Slave 1 DI5, NC / active-high at trip) ---
-# Probe changed from NO to NC: DI goes TRUE when the contact opens on trigger.
-net probe-in     lcec.0.1.di-5 => motion.probe-input
+# --- TOUCH PROBE + TOOLSETTER (both NC / active-high at trip) ---
+# Touch probe: Slave 1 DI5. Toolsetter: Slave 2 DI5 (DB15 pin 11).
+# Either sensor tripping drives motion.probe-input TRUE.
+net touch-probe-in   lcec.0.1.di-5 => or2.0.in0
+net toolsetter-in    lcec.0.2.di-5 => or2.0.in1
+net probe-in         or2.0.out => motion.probe-input
 
 # Standard Software GUI E-Stop Loop (Physical Master E-Stop cuts Mains Power)
 # Software E-stop switch is NC on Slave 3 DI1 / DB15 pin 10.

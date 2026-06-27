@@ -60,7 +60,7 @@ Many of these files are connected to eachother. Using a tool like Cursor or Clau
 
 - Manual tool changes are **retract-only**: `TOOL_CHANGE_QUILL_UP = 1` and no `TOOL_CHANGE_POSITION`, so LinuxCNC does not command an X/Y move for tool change.
 - Home/limit inputs below are wired active-low NC and inverted in HAL (`not.*`).
-- Touch probe is wired NC on Slave 1 DI5 and mapped directly to `motion.probe-input` (no HAL inverter).
+- Touch probe (Slave 1 DI5) and contact toolsetter (Slave 2 DI5 / DB15 pin 11) are NC and OR'd together to `motion.probe-input`.
 - Software E-stop is wired NC on Slave 3 DI1 / DB15 pin 10 and gates `iocontrol.0.emc-enable-in`.
 
 | Drive / EtherCAT slave | DI input | Signal use |
@@ -71,7 +71,8 @@ Many of these files are connected to eachother. Using a tool like Cursor or Clau
 | Slave 0 (X/Y drive IO) | DI2 | Y limit chain (`joint.1.neg-lim-sw-in`, `joint.1.pos-lim-sw-in`) |
 | Slave 1 (Z/probe IO) | DI4 | Z home at +Z (`joint.2.home-sw-in`) |
 | Slave 2 (Z/aux IO) | DI2 | Z negative limit (`joint.2.neg-lim-sw-in`) |
-| Slave 1 (Z/probe IO) | DI5 | Touch probe (`motion.probe-input`) |
+| Slave 1 (Z/probe IO) | DI5 | Touch probe (`touch-probe-in` -> `motion.probe-input`) |
+| Slave 2 (Z/aux IO) | DI5 / DB15 pin 11 | Contact toolsetter (`toolsetter-in` -> `motion.probe-input`) |
 | Slave 3 (A axis IO) | DI1 / DB15 pin 10 | Software E-stop NC switch (`iocontrol.0.emc-enable-in`) |
 | Slave 3 (A axis IO) | DI3 (planned) | A home (currently commented out in HAL) |
 
