@@ -120,6 +120,16 @@ MDI: `M3 S2000`, then a small `G1` — the move should wait until `spindle.0.at-
 
 To revert to immediate at-speed (no 5 s settle), edit `custom.hal`: remove the `timedelay` block and wire `near.0.out` directly to `spindle.0.at-speed`. The `feature_spindle-delay` branch is kept for reference.
 
+## Laser tool setter (skeleton, in progress)
+
+A dedicated Probe Basic tab for an upcoming laser tool setter (tool length + diameter + runout + broken-tool detect). Currently UI-only — buttons fire NGC subroutines that print a DEBUG line and exit. No HAL pins, no actual probing.
+
+- Tab loaded via `USER_TABS_PATH = probe_basic/user_tabs/` (added in `ethercat_mill.ini` `[DISPLAY]`).
+- Tab source: `probe_basic/user_tabs/laser_setter/` (`.ui`, `.py`, `.qss`).
+- Skeleton macros: `probe_basic/subroutines/laser_*.ngc`.
+
+Roadmap is staged: hardware pick + HAL wiring + length-only macro + calibration + diameter measure + PB button polish + broken-tool M-code + per-flute profiling. Each phase ships on its own branch and PR.
+
 ## What was left out of git, but is helpful to keep in the config
 
 
