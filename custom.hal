@@ -51,3 +51,24 @@ setp mult2.6.in1 0.01
 net spindle-current-raw mb2hal.freq_fb.02.float => mult2.6.in0
 net spindle-current mult2.6.out
 
+# 6. VFD Fault Code Monitoring
+# H100 manual: input register 0x000A is "Current fault" and is read with function 0x04.
+# Decimal 64 = E.OCS (overcurrent), decimal 92 = E.oHS (inverter overheating).
+addf near.1 servo-thread
+addf near.2 servo-thread
+loadrt or2 names=vfd_fault_or
+addf vfd_fault_or servo-thread
+
+setp near.1.scale 1.0
+setp near.1.difference 0.5
+setp near.1.in2 64.0
+
+setp near.2.scale 1.0
+setp near.2.difference 0.5
+setp near.2.in2 92.0
+
+net spindle-vfd-fault-code mb2hal.vfd_fault.00.float => near.1.in1 near.2.in1
+net spindle-vfd-overcurrent near.1.out => vfd_fault_or.in0
+net spindle-vfd-overtemperature near.2.out => vfd_fault_or.in1
+net spindle-vfd-critical-fault vfd_fault_or.out => halui.estop.activate
+

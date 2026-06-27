@@ -138,6 +138,22 @@ MDI: `M3 S2000`, then a small `G1` — the move should wait until `spindle.0.at-
 
 To revert to immediate at-speed (no 5 s settle), edit `custom.hal`: remove the `timedelay` block and wire `near.0.out` directly to `spindle.0.at-speed`. The `feature_spindle-delay` branch is kept for reference.
 
+## H100 VFD fault monitoring
+
+`h100.mb2hal` polls H100 input register `0x000A` with Modbus function `0x04`
+(`fnct_04_read_input_registers`). The H100 manual lists this register as
+`Current fault`.
+
+`custom.hal` watches the returned decimal code:
+
+| Decimal code | H100 display | Meaning | HAL signal |
+|--------------|--------------|---------|------------|
+| `64` | `E.OCS` | Overcurrent | `spindle-vfd-overcurrent` |
+| `92` | `E.oHS` | Inverter overheating | `spindle-vfd-overtemperature` |
+
+Either fault sets `spindle-vfd-critical-fault`, which triggers
+`halui.estop.activate`.
+
 ## What was left out of git, but is helpful to keep in the config
 
 
