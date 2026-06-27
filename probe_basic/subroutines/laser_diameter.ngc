@@ -1,0 +1,10 @@
+(author: jayem)
+(date: 2026)
+(SKELETON - NO LOGIC YET)
+(Future: spinning tool, probe +X and -X edges of beam, compute diameter)
+
+o<laser_diameter> sub
+    (DEBUG, LASER: measure diameter - SKELETON, no logic yet)
+o<laser_diameter> endsub
+
+M2
