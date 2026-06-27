@@ -4,6 +4,9 @@
 (Future: spinning tool, probe +X and -X edges of beam, compute diameter)
 
 o<laser_diameter> sub
+    o100 if [#5399 NE 1]
+        (abort, LASER: Touch off Z first before diameter measurement)
+    o100 endif
     (DEBUG, LASER: measure diameter - SKELETON, no logic yet)
 o<laser_diameter> endsub
 
