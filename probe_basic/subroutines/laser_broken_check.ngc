@@ -5,6 +5,9 @@
 (read laser-broken pin, abort program if tool missing/short)
 
 o<laser_broken_check> sub
+    o100 if [#5399 NE 1]
+        (abort, LASER: Touch off Z first before broken tool check)
+    o100 endif
     (DEBUG, LASER: broken tool check - SKELETON, no logic yet)
 o<laser_broken_check> endsub
 

@@ -1,0 +1,13 @@
+(author: jayem)
+(date: 2026)
+(SKELETON - NO LOGIC YET)
+(Dedicated action to commit measured laser values into tool table)
+
+o<laser_update_tool_table> sub
+    o100 if [#5399 NE 1]
+        (abort, LASER: Touch off Z first before updating tool table)
+    o100 endif
+    (DEBUG, LASER: update tool table - SKELETON, no logic yet)
+o<laser_update_tool_table> endsub
+
+M2

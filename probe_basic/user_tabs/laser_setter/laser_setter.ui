@@ -107,27 +107,6 @@
       </item>
 
       <item>
-       <widget class="QFrame" name="headerDivider2">
-        <property name="frameShape"><enum>QFrame::VLine</enum></property>
-        <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
-       </widget>
-      </item>
-
-      <item>
-       <widget class="QLabel" name="ledMuxMode">
-        <property name="minimumSize"><size><width>18</width><height>18</height></size></property>
-        <property name="maximumSize"><size><width>18</width><height>18</height></size></property>
-        <property name="text"><string/></property>
-        <property name="toolTip"><string>Probe mux mode (placeholder)</string></property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="lblMuxMode">
-        <property name="text"><string>MUX: CONTACT</string></property>
-       </widget>
-      </item>
-
-      <item>
        <widget class="QFrame" name="headerDivider3">
         <property name="frameShape"><enum>QFrame::VLine</enum></property>
         <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
@@ -137,6 +116,27 @@
       <item>
        <widget class="QLabel" name="lblActiveTool">
         <property name="text"><string>TOOL: --</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="headerDivider4">
+        <property name="frameShape"><enum>QFrame::VLine</enum></property>
+        <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lblUnitsCap">
+        <property name="text"><string>UNITS</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="cmbUnits">
+        <item>
+         <property name="text"><string>mm</string></property>
+        </item>
+        <item>
+         <property name="text"><string>in</string></property>
+        </item>
        </widget>
       </item>
      </layout>
@@ -158,6 +158,13 @@
         <property name="rightMargin"><number>14</number></property>
         <property name="bottomMargin"><number>14</number></property>
         <property name="spacing"><number>10</number></property>
+
+        <item>
+         <widget class="QPushButton" name="btnGetStartPos">
+          <property name="text"><string>GET STARTING POSITION (X/Y)</string></property>
+          <property name="minimumHeight"><number>44</number></property>
+         </widget>
+        </item>
 
         <item>
          <widget class="QPushButton" name="btnMeasureLength">
@@ -229,7 +236,7 @@
         </item>
         <item row="0" column="2">
          <widget class="QLabel" name="lblResLengthUnit">
-          <property name="text"><string>in</string></property>
+          <property name="text"><string>mm</string></property>
          </widget>
         </item>
 
@@ -246,7 +253,7 @@
         </item>
         <item row="1" column="2">
          <widget class="QLabel" name="lblResDiamUnit">
-          <property name="text"><string>in</string></property>
+          <property name="text"><string>mm</string></property>
          </widget>
         </item>
 
@@ -263,7 +270,7 @@
         </item>
         <item row="2" column="2">
          <widget class="QLabel" name="lblResRunoutUnit">
-          <property name="text"><string>in</string></property>
+          <property name="text"><string>mm</string></property>
          </widget>
         </item>
 
@@ -344,14 +351,14 @@
         </item>
         <item row="0" column="1">
          <widget class="QLineEdit" name="leMasterPin">
-          <property name="text"><string>0.5000</string></property>
+          <property name="text"><string>12.7000</string></property>
           <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
           <property name="minimumHeight"><number>32</number></property>
          </widget>
         </item>
         <item row="0" column="2">
          <widget class="QLabel" name="lblMasterPinUnit">
-          <property name="text"><string>in</string></property>
+          <property name="text"><string>mm</string></property>
          </widget>
         </item>
 
@@ -400,7 +407,7 @@
         </item>
         <item row="4" column="2">
          <widget class="QLabel" name="lblBeamXUnit">
-          <property name="text"><string>in</string></property>
+          <property name="text"><string>mm</string></property>
          </widget>
         </item>
 
@@ -417,7 +424,7 @@
         </item>
         <item row="5" column="2">
          <widget class="QLabel" name="lblBeamYUnit">
-          <property name="text"><string>in</string></property>
+          <property name="text"><string>mm</string></property>
          </widget>
         </item>
 
@@ -434,7 +441,7 @@
         </item>
         <item row="6" column="2">
          <widget class="QLabel" name="lblBeamZUnit">
-          <property name="text"><string>in</string></property>
+          <property name="text"><string>mm</string></property>
          </widget>
         </item>
 
@@ -451,7 +458,7 @@
         </item>
         <item row="7" column="2">
          <widget class="QLabel" name="lblZOffsetUnit">
-          <property name="text"><string>in</string></property>
+          <property name="text"><string>mm</string></property>
          </widget>
         </item>
 
@@ -468,7 +475,7 @@
         </item>
         <item row="8" column="2">
          <widget class="QLabel" name="lblBeamDiaUnit">
-          <property name="text"><string>in</string></property>
+          <property name="text"><string>mm</string></property>
          </widget>
         </item>
 
@@ -513,11 +520,10 @@
       </item>
 
       <item>
-       <widget class="QPushButton" name="btnMuxToggle">
-        <property name="text"><string>PROBE MUX: TOGGLE</string></property>
+       <widget class="QPushButton" name="btnUpdateToolTable">
+        <property name="text"><string>UPDATE TOOL TABLE</string></property>
         <property name="minimumHeight"><number>36</number></property>
         <property name="minimumWidth"><number>200</number></property>
-        <property name="checkable"><bool>true</bool></property>
        </widget>
       </item>
 

@@ -1,14 +1,14 @@
 /* ============================================================
  * Laser Tool Setter — stylesheet
- * Matches Probe Basic dark theme: gray panels, orange accent.
+ * Matches Probe Basic dark theme: gray panels with glossy controls.
  * Scope: applied via self.setStyleSheet() in laser_setter.py,
  * cascades through the LASER_SETTER root QWidget only.
  * ============================================================ */
 
 QWidget#LASER_SETTER {
-    background-color: #1e1e1e;
-    color: #e0e0e0;
-    font-family: "Roboto", "DejaVu Sans", sans-serif;
+    background-color: rgb(90, 90, 90);
+    color: rgb(238, 238, 236);
+    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
     font-size: 12px;
 }
 
@@ -16,23 +16,23 @@ QWidget#LASER_SETTER {
 
 QFrame#headerBar,
 QFrame#footerBar {
-    background-color: #262626;
-    border: 1px solid #3a3a3a;
+    background-color: rgb(82, 82, 83);
+    border: 1px solid rgb(176, 179, 172);
     border-radius: 4px;
 }
 
 QFrame#headerDivider1,
-QFrame#headerDivider2,
 QFrame#headerDivider3,
+QFrame#headerDivider4,
 QFrame#resultsDivider,
 QFrame#calDivider {
-    color: #3a3a3a;
-    background-color: #3a3a3a;
+    color: rgb(130, 130, 130);
+    background-color: rgb(130, 130, 130);
     max-width: 1px;
 }
 
 QLabel#lblTitle {
-    color: #ff7e00;
+    color: white;
     font-family: "Bebas Mono", "Bebas Kai", "Roboto", sans-serif;
     font-size: 22px;
     font-weight: bold;
@@ -41,11 +41,11 @@ QLabel#lblTitle {
 
 QLabel#lblLedLaser,
 QLabel#lblLedAir,
-QLabel#lblMuxMode,
 QLabel#lblActiveTool,
-QLabel#lblStatusBar {
-    color: #c0c0c0;
-    font-family: "Bebas Mono", "Roboto Mono", monospace;
+QLabel#lblStatusBar,
+QLabel#lblUnitsCap {
+    color: rgb(238, 238, 236);
+    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
     font-size: 13px;
     letter-spacing: 1px;
 }
@@ -53,8 +53,7 @@ QLabel#lblStatusBar {
 /* ---------- Status LEDs (placeholder gray; later driven by HAL) ---------- */
 
 QLabel#ledLaserHealthy,
-QLabel#ledAirBlast,
-QLabel#ledMuxMode {
+QLabel#ledAirBlast {
     background-color: #555555;
     border: 1px solid #2a2a2a;
     border-radius: 9px;
@@ -63,19 +62,20 @@ QLabel#ledMuxMode {
 /* ---------- Group boxes (column containers) ---------- */
 
 QGroupBox {
-    background-color: #262626;
-    border: 1px solid #3a3a3a;
+    background-color: rgb(82, 82, 83);
+    border: 1px solid rgb(176, 179, 172);
     border-radius: 4px;
-    margin-top: 16px;
-    padding-top: 6px;
+    margin-top: 0px;
+    padding-top: 22px;
 }
 
 QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    left: 14px;
+    subcontrol-origin: padding;
+    subcontrol-position: top center;
+    left: 0px;
+    top: 2px;
     padding: 0 6px;
-    color: #ff7e00;
+    color: white;
     font-family: "Bebas Mono", "Bebas Kai", "Roboto", sans-serif;
     font-size: 14px;
     font-weight: bold;
@@ -85,65 +85,88 @@ QGroupBox::title {
 /* ---------- Buttons ---------- */
 
 QPushButton {
-    background-color: #2a2a2a;
-    color: #e0e0e0;
-    border: 1px solid #3a3a3a;
-    border-radius: 3px;
+    color: white;
+    border-color: black;
+    border-style: solid;
+    border-width: 2px;
+    border-radius: 5px;
     padding: 6px 12px;
-    font-family: "Bebas Mono", "Roboto", sans-serif;
-    font-size: 13px;
+    background: qlineargradient(
+        spread:pad, x1:0, y1:1, x2:0, y2:0,
+        stop:0 rgba(213, 218, 216, 255),
+        stop:0.169312 rgba(82, 82, 83, 255),
+        stop:0.328042 rgba(72, 70, 73, 255),
+        stop:0.492063 rgba(78, 77, 79, 255),
+        stop:0.703704 rgba(72, 70, 73, 255),
+        stop:0.86 rgba(82, 82, 83, 255),
+        stop:1 rgba(213, 218, 216, 255)
+    );
+    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
+    font-size: 15pt;
     letter-spacing: 1px;
 }
 
 QPushButton:hover {
-    background-color: #353535;
-    border-color: #ff7e00;
+    background: qlineargradient(
+        x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 #A19E9E, stop: 1.0 #5C5959
+    );
 }
 
 QPushButton:pressed,
 QPushButton:checked {
-    background-color: #ff7e00;
-    color: #1e1e1e;
-    border-color: #ff7e00;
+    background: qlineargradient(
+        spread:pad, x1:0, y1:0, x2:0, y2:1,
+        stop:0 rgba(85, 85, 238, 255),
+        stop:0.544974 rgba(90, 91, 239, 255),
+        stop:1 rgba(126, 135, 243, 255)
+    );
 }
 
 QPushButton:disabled {
-    background-color: #1a1a1a;
-    color: #555555;
-    border-color: #2a2a2a;
+    border-color: gray;
+    color: rgb(170, 170, 170);
 }
 
 QPushButton#btnAbortSafe {
-    border-color: #e44;
-    color: #ff6b6b;
+    color: white;
+    border: 2px solid #4a0000;
+    border-radius: 5px;
+    background: qlineargradient(
+        x1:0, y1:1, x2:0, y2:0,
+        stop:0 #5a1111, stop:0.5 #a61f1f, stop:1 #d84a4a
+    );
 }
 
 QPushButton#btnAbortSafe:hover {
-    background-color: #4a1a1a;
-    border-color: #ff4444;
-    color: #ffffff;
+    background: qlineargradient(
+        x1:0, y1:1, x2:0, y2:0,
+        stop:0 #6a1a1a, stop:0.5 #b82b2b, stop:1 #ee6a6a
+    );
 }
 
 QPushButton#btnAbortSafe:pressed {
-    background-color: #cc2222;
-    color: #ffffff;
-    border-color: #ff4444;
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #7a1414, stop:1 #cf2a2a
+    );
 }
 
 /* ---------- Line edits (calibration entry) ---------- */
 
 QLineEdit {
-    background-color: #161616;
-    color: #ffd080;
-    border: 1px solid #3a3a3a;
-    border-radius: 3px;
+    background-color: rgb(235, 235, 235);
+    color: black;
+    border: 1px solid rgb(180, 180, 180);
+    border-radius: 5px;
     padding: 4px 8px;
-    font-family: "Bebas Mono", "Roboto Mono", monospace;
-    font-size: 14px;
+    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
+    font-size: 18px;
 }
 
 QLineEdit:focus {
-    border-color: #ff7e00;
+    border-color: rgb(85, 85, 238);
+    background-color: rgb(245, 245, 255);
 }
 
 /* ---------- Result / cal value labels (DRO-style) ---------- */
@@ -159,13 +182,13 @@ QLabel#lblBeamY,
 QLabel#lblBeamZ,
 QLabel#lblZOffset,
 QLabel#lblBeamDia {
-    color: #ffd080;
-    background-color: #161616;
-    border: 1px solid #2a2a2a;
-    border-radius: 3px;
+    color: black;
+    background-color: rgb(235, 235, 235);
+    border: 1px solid rgb(180, 180, 180);
+    border-radius: 5px;
     padding: 4px 10px;
-    font-family: "Bebas Mono", "Roboto Mono", monospace;
-    font-size: 16px;
+    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
+    font-size: 20px;
     min-width: 90px;
 }
 
@@ -182,9 +205,9 @@ QLabel#lblZOffsetCap,
 QLabel#lblBeamDiaCap,
 QLabel#lblMasterPinCap,
 QLabel#lblCalRpmCap {
-    color: #909090;
-    font-family: "Bebas Mono", "Roboto", sans-serif;
-    font-size: 11px;
+    color: rgb(238, 238, 236);
+    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
+    font-size: 15px;
     letter-spacing: 1px;
 }
 
@@ -199,7 +222,46 @@ QLabel#lblZOffsetUnit,
 QLabel#lblBeamDiaUnit,
 QLabel#lblMasterPinUnit,
 QLabel#lblCalRpmUnit {
-    color: #707070;
-    font-family: "Roboto", sans-serif;
-    font-size: 10px;
+    color: white;
+    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
+    font-size: 15px;
+}
+
+QComboBox#cmbUnits {
+    color: white;
+    border: 2px solid black;
+    border-radius: 5px;
+    padding: 4px 8px;
+    min-width: 68px;
+    background: qlineargradient(
+        spread:pad, x1:0, y1:1, x2:0, y2:0,
+        stop:0 rgba(213, 218, 216, 255),
+        stop:0.169312 rgba(82, 82, 83, 255),
+        stop:0.328042 rgba(72, 70, 73, 255),
+        stop:0.492063 rgba(78, 77, 79, 255),
+        stop:0.703704 rgba(72, 70, 73, 255),
+        stop:0.86 rgba(82, 82, 83, 255),
+        stop:1 rgba(213, 218, 216, 255)
+    );
+    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
+    font-size: 13pt;
+}
+
+QComboBox#cmbUnits:hover {
+    background: qlineargradient(
+        x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 #A19E9E, stop: 1.0 #5C5959
+    );
+}
+
+QComboBox#cmbUnits::drop-down {
+    border: none;
+    width: 16px;
+}
+
+QComboBox#cmbUnits QAbstractItemView {
+    color: white;
+    background-color: rgb(60, 60, 60);
+    border: 1px solid black;
+    selection-background-color: rgb(85, 85, 238);
 }

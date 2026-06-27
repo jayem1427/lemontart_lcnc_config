@@ -1,0 +1,12 @@
+(author: jayem)
+(date: 2026)
+(Sets laser start position from operator-jogged center point)
+(Stores only X/Y. Z is managed in a separate Z-touch flow.)
+
+o<laser_set_start_xy> sub
+    #5181 = #1
+    #5182 = #2
+    (DEBUG, LASER: start XY saved to #5181/#5182, Z unchanged)
+o<laser_set_start_xy> endsub
+
+M2
