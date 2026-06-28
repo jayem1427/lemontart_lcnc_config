@@ -18,7 +18,7 @@ loadrt limit1 count=4
 loadrt div2 count=4
 loadrt not count=9
 loadrt and2 count=3
-loadrt or2 count=1
+loadrt or2 names=probe_or
 loadrt near count=3
 
 # =========================================================
@@ -42,13 +42,14 @@ addf div2.3 servo-thread
 addf and2.0 servo-thread
 addf and2.1 servo-thread
 addf and2.2 servo-thread
-addf or2.0 servo-thread
+addf probe_or servo-thread
 # not.0 is reserved by probe_basic_postgui.hal.
 addf not.1 servo-thread
 addf not.2 servo-thread
 addf not.3 servo-thread
 addf not.4 servo-thread
 addf not.5 servo-thread
+addf not.6 servo-thread
 addf not.7 servo-thread
 addf not.8 servo-thread
 setp and2.0.in0 0
@@ -196,20 +197,23 @@ net y-limit      not.4.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in
 # --- Z home on Slave 1 DI4 (+Z); -Z limit on Slave 2 DI2; no +Z limit ---
 net z-home-raw   lcec.0.1.di-4 => not.7.in
 net z-home       not.7.out => joint.2.home-sw-in
-net z-limit-raw  lcec.0.2.di-2 => not.8.in
-net z-limit      not.8.out => joint.2.neg-lim-sw-in
+# Z - limit on Slave 2 DI2 (DB15 pin 9) — disabled; pin free if needed later.
+# net z-limit-raw  lcec.0.2.di-2 => not.8.in
+# net z-limit      not.8.out => joint.2.neg-lim-sw-in
 
 # --- A still on breakout (no homing yet) ---
 # A axis home on slave 3 DI3:
 # net a-home-sw    lcec.0.3.di-3 => joint.3.home-sw-in
 net za-lims-gagged and2.0.out => joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
 
-# --- TOUCH PROBE + TOOLSETTER (both NC / active-high at trip) ---
-# Touch probe: Slave 1 DI5. Toolsetter: Slave 2 DI5 (DB15 pin 11).
+# --- TOUCH PROBE + TOOLSETTER (active-high at trip -> motion.probe-input) ---
+# Touch probe: Slave 1 DI5, NO (NPN). Idle open = di HIGH; trip closed = di LOW; inverted in HAL.
+# Toolsetter: Slave 1 DI2 (DB15 pin 9), NC (NPN). Direct, no inversion.
 # Either sensor tripping drives motion.probe-input TRUE.
-net touch-probe-in   lcec.0.1.di-5 => or2.0.in0
-net toolsetter-in    lcec.0.2.di-5 => or2.0.in1
-net probe-in         or2.0.out => motion.probe-input
+net touch-probe-raw  lcec.0.1.di-5 => not.6.in
+net touch-probe-in   not.6.out => probe_or.in0
+net toolsetter-in    lcec.0.1.di-2 => probe_or.in1
+net probe-in         probe_or.out => motion.probe-input
 
 # Standard Software GUI E-Stop Loop (Physical Master E-Stop cuts Mains Power)
 # Software E-stop switch is NC on Slave 3 DI1 / DB15 pin 10.
