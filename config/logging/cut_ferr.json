@@ -1,0 +1,32 @@
+{
+  "name": "cut_ferr",
+  "description": "Following error on all axes during AUTO program runs",
+  "rate_hz": 50,
+  "trigger": "program",
+  "log_subdir": "cut_ferr",
+  "context": ["line", "feed"],
+  "channels": [
+    {"id": "x_ferr", "pin": "joint.0.f-error", "label": "X", "units": "mm", "color": "#3498db", "group": "xyz_ferr"},
+    {"id": "y_ferr", "pin": "joint.1.f-error", "label": "Y", "units": "mm", "color": "#2ecc71", "group": "xyz_ferr"},
+    {"id": "z_ferr", "pin": "joint.2.f-error", "label": "Z", "units": "mm", "color": "#e74c3c", "group": "xyz_ferr"},
+    {"id": "a_ferr", "pin": "joint.3.f-error", "label": "A", "units": "deg", "color": "#9b59b6", "group": "a_ferr"}
+  ],
+  "plot_groups": [
+    {
+      "id": "xyz_ferr",
+      "title": "XYZ following error (mm)",
+      "y_mode": "fixed",
+      "y_min": -0.25,
+      "y_max": 0.25,
+      "channels": ["x_ferr", "y_ferr", "z_ferr"]
+    },
+    {
+      "id": "a_ferr",
+      "title": "A following error (deg)",
+      "y_mode": "fixed",
+      "y_min": -60,
+      "y_max": 60,
+      "channels": ["a_ferr"]
+    }
+  ]
+}

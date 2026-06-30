@@ -1,2 +1,46 @@
 toolsetter Reference/
 spindle_warmup.ngc
+
+# LinuxCNC / Probe Basic runtime (keep linuxcnc.var tracked; ignore backups)
+*.var.bak
+position.txt
+
+# QtPyVCP / Probe Basic local state
+.vcp_persistent_data.pickle
+**/sim.log
+**/sim.var
+**/sim.var.bak
+**/sim.pref
+**/probe_basic.pref
+
+# Editor / scope prefs
+halshow.preferences
+autosave.halscope
+
+# Duplicate tree at repo root only (INI uses probe_basic/user_dro_display/)
+/user_dro_display/
+
+# Orphan file in repo root (real table is probe_basic/tool.tbl)
+/tool.tbl
+
+# Simulation backup / scratch
+probe_basic/pb_required_ini_settings.old/
+
+# Large vendor extractions — use vendor PDF or your own copy
+A6-EC_series_servo_drive_manual.pdf
+A6-EC_series_servo_drive_manual.txt
+
+# Personal notes export
+Probe Basic Setup & Tuning.md
+
+# High-RPM example; unsafe as a generic default
+/spindle_break_in.ngc
+/x_tuning.g
+
+__pycache__/
+*.pyc
+
+# Signal logger output
+logs/**/*.csv
+logs/**/*.summary.txt
+!logs/**/.gitkeep

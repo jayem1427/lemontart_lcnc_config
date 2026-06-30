@@ -53,6 +53,10 @@ Note: **`PROGRAM_PREFIX`** points at `nc_files/` (next to the INI). Put your G-c
 | `xhc-whb04b-6.hal` | Pendant |
 | `probe_basic/` | Probe Basic YAML, postgui HAL, DROs, macros, `tool.tbl` |
 | `nc_files/` | Default program search path |
+| `config/logging/` | JSON presets for HAL signal logger |
+| `probe_basic/python/hal_signal_logger.py` | Generic logger + live buffers |
+| `scripts/run_signal_logger.py` | Run a preset from a second terminal |
+| `probe_basic/user_tabs/signal_monitor/` | Probe Basic live plot tab |
 
 Many of these files are connected to eachother. Using a tool like Cursor or Claude Code will absolutely make your life easier since you can expand the context window to multiple files, but please always verify any changes that AI makes. Add testable features one-at-a-time, and verify they work before proceeding forward.
 
@@ -83,6 +87,76 @@ Bit gating uses `and2.3` / `and2.4` and `or2.0` (`mux2` is float-only and cannot
 This lets you unplug the NC touch probe while running M600/toolsetter with a cutter loaded — the unplugged probe cannot false-trip probing when T99 is not in the spindle.
 
 Default probe tool is **T99**; `#3014`, `tool.tbl`, and HAL must all match. See **[Touch probe tool number](TOOLSETTER.md#touch-probe-tool-number-setup-and-renumbering)** in TOOLSETTER.md for first-time setup and renumbering.
+
+## Signal logging and live plots
+
+Generic framework for logging **any HAL pin** defined in JSON presets, with CSV output, per-session summaries, and optional live plotting in Probe Basic.
+
+### Dependencies
+
+```bash
+pip install --user pyqtgraph
+```
+
+Probe Basic already ships QtPyVCP / qtpy. `pyqtgraph` is only required for plots (the Signal Monitor tab and `plot_signal_log.py`).
+
+### Presets (`config/logging/`)
+
+| Preset | Trigger | What it logs |
+|--------|---------|--------------|
+| `cut_ferr` | AUTO program run | `joint.N.f-error` on all axes |
+| `motor_torque` | AUTO program run | `tune-torque.N.out` (% rated torque) |
+| `tune_idle` | Manual start/stop | Torque + velocity for rigidity / idle hunt tests |
+| `custom_template` | Copy and edit | Any HAL pin you name |
+
+Each preset defines:
+
+- `channels[]` — `id`, `pin`, `label`, `units`, `color`, optional `scale`
+- `plot_groups[]` — stacked plots with `y_mode`: `auto`, `fixed`, or `sym` (symmetric auto)
+- `trigger` — `program` (auto on cut) or `manual`
+
+Logs land in `logs/<log_subdir>/` as timestamped `.csv` + `.summary.txt`.
+
+### Run beside LinuxCNC (terminal 2)
+
+```bash
+./launch.sh
+# other terminal:
+python3 scripts/run_signal_logger.py --preset cut_ferr
+python3 scripts/run_signal_logger.py --preset motor_torque
+python3 scripts/run_signal_logger.py --list-presets
+python3 scripts/run_signal_logger.py --config config/logging/my_preset.json
+```
+
+### Probe Basic tab
+
+`ethercat_mill.ini` enables `USER_TABS_PATH = probe_basic/user_tabs/`. Open the **Signal Monitor** tab to pick a preset, live-plot channels, and manually start/stop `manual` presets (e.g. `tune_idle` during rigidity sweeps).
+
+`program` presets also auto-start when you run G-code in AUTO.
+
+### Plot a finished CSV
+
+```bash
+python3 scripts/plot_signal_log.py logs/cut_ferr/20250629_120000_part.csv --preset config/logging/cut_ferr.json
+```
+
+### Torque / velocity HAL pins
+
+`ethercat-conf.xml` maps CiA `6077` (torque) and `606C` (velocity) into each drive PDO. `custom.hal` scales them to:
+
+| HAL pin | Meaning |
+|---------|---------|
+| `tune-torque.0.out` … `.3.out` | X/Y/Z/A torque, % of rated |
+| `tune-velocity.0.out` … `.3.out` | X/Y/Z/A velocity (scale gain adjustable) |
+
+Verify torque scaling against the A6 manual on your bench; adjust `torque-pct.N.in1` or `tune-velocity.N.gain` in `custom.hal` if units look wrong.
+
+### Add your own preset
+
+1. Copy `config/logging/custom_template.json`.
+2. Set each channel `pin` to any HAL pin (`halcmd show pin` / `halcmd show sig`).
+3. Group channels into `plot_groups` with `y_mode` `auto`, `fixed`, or `sym`.
+4. Run with `--config your_file.json` or add it under `config/logging/` for the Probe Basic dropdown.
 
 ## Current machine behavior (captured config)
 
