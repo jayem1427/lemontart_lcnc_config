@@ -71,3 +71,83 @@ net spindle-vfd-overcurrent near.1.out => or2.1.in0
 net spindle-vfd-overtemperature near.2.out => or2.1.in1
 net spindle-vfd-critical-fault or2.1.out => halui.estop.activate
 
+# 7. Drive telemetry for logging / tuning (CiA 6077 torque, 606C velocity)
+loadrt conv_s32_float count=4 names=torque-cvt
+loadrt conv_s32_float count=4 names=vel-cvt
+loadrt mult2 count=4 names=torque-pct
+loadrt scale count=4 names=tune-torque
+loadrt scale count=4 names=tune-velocity
+
+addf torque-cvt.0 servo-thread
+addf torque-cvt.1 servo-thread
+addf torque-cvt.2 servo-thread
+addf torque-cvt.3 servo-thread
+addf vel-cvt.0 servo-thread
+addf vel-cvt.1 servo-thread
+addf vel-cvt.2 servo-thread
+addf vel-cvt.3 servo-thread
+addf torque-pct.0 servo-thread
+addf torque-pct.1 servo-thread
+addf torque-pct.2 servo-thread
+addf torque-pct.3 servo-thread
+addf tune-torque.0 servo-thread
+addf tune-torque.1 servo-thread
+addf tune-torque.2 servo-thread
+addf tune-torque.3 servo-thread
+addf tune-velocity.0 servo-thread
+addf tune-velocity.1 servo-thread
+addf tune-velocity.2 servo-thread
+addf tune-velocity.3 servo-thread
+
+# A6 6077 is typically 0.1% rated torque per count -> percent = raw * 0.1
+setp torque-pct.0.in1 0.1
+setp torque-pct.1.in1 0.1
+setp torque-pct.2.in1 0.1
+setp torque-pct.3.in1 0.1
+setp tune-torque.0.gain 1.0
+setp tune-torque.1.gain 1.0
+setp tune-torque.2.gain 1.0
+setp tune-torque.3.gain 1.0
+setp tune-torque.0.offset 0.0
+setp tune-torque.1.offset 0.0
+setp tune-torque.2.offset 0.0
+setp tune-torque.3.offset 0.0
+
+# 606C scaling is drive-specific; adjust gain if logged velocity looks wrong.
+setp tune-velocity.0.gain 0.001
+setp tune-velocity.1.gain 0.001
+setp tune-velocity.2.gain 0.001
+setp tune-velocity.3.gain 0.001
+setp tune-velocity.0.offset 0.0
+setp tune-velocity.1.offset 0.0
+setp tune-velocity.2.offset 0.0
+setp tune-velocity.3.offset 0.0
+
+net x-torque-s32 lcec.0.0.torque-fb => torque-cvt.0.in
+net x-torque-float torque-cvt.0.out => torque-pct.0.in0
+net x-torque-pct torque-pct.0.out => tune-torque.0.in
+
+net y-torque-s32 lcec.0.1.torque-fb => torque-cvt.1.in
+net y-torque-float torque-cvt.1.out => torque-pct.1.in0
+net y-torque-pct torque-pct.1.out => tune-torque.1.in
+
+net z-torque-s32 lcec.0.2.torque-fb => torque-cvt.2.in
+net z-torque-float torque-cvt.2.out => torque-pct.2.in0
+net z-torque-pct torque-pct.2.out => tune-torque.2.in
+
+net a-torque-s32 lcec.0.3.torque-fb => torque-cvt.3.in
+net a-torque-float torque-cvt.3.out => torque-pct.3.in0
+net a-torque-pct torque-pct.3.out => tune-torque.3.in
+
+net x-vel-s32 lcec.0.0.vel-fb => vel-cvt.0.in
+net x-vel-float vel-cvt.0.out => tune-velocity.0.in
+
+net y-vel-s32 lcec.0.1.vel-fb => vel-cvt.1.in
+net y-vel-float vel-cvt.1.out => tune-velocity.1.in
+
+net z-vel-s32 lcec.0.2.vel-fb => vel-cvt.2.in
+net z-vel-float vel-cvt.2.out => tune-velocity.2.in
+
+net a-vel-s32 lcec.0.3.vel-fb => vel-cvt.3.in
+net a-vel-float vel-cvt.3.out => tune-velocity.3.in
+
