@@ -1,0 +1,22 @@
+{
+  "name": "motor_torque",
+  "description": "EtherCAT drive torque feedback on all axes during program runs",
+  "rate_hz": 50,
+  "trigger": "program",
+  "log_subdir": "motor_torque",
+  "context": ["line", "feed"],
+  "channels": [
+    {"id": "x_torque", "pin": "tune-torque.0.out", "label": "X", "units": "%", "color": "#e74c3c", "group": "torque"},
+    {"id": "y_torque", "pin": "tune-torque.1.out", "label": "Y", "units": "%", "color": "#2ecc71", "group": "torque"},
+    {"id": "z_torque", "pin": "tune-torque.2.out", "label": "Z", "units": "%", "color": "#3498db", "group": "torque"},
+    {"id": "a_torque", "pin": "tune-torque.3.out", "label": "A", "units": "%", "color": "#f39c12", "group": "torque"}
+  ],
+  "plot_groups": [
+    {
+      "id": "torque",
+      "title": "Motor torque (% rated)",
+      "y_mode": "auto",
+      "channels": ["x_torque", "y_torque", "z_torque", "a_torque"]
+    }
+  ]
+}

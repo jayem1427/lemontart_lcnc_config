@@ -36,3 +36,8 @@ Probe Basic Setup & Tuning.md
 
 __pycache__/
 *.pyc
+
+# Signal logger output
+logs/**/*.csv
+logs/**/*.summary.txt
+!logs/**/.gitkeep
