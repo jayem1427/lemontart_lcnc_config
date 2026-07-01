@@ -3,7 +3,7 @@
 (date: 01/28/26)
 
 (load tool in spindle safety macro)
-; TOOL CHANGE PANEL — T prep, then M600 measure + M6 prompt at G30
+; TOOL CHANGE PANEL — cutters: M600 measure; touch probe (#3014): M6+G43 only
 ; Parameter #3991 is used to track the current tool loaded it in the spindle (persistently)
 ; Parameters #4001 to #4024 are used to track which tool is in which pocket (persistently)
 ; Parameter #4000 is not populated just used in the maths to calculate the above numbers
@@ -36,15 +36,19 @@ o120 if [#11 EQ 1]
 o120 endif
 
 o130 if [#11 EQ 0]
+  o<131> if [#<probe_tool_number> GT 0 AND [#<load_spindle_tool_number_2> EQ #<probe_tool_number>]]
+    ; Touch probe (#3014 from Probe Basic menu) — M6+G43 only, no contact toolsetter measure
+    T#<load_spindle_tool_number_2> M6
+    G43 H#<load_spindle_tool_number_2>
+    #3991 = #<load_spindle_tool_number_2>
+    S0 M5
+  o<131> else
     #2001 = 1
     T#<load_spindle_tool_number_2>
     o<m600> call
     #3991 = #<load_spindle_tool_number_2>
+  o<131> endif
 o130 endif
-
-o140 if [#<load_spindle_tool_number_2> EQ #<probe_tool_number>]
-    S0 M5
-o140 endif
 
 o<program_coolant> call
 

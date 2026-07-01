@@ -60,7 +60,7 @@ Semi-automatic tool length measurement for a **manual collet spindle**, based on
 
 | Control | Subroutine | Behavior |
 |---------|------------|----------|
-| **LOAD SPINDLE** (TOOL CHANGE PANEL) | `load_spindle_safety_2.ngc` | `T#` → `#2001=1` → `m600` — full change + measure; no post-probe `M00` |
+| **LOAD SPINDLE** (TOOL CHANGE PANEL) | `load_spindle_safety_2.ngc` | Cutters: `T#` → `#2001=1` → `m600`. Touch probe (`#3014`): `T M6` + `G43` + `M5` only |
 | **M6 G43** (tool page / bottom bar) | `m6_tool_call_*.ngc` | `T M6` + `G43` only — OK dialog, no move, no probe; uses existing table length |
 | **TOUCH OFF CURRENT TOOL** | `tool_touch_off.ngc` | Re-measure tool already in spindle (manual mode) |
 
