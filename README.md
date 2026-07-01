@@ -56,9 +56,13 @@ Note: **`PROGRAM_PREFIX`** points at `nc_files/` (next to the INI). Put your G-c
 
 Many of these files are connected to eachother. Using a tool like Cursor or Claude Code will absolutely make your life easier since you can expand the context window to multiple files, but please always verify any changes that AI makes. Add testable features one-at-a-time, and verify they work before proceeding forward.
 
+## Toolsetter (semi-auto tool length)
+
+TooTall18T `tool_touch_off` + `M600` integration for manual collet tool changes with probing. See **[TOOLSETTER.md](TOOLSETTER.md)** for INI/HAL/macro details and Probe Basic button map.
+
 ## Current machine behavior (captured config)
 
-- Manual tool changes are **retract-only**: `TOOL_CHANGE_QUILL_UP = 1` and no `TOOL_CHANGE_POSITION`, so LinuxCNC does not command an X/Y move for tool change.
+- Built-in M6 tool-change motion is **disabled** (`TOOL_CHANGE_AT_G30=0`, `TOOL_CHANGE_QUILL_UP=0`); retract and G30 are handled by `tool_touch_off.ngc` / `M600`.
 - Home/limit inputs below are wired active-low NC and inverted in HAL (`not.*`).
 - Touch probe (Slave 1 DI5) and contact toolsetter (Slave 2 DI5 / DB15 pin 11) are NC and OR'd together to `motion.probe-input`.
 - Software E-stop is wired NC on Slave 3 DI1 / DB15 pin 10 and gates `iocontrol.0.emc-enable-in`.

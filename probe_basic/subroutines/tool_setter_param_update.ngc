@@ -1,18 +1,62 @@
 o<tool_setter_param_update> sub
 
-  #<fast_probe_fr_3004> = #1
-  #<slow_probe_fr_3005> = #2
-  #<traverse_fr_3006> = #3
-  #<z_max_travel_3007> = #4
-  #<xy_max_travel_3008> = #5
-  #<retract_distance_3009> = #6
-  #<spindle_zero_height_3010> = #7
-  #<tool_diameter_probe_mode_3011> = #8
-  #<tool_diameter_offset_mode_3012> = #9
-  #<tool_setter_offset_direction_3013> = #10
-  #<breakage_tolerance_3037> = #11
-  #<user_setter_1_3038> = #12
-  #<user_setter_2_3039> = #13
+  #<fast_probe_fr_3004> = 400
+  #<slow_probe_fr_3005> = 50
+  #<traverse_fr_3006> = 800
+  #<z_max_travel_3007> = 50
+  #<xy_max_travel_3008> = 1
+  #<retract_distance_3009> = 2
+  #<spindle_zero_height_3010> = #3010
+  o115 if [#<spindle_zero_height_3010> LE 0]
+    #<spindle_zero_height_3010> = 25
+  o115 endif
+  #<tool_diameter_probe_mode_3011> = 0
+  #<tool_diameter_offset_mode_3012> = 0
+  #<tool_setter_offset_direction_3013> = 0
+  #<breakage_tolerance_3037> = 0
+  #<user_setter_1_3038> = 0
+  #<user_setter_2_3039> = 0
+
+  (optional argument override support)
+  o100 if [#1 GT 0]
+    #<fast_probe_fr_3004> = #1
+  o100 endif
+  o101 if [#2 GT 0]
+    #<slow_probe_fr_3005> = #2
+  o101 endif
+  o102 if [#3 GT 0]
+    #<traverse_fr_3006> = #3
+  o102 endif
+  o103 if [#4 GT 0]
+    #<z_max_travel_3007> = #4
+  o103 endif
+  o104 if [#5 GT 0]
+    #<xy_max_travel_3008> = #5
+  o104 endif
+  o105 if [#6 GT 0]
+    #<retract_distance_3009> = #6
+  o105 endif
+  o106 if [#7 GT 0]
+    #<spindle_zero_height_3010> = #7
+  o106 endif
+  o107 if [#8 GT 0]
+    #<tool_diameter_probe_mode_3011> = #8
+  o107 endif
+  o108 if [#9 GT 0]
+    #<tool_diameter_offset_mode_3012> = #9
+  o108 endif
+  o109 if [#10 GT 0]
+    #<tool_setter_offset_direction_3013> = #10
+  o109 endif
+  o110 if [#11 GT 0]
+    #<breakage_tolerance_3037> = #11
+  o110 endif
+  o111 if [#12 GT 0]
+    #<user_setter_1_3038> = #12
+  o111 endif
+  o112 if [#13 GT 0]
+    #<user_setter_2_3039> = #13
+  o112 endif
 
   #3004 = #<fast_probe_fr_3004>
 
@@ -39,6 +83,8 @@ o<tool_setter_param_update> sub
   #3038 = #<user_setter_1_3038>
 
   #3039 = #<user_setter_2_3039>
+
+  ; #5181-#5183 are written by SET TOOL TOUCH OFF POS / G30.1 — do not overwrite here
 
 o<tool_setter_param_update> endsub [1]
 

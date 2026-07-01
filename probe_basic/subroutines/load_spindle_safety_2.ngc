@@ -3,7 +3,7 @@
 (date: 01/28/26)
 
 (load tool in spindle safety macro)
-; This is called form the Tool page
+; TOOL CHANGE PANEL — T prep, then M600 measure + M6 prompt at G30
 ; Parameter #3991 is used to track the current tool loaded it in the spindle (persistently)
 ; Parameters #4001 to #4024 are used to track which tool is in which pocket (persistently)
 ; Parameter #4000 is not populated just used in the maths to calculate the above numbers
@@ -15,7 +15,8 @@ o<load_spindle_safety_2> sub
 #<load_spindle_tool_number_2> = #1 ; this is the value form the TOOL tab
 #<probe_tool_number> = #3014
 
-; Update atc pocket count based on INI settings
+; Update atc pocket count based on INI settings (default 1 for manual collet spindle)
+#<number_of_pockets> = 1
 o101 if [EXISTS[#<_ini[atc]pockets>]]
     #<number_of_pockets> = #<_ini[atc]pockets>
 o101 endif
@@ -31,11 +32,13 @@ o110 while [#10 LT #<number_of_pockets>]
 o110 endwhile
 
 o120 if [#11 EQ 1]
-    (abort, Tool %d#<load_spindle_tool_number> is already stored in carousel, not loading into spindle)
+    (abort, Tool %d#<load_spindle_tool_number_2> is already stored in carousel, not loading into spindle)
 o120 endif
 
 o130 if [#11 EQ 0]
-    M61 Q#<load_spindle_tool_number_2> G43 H#<load_spindle_tool_number_2>
+    #2001 = 1
+    T#<load_spindle_tool_number_2>
+    o<m600> call
     #3991 = #<load_spindle_tool_number_2>
 o130 endif
 

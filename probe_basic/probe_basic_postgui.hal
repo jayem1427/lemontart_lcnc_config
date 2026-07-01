@@ -14,6 +14,7 @@ net cycle-hours qtpyvcp.timerhours.in <= time.0.hours
 # *** Time items required for Probe Basic to run ***
 
 #  ---manual tool change signals---
+# TooTall18T Integration — M6 at G30 opens OK dialog with tool number (qtpyvcp_manualtoolchange)
 net tool-change-request => qtpyvcp_manualtoolchange.change
 net tool-change-confirmed <= qtpyvcp_manualtoolchange.changed
 net tool-number => qtpyvcp_manualtoolchange.number
