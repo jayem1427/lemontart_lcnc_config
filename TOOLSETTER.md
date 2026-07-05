@@ -127,30 +127,44 @@ Update README cross-references if you document a non-99 default elsewhere.
 
 Fusion post for this config. Install in Fusion **Posts** folder (replace the old file completely — Fusion caches posts).
 
-**Post engine 45702+ required** (current Fusion). Properties use the unified format; you should see a **Multi-Axis Setup** group in the post dialog with **Fourth axis mounted along**, **4th axis is a table**, and **G93 inverse time**.
+**Post engine 45702+ required** (current Fusion). Post dialog groups: **Tool Change**, **Multi-Axis Setup**, etc.
 
 If options still look like the old stock list, Fusion is still using a cached copy: remove `linuxcnc-djr.cps` from Personal Posts, restart Fusion, copy the new file in, and re-select it when posting.
 
 | Setting | Value | Why |
 |---------|-------|-----|
-| Tool change | **`T<n> M600`** (not M6) | Runs `m600.ngc` → `tool_touch_off.ngc` (retract, G30, probe, `G10` length) |
-| **Preload tool** | **Off** (`preloadTool: false`) | Avoids a bare `T` for the next tool after M600; see below |
-| **Fourth axis mounted along** | **Along X** (`fourthAxisAround: "x"`) | Post property group **Multi-Axis Setup** — enables A output and kinematics |
+| **Tool change command** | **M600 — toolsetter probe** (`toolChangeMode: "M600"`) | Lemontart default — see below |
+| **Preload tool** | **Off** (`preloadTool: false`) | Avoids a bare `T` for the next tool after tool change |
+| **Fourth axis mounted along** | **Along X** (`fourthAxisAround: "x"`) | **Multi-Axis Setup** — enables A output and kinematics |
 | **4th axis is a table** | **On** (`fourthAxisIsTable: true`) | Table rotary on X (Lemontart `trivkins coordinates=XYZA`) |
 | **G93 inverse time** | **On** (`useInverseTimeFeed: true`) | Simultaneous `G1 X Y Z A` uses inverse-time `F` |
-| Spindle after tool change | Post emits `M3`/`M4` after M600 | M600 stops spindle; CAM must restart it (post does this) |
+| Spindle after tool change | Post emits `M3`/`M4` after tool change M-code | M600 stops spindle; CAM must restart it (post does this) |
 
-In Fusion’s post dialog, open the **Multi-Axis Setup** group. If you use a Fusion **Machine Definition** on the setup, its kinematics override the post’s hardcoded A axis (set **Fourth axis mounted along** to **None** only if you intentionally want 3-axis output).
+In Fusion’s post dialog, open **Tool Change** and **Multi-Axis Setup**. If you use a Fusion **Machine Definition** on the setup, its kinematics override the post’s hardcoded A axis (set **Fourth axis mounted along** to **None** only if you intentionally want 3-axis output).
 
 Do **not** end programs with `T0 M600`. Keep touch probe **T99** out of CAM tool-change lists (load via Probe Basic only).
 
+### Tool change command (Fusion post property)
+
+Open the **Tool Change** group when posting. **`toolChangeMode`** selects what the post writes after each `T<n>`:
+
+| Mode | Posted G-code | Who needs it |
+|------|---------------|--------------|
+| **M600 — toolsetter probe** (default) | `T<n> M600` | **Lemontart / manual collet + toolsetter.** CAM triggers the full cycle: retract, G30 collet-change position, Manual Tool Change OK dialog, probe on the setter, `G10` length update via `m600.ngc` → `tool_touch_off.ngc`. Use for normal multi-tool CAM where each cutter is measured automatically. |
+| **M6 — manual OK only** | `T<n> M6` | **Lengths already known.** Tool table is correct (presetter, earlier M600, or single tool). Shows the OK dialog and syncs tool number only — **no** move to G30, **no** setter probe. Dry runs, test air cuts, or when the setter is unavailable. Same idea as Probe Basic **M6 G43** on the tool page. |
+| **T only — no M-code** | `T<n>` | **Fully manual workflow.** You load and measure with Probe Basic (**LOAD SPINDLE**, panel touch-off) before running CAM. CAM must not call any tool-change macro. Single-operation or repeat-run jobs where the spindle is already set up. |
+
+**Why M600 exists on this machine:** LinuxCNC built-in M6 tool-change motion is disabled (`TOOL_CHANGE_AT_G30=0`). M600 is a custom `REMAP` that runs the TooTall18T / Lemontart toolsetter sequence from CAM. Without it, Fusion’s default `M6` would only show the OK dialog — it would not probe or update length.
+
+**Spindle note:** M600 stops the spindle during the measure cycle; the post still emits `M3`/`M4` after the tool change block. With **M6** or **T only**, you are responsible for spindle state before the next cut.
+
 ### Preload tool (Fusion post property)
 
-When **on**, after each `T<n> M600` the post also writes a bare **`T<next>`** with no M-code — Fusion’s “preload next tool for ATC” habit.
+When **on**, after each tool change the post also writes a bare **`T<next>`** with no M-code — Fusion’s “preload next tool for ATC” habit.
 
 On a **manual collet** mill that is usually wrong:
 
-- The bare `T` updates **prepared** tool number only; nothing is in the spindle until you physically change and M600 completes.
+- The bare `T` updates **prepared** tool number only; nothing is in the spindle until you physically change and the tool-change macro completes.
 - Your HAL probe gating uses **`halui.tool.number`** (spindle tool). An extra prepared `T` does not match what is physically loaded and can confuse debugging.
 - There is no carousel to prefetch into.
 

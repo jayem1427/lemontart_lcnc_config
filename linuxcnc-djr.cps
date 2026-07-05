@@ -10,14 +10,14 @@
   FORKID {52A5C3D6-1533-413E-B493-7B93D9E48B30}
 */
 
-description = "LinuxCNC mill with A axis, M600 toolsetter, inverse time feed";
+description = "LinuxCNC mill with optional M600 toolsetter, A axis, inverse time feed";
 vendor = "LinuxCNC";
 vendorUrl = "http://www.linuxcnc.org";
 legal = "Copyright (C) 2012-2018 by Autodesk, Inc.";
 certificationLevel = 2;
 minimumRevision = 45702;
 
-longDescription = "LinuxCNC XYZA (table A), M600 toolsetter, G93 inverse time on simultaneous 4-axis moves";
+longDescription = "LinuxCNC XYZA, optional M600 toolsetter probing or M6 manual tool change, G93 inverse time on simultaneous 4-axis moves";
 
 extension = "ngc";
 setCodePage("ascii");
@@ -42,6 +42,12 @@ groupDefinitions = {
     description: "Header, tool change, and formatting",
     collapsed: false,
     order: 10
+  },
+  toolChange: {
+    title: "Tool Change",
+    description: "CAM tool-change behavior for this LinuxCNC config (M600 toolsetter vs M6 manual)",
+    collapsed: false,
+    order: 20
   },
   multiAxis: {
     title: "Multi-Axis Setup",
@@ -83,10 +89,23 @@ properties = {
   },
   preloadTool: {
     title: "Preload tool",
-    description: "After each tool change, output a bare T-word for the next tool (no M600). Leave off for manual collet spindles.",
+    description: "After each tool change, output a bare T-word for the next tool (no M-code). Leave off for manual collet spindles.",
     group: "general",
     type: "boolean",
     value: false,
+    scope: "post"
+  },
+  toolChangeMode: {
+    title: "Tool change command",
+    description: "Controls the M-code emitted after each T-word when Fusion posts a tool change.\n\nM600 (toolsetter probe) — Lemontart default. Runs the remapped M600 macro: retract, G30 collet-change position, Manual Tool Change OK dialog, probe on the toolsetter, and G10 tool-length update. Use this when CAM should measure each cutter automatically (manual collet spindle + toolsetter).\n\nM6 (manual OK only) — Standard LinuxCNC manual tool change. Shows the OK dialog and syncs the tool number; does NOT move to the setter or probe. Use when lengths are already correct in the tool table (presetter, prior M600, or single-tool jobs), for dry runs, or when the toolsetter is unavailable.\n\nT only (no M-code) — Outputs T<n> only. Use when you load and measure tools yourself before running (Probe Basic LOAD SPINDLE / panel workflow) and CAM must not trigger any tool-change macro.",
+    group: "toolChange",
+    type: "enum",
+    values: [
+      {id: "M600", title: "M600 — toolsetter probe (Lemontart default)"},
+      {id: "M6", title: "M6 — manual OK only (no probe)"},
+      {id: "T_ONLY", title: "T only — no M-code"}
+    ],
+    value: "M600",
     scope: "post"
   },
   fourthAxisAround: {
@@ -210,6 +229,28 @@ function getProperty(name) {
 
 function setProperty(property, value) {
   properties[property].current = value;
+}
+
+function getToolChangeMcode() {
+  switch (getProperty("toolChangeMode")) {
+  case "M6":
+    return 6;
+  case "T_ONLY":
+    return undefined;
+  case "M600":
+  default:
+    return 600;
+  }
+}
+
+function writeToolChange(toolNumber) {
+  var tWord = "T" + toolFormat.format(toolNumber);
+  var mcode = getToolChangeMcode();
+  if (mcode != undefined) {
+    writeBlock(tWord, mFormat.format(mcode));
+  } else {
+    writeBlock(tWord);
+  }
 }
 
 var permittedCommentChars = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,=_-";
@@ -862,7 +903,7 @@ function onSection() {
       warning(localize("Tool number exceeds maximum value."));
     }
 
-    writeBlock("T" + toolFormat.format(tool.number), mFormat.format(600));
+    writeToolChange(tool.number);
     if (tool.comment) {
       writeComment(tool.comment);
     }
@@ -1720,7 +1761,7 @@ var mapCommand = {
   COMMAND_SPINDLE_COUNTERCLOCKWISE:4,
   COMMAND_STOP_SPINDLE:5,
   COMMAND_ORIENTATE_SPINDLE:19,
-  COMMAND_LOAD_TOOL: 600
+  COMMAND_LOAD_TOOL: 6 // overridden by getToolChangeMcode() when Fusion emits COMMAND_LOAD_TOOL
 };
 
 function onCommand(command) {
@@ -1739,6 +1780,12 @@ function onCommand(command) {
   case COMMAND_BREAK_CONTROL:
     return;
   case COMMAND_TOOL_MEASURE:
+    return;
+  case COMMAND_LOAD_TOOL:
+    var loadMcode = getToolChangeMcode();
+    if (loadMcode != undefined) {
+      writeBlock(mFormat.format(loadMcode));
+    }
     return;
   }
   
