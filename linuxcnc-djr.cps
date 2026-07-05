@@ -35,6 +35,34 @@ allowedCircularPlanes = undefined; // allow any circular motion
 
 
 
+// Property groups (MillenniumOS-style — order/collapsed required for Fusion UI)
+groupDefinitions = {
+  general: {
+    title: "General",
+    description: "Header, tool change, and formatting",
+    collapsed: false,
+    order: 10
+  },
+  multiAxis: {
+    title: "Multi-Axis Setup",
+    description: "4th axis configuration and G93 inverse time",
+    collapsed: false,
+    order: 30
+  },
+  sequenceNumbers: {
+    title: "Sequence numbers",
+    description: "Optional N-word block numbering",
+    collapsed: true,
+    order: 40
+  },
+  retracts: {
+    title: "Retracts",
+    description: "Safe retract behavior",
+    collapsed: true,
+    order: 50
+  }
+};
+
 // user-defined properties (unified format — post engine 45702+)
 properties = {
   writeMachine: {
@@ -61,18 +89,23 @@ properties = {
     value: false,
     scope: "post"
   },
-  hasAAxis: {
-    title: "Use A axis (4th axis)",
-    description: "Enable table rotary A (G0/G1 A words) for 4-axis indexing and simultaneous toolpaths. Hardcoded kinematics unless a Fusion Machine Definition is on the setup.",
-    group: "fourthAxis",
-    type: "boolean",
-    value: true,
+  fourthAxisAround: {
+    title: "Fourth axis mounted along",
+    description: "Specifies which axis the fourth axis is mounted on. Select None for 3-axis output only.",
+    group: "multiAxis",
+    type: "enum",
+    values: [
+      {id: "none", title: "None"},
+      {id: "x", title: "Along X"},
+      {id: "y", title: "Along Y"}
+    ],
+    value: "x",
     scope: "post"
   },
-  aAxisPositive: {
-    title: "A axis around +X",
-    description: "Table rotary rotates around positive X. Uncheck if your A axis is -X in LinuxCNC.",
-    group: "fourthAxis",
+  fourthAxisIsTable: {
+    title: "4th axis is a table",
+    description: "True — table rotary (Lemontart A on X). False — head/rotary trunnion.",
+    group: "multiAxis",
     type: "boolean",
     value: true,
     scope: "post"
@@ -80,7 +113,7 @@ properties = {
   useInverseTimeFeed: {
     title: "G93 inverse time (simultaneous XYZA)",
     description: "Coordinated X/Y/Z/A cuts use G93 with inverse-time F. Plain 3-axis moves still use G94 feed/min.",
-    group: "fourthAxis",
+    group: "multiAxis",
     type: "boolean",
     value: true,
     scope: "post"
@@ -156,25 +189,6 @@ properties = {
     type: "boolean",
     value: false,
     scope: "post"
-  }
-};
-
-groupDefinitions = {
-  general: {
-    title: "General",
-    description: "Header, tool change, and formatting"
-  },
-  fourthAxis: {
-    title: "4th axis",
-    description: "Table A axis and G93 inverse time for simultaneous moves"
-  },
-  sequenceNumbers: {
-    title: "Sequence numbers",
-    description: "Optional N-word block numbering"
-  },
-  retracts: {
-    title: "Retracts",
-    description: "Safe retract behavior"
   }
 };
 
@@ -270,40 +284,10 @@ var currentFeedId;
 var retracted = false; // specifies that the tool has been retracted to the safe plane
 var previousABC = new Vector(0, 0, 0);
 
-// machine configuration (defineMachine / activateMachine)
+// machine configuration (MillenniumOS-style setup in onOpen)
 var receivedMachineConfiguration = false;
-var tcpIsSupported = false;
 
-function defineMachine() {
-  if (receivedMachineConfiguration) {
-    return; // Fusion Machine Definition on the setup takes precedence
-  }
-  if (!getProperty("hasAAxis")) {
-    machineConfiguration = new MachineConfiguration();
-    machineConfiguration.setVendor("LinuxCNC");
-    machineConfiguration.setModel("XYZ");
-    machineConfiguration.setDescription("3-axis (A axis disabled in post)");
-    setMachineConfiguration(machineConfiguration);
-    return;
-  }
-  var useTCP = false;
-  var aDir = getProperty("aAxisPositive") ? 1 : -1;
-  var aAxis = createAxis({
-    coordinate: 0,
-    table: true,
-    axis: [aDir, 0, 0],
-    cyclic: true,
-    preference: 0,
-    tcp: useTCP
-  });
-  machineConfiguration = new MachineConfiguration(aAxis);
-  machineConfiguration.setVendor("LinuxCNC");
-  machineConfiguration.setModel("Lemontart XYZA");
-  machineConfiguration.setDescription("Table A on X, non-TCP, G93 inverse time on simultaneous moves");
-  setMachineConfiguration(machineConfiguration);
-}
-
-function setFeedrateMode() {
+function configureMultiAxisFeedrate() {
   if (!machineConfiguration.isMultiAxisConfiguration()) {
     return;
   }
@@ -327,34 +311,7 @@ function setFeedrateMode() {
   if (!receivedMachineConfiguration) {
     setMachineConfiguration(machineConfiguration);
   }
-}
-
-function activateMachine() {
-  tcpIsSupported = false;
-  var axes = [machineConfiguration.getAxisU(), machineConfiguration.getAxisV(), machineConfiguration.getAxisW()];
-  for (var i in axes) {
-    if (axes[i].isEnabled() && axes[i].isTCPEnabled()) {
-      tcpIsSupported = true;
-      break;
-    }
-  }
-
-  if (!machineConfiguration.isMachineCoordinate(0)) {
-    aOutput.disable();
-  }
-  if (!machineConfiguration.isMachineCoordinate(1)) {
-    bOutput.disable();
-  }
-  if (!machineConfiguration.isMachineCoordinate(2)) {
-    cOutput.disable();
-  }
-
-  if (!machineConfiguration.isMultiAxisConfiguration()) {
-    return;
-  }
-
-  setFeedrateMode();
-  optimizeMachineAngles2(tcpIsSupported ? 0 : 1);
+  optimizeMachineAngles2(1); // map tip mode, non-TCP (matches trivkins XYZA)
   useInverseTimeFeed = getProperty("useInverseTimeFeed") !== false;
 }
 
@@ -408,10 +365,47 @@ function writeComment(text) {
 
 function onOpen() {
   receivedMachineConfiguration = (typeof machineConfiguration.isReceived == "function") ? machineConfiguration.isReceived() : false;
-  if (typeof defineMachine == "function") {
-    defineMachine();
+
+  if (!receivedMachineConfiguration) {
+    if (getProperty("fourthAxisAround") != "none") {
+      var aAxis = createAxis({
+        coordinate: 0,
+        table: getProperty("fourthAxisIsTable"),
+        axis: [
+          (getProperty("fourthAxisAround") == "x" ? 1 : 0),
+          (getProperty("fourthAxisAround") == "y" ? 1 : 0),
+          0
+        ],
+        cyclic: true,
+        range: [0, 360],
+        preference: 0
+      });
+      machineConfiguration = new MachineConfiguration(aAxis);
+      machineConfiguration.setVendor("LinuxCNC");
+      machineConfiguration.setModel("Lemontart XYZA");
+      machineConfiguration.setDescription("Table A on X, non-TCP, G93 inverse time on simultaneous moves");
+      setMachineConfiguration(machineConfiguration);
+    } else {
+      machineConfiguration = new MachineConfiguration();
+      machineConfiguration.setVendor("LinuxCNC");
+      machineConfiguration.setModel("XYZ");
+      machineConfiguration.setDescription("3-axis (fourth axis disabled in post)");
+      setMachineConfiguration(machineConfiguration);
+    }
   }
-  activateMachine();
+
+  if (!machineConfiguration.isMachineCoordinate(0)) {
+    aOutput.disable();
+  }
+  if (!machineConfiguration.isMachineCoordinate(1)) {
+    bOutput.disable();
+  }
+  if (!machineConfiguration.isMachineCoordinate(2)) {
+    cOutput.disable();
+  }
+
+  currentMachineABC = new Vector(0, 0, 0);
+  configureMultiAxisFeedrate();
 
   if (getProperty("useRadius")) {
     maximumCircularSweep = toRad(90); // avoid potential center calculation errors for CNC
@@ -744,6 +738,8 @@ function setWorkPlane(abc) {
   onCommand(COMMAND_LOCK_MULTI_AXIS);
 
   currentWorkPlaneABC = abc;
+  currentMachineABC = abc;
+  setCurrentABC(abc);
 }
 
 var closestABC = false; // choose closest machine angles
@@ -1495,6 +1491,7 @@ function onRapid5D(_x, _y, _z, _a, _b, _c) {
   var b = bOutput.format(_b);
   var c = cOutput.format(_c);
   writeBlock(gMotionModal.format(0), x, y, z, a, b, c);
+  currentMachineABC = new Vector(_a, _b, _c);
   forceFeed();
 }
 
@@ -1532,6 +1529,7 @@ function onLinear5D(_x, _y, _z, _a, _b, _c, feed) {
       writeBlock(gFeedModeModal.format(f.fmode), gMotionModal.format(1), f.frn);
     }
   }
+  currentMachineABC = new Vector(_a, _b, _c);
 }
 
 function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {

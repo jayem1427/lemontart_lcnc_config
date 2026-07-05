@@ -127,7 +127,7 @@ Update README cross-references if you document a non-99 default elsewhere.
 
 Fusion post for this config. Install in Fusion **Posts** folder (replace the old file completely — Fusion caches posts).
 
-**Post engine 45702+ required** (current Fusion). Properties use the unified format; you should see a **4th axis** group in the post dialog with **Use A axis**, **A axis around +X**, and **G93 inverse time**.
+**Post engine 45702+ required** (current Fusion). Properties use the unified format; you should see a **Multi-Axis Setup** group in the post dialog with **Fourth axis mounted along**, **4th axis is a table**, and **G93 inverse time**.
 
 If options still look like the old stock list, Fusion is still using a cached copy: remove `linuxcnc-djr.cps` from Personal Posts, restart Fusion, copy the new file in, and re-select it when posting.
 
@@ -135,11 +135,12 @@ If options still look like the old stock list, Fusion is still using a cached co
 |---------|-------|-----|
 | Tool change | **`T<n> M600`** (not M6) | Runs `m600.ngc` → `tool_touch_off.ngc` (retract, G30, probe, `G10` length) |
 | **Preload tool** | **Off** (`preloadTool: false`) | Avoids a bare `T` for the next tool after M600; see below |
-| **Use A axis (4th axis)** | **On** (`hasAAxis: true`) | Post property group **4th axis** — enables A output and kinematics |
+| **Fourth axis mounted along** | **Along X** (`fourthAxisAround: "x"`) | Post property group **Multi-Axis Setup** — enables A output and kinematics |
+| **4th axis is a table** | **On** (`fourthAxisIsTable: true`) | Table rotary on X (Lemontart `trivkins coordinates=XYZA`) |
 | **G93 inverse time** | **On** (`useInverseTimeFeed: true`) | Simultaneous `G1 X Y Z A` uses inverse-time `F` |
 | Spindle after tool change | Post emits `M3`/`M4` after M600 | M600 stops spindle; CAM must restart it (post does this) |
 
-In Fusion’s post dialog, open the **4th axis** group. If you use a Fusion **Machine Definition** on the setup, its kinematics override the post’s hardcoded A axis (leave **Use A axis** on unless you intentionally want 3-axis output only).
+In Fusion’s post dialog, open the **Multi-Axis Setup** group. If you use a Fusion **Machine Definition** on the setup, its kinematics override the post’s hardcoded A axis (set **Fourth axis mounted along** to **None** only if you intentionally want 3-axis output).
 
 Do **not** end programs with `T0 M600`. Keep touch probe **T99** out of CAM tool-change lists (load via Probe Basic only).
 
@@ -167,7 +168,7 @@ G93 G1 X... Y... Z... A... F...
 - **Simultaneous** (swarf / multi-axis): `onLinear5D` uses **`getMultiaxisFeed`** to compute an inverse-time **`F`** from the combined linear + rotary move length, then posts **`G93 G1`** (not the invalid `linear5D` word).
 - **Plain 3-axis** cuts still use **`G94`** and a normal feed-per-minute `F`.
 
-Machine definition in the post: **table A** on X, **`optimizeMachineAngles2(0)`** (non-TCP) to match **`trivkins coordinates=XYZA`** in `ethercat_mill.ini`. Do not enable TCP in Fusion for this config unless you add TCP kinematics in LinuxCNC.
+Machine definition in the post: **table A along X** (`fourthAxisAround: "x"`, `fourthAxisIsTable: true`), **`optimizeMachineAngles2(1)`** (map tip, non-TCP) to match **`trivkins coordinates=XYZA`** in `ethercat_mill.ini`. Do not enable TCP in Fusion for this config unless you add TCP kinematics in LinuxCNC.
 
 In Fusion, use **4-axis simultaneous** / multi-axis strategies with this post selected; verify the first program on air with low feed override.
 
