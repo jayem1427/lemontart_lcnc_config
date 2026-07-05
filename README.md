@@ -82,7 +82,7 @@ Bit gating uses `and2.3` / `and2.4` and `or2.0` (`mux2` is float-only and cannot
 
 This lets you unplug the NC touch probe while running M600/toolsetter with a cutter loaded — the unplugged probe cannot false-trip probing when T99 is not in the spindle.
 
-Probe tool number is **99** in HAL (`setp probe-tool-num.value 99`), matching `T99` in `probe_basic/tool.tbl` and Probe Basic `#3014` in `linuxcnc.var`.
+Default probe tool is **T99**; `#3014`, `tool.tbl`, and HAL must all match. See **[Touch probe tool number](TOOLSETTER.md#touch-probe-tool-number-setup-and-renumbering)** in TOOLSETTER.md for first-time setup and renumbering.
 
 ## Current machine behavior (captured config)
 

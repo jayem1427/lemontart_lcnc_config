@@ -18,7 +18,56 @@ Semi-automatic tool length measurement for a **manual collet spindle**, based on
 - `ethercat_mill.hal` — touch probe (DI5) vs contact toolsetter (DI2) gated onto `motion.probe-input` by `halui.tool.number` (T99 → probe only; any other tool → toolsetter only). See **Touch probe vs toolsetter routing** in [README.md](README.md).
 - `custom.hal` — VFD fault OR uses `or2.1`; `or2.0` is probe routing in `ethercat_mill.hal` (`loadrt or2 count=2` — do not add a second `or2` load with `names=`)
 
-Probe Basic touch-probe tool number: `#3014` in `linuxcnc.var` (must match `T99` in `probe_basic/tool.tbl` and `setp probe-tool-num.value 99` in HAL).
+Probe Basic touch-probe tool number: `#3014` in `linuxcnc.var` (must match the tool table slot and HAL). See **[Touch probe tool number](#touch-probe-tool-number-setup-and-renumbering)** below.
+
+## Touch probe tool number (setup and renumbering)
+
+This config uses **one tool table slot** for the touch probe (default **T99**). That same number must appear in three places — NGc macros read `#3014` (Probe Basic’s probe-tool parameter), but **HAL probe routing** uses its own constant and does **not** follow `#3014` automatically.
+
+### Three places that must agree
+
+| # | Where | What to set | Example (default) |
+|---|--------|-------------|-------------------|
+| 1 | **`probe_basic/tool.tbl`** | Tool table row: `T<n>`, pocket, **diameter** `D`, optional length `Z` | `T99  P5  D+2.000000 ; touch probe` |
+| 2 | **`linuxcnc.var`** → **`#3014`** | Probe Basic “probe tool number” (also set from the Probe screen) | `3014  99.000000` |
+| 3 | **`ethercat_mill.hal`** | `setp probe-tool-num.value <n>` — gates DI5 vs DI2 by `halui.tool.number` | `setp probe-tool-num.value 99` |
+
+If any one of these differs from the others, symptoms include: Probe Basic aborts (“probe tool not in spindle”), LOAD SPINDLE runs M600 on the touch probe, or HAL listens to the toolsetter while T99 is loaded (and vice versa).
+
+**You do not need to edit** individual `probe_*.ngc` files — they use `#3014` at runtime. **You must edit HAL** when renumbering; changing only the Probe Basic UI is not enough.
+
+### First-time setup (copying this repo)
+
+1. **Pick a tool number** not used by your cutters (99 is a common convention; any free integer works).
+2. **Tool table** — add or edit the row in `probe_basic/tool.tbl`:
+   - `T<n>  P<pocket>  D+<probe_diameter_mm>  ; touch probe`
+   - Set `D` to the **stylus ball diameter** (Trigger-type probes), not shank size.
+3. **Probe Basic UI** — open the Probe / touch-probe settings, set **Probe tool number** to `<n>`, set feeds/clearances as needed, click **UPDATE PROBE PARAMS** (runs `touch_probe_param_update.ngc` → writes `#3014` and related params to `linuxcnc.var`).
+4. **HAL** — in `ethercat_mill.hal`, set `setp probe-tool-num.value <n>` to the same number.
+5. **Restart LinuxCNC** so HAL reloads the constant.
+6. **Verify** — MDI `T<n> M6`, confirm in HAL: `halcmd show pin comp.0.equal` is TRUE when that tool is in the spindle; trip touch probe → `motion.probe-input` TRUE; trip toolsetter → ignored.
+
+Optional: set `#3014` directly in `linuxcnc.var` before first launch if you are not using the Probe Basic UI yet — but still align `tool.tbl` and HAL.
+
+### Changing the probe number later
+
+Example: move from T99 to **T50**.
+
+1. Update **`probe_basic/tool.tbl`** — rename `T99` → `T50` (or add T50 and remove T99).
+2. Probe Basic → set probe tool number to **50** → **UPDATE PROBE PARAMS** (or edit `#3014` in `linuxcnc.var`).
+3. Edit **`ethercat_mill.hal`**: `setp probe-tool-num.value 50`.
+4. Restart LinuxCNC.
+5. Re-load the probe with **LOAD SPINDLE** or `T50 M6` and re-run a quick probe test.
+
+Update README cross-references if you document a non-99 default elsewhere.
+
+### Related (not the tool *number*)
+
+| Item | File / param | Notes |
+|------|----------------|-------|
+| Probe diameter for routines | `#3014` row in tool table `D` column | Used for offset math in probing |
+| Skip M600 when loading probe | `load_spindle_safety_2.ngc` | Uses `#3014`; no edit if `#3014` is correct |
+| Metrology | `probe_basic/subroutines/metrology/README.md` | Assumes probe loaded and `#3014` matches spindle |
 
 ## Macros (`probe_basic/subroutines/`)
 
