@@ -123,10 +123,32 @@ Update README cross-references if you document a non-99 default elsewhere.
 2. **PROBE SPINDLE NOSE ZERO** → `#3010`
 3. Set probe feeds / retract in Tool Setter screen → **UPDATE** (`tool_setter_param_update.ngc`)
 
-## CAM / operator notes
+## CAM / post processor (`linuxcnc-djr.cps`)
 
-- Use `T<n> M600` in G-code, **not** `M6`; emit `M3 S…` after `M600` (macro does not restart spindle)
-- Avoid `T0 M600` at program end (G43/G49 hazard on abort)
+Fusion post for this config. Install in Fusion **Posts** folder.
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| Tool change | **`T<n> M600`** (not M6) | Runs `m600.ngc` → `tool_touch_off.ngc` (retract, G30, probe, `G10` length) |
+| **Preload tool** | **Off** (`preloadTool: false`) | Avoids a bare `T` for the next tool after M600; see below |
+| Spindle after tool change | Post emits `M3`/`M4` after M600 | M600 stops spindle; CAM must restart it (post does this) |
+
+Do **not** end programs with `T0 M600`. Keep touch probe **T99** out of CAM tool-change lists (load via Probe Basic only).
+
+### Preload tool (Fusion post property)
+
+When **on**, after each `T<n> M600` the post also writes a bare **`T<next>`** with no M-code — Fusion’s “preload next tool for ATC” habit.
+
+On a **manual collet** mill that is usually wrong:
+
+- The bare `T` updates **prepared** tool number only; nothing is in the spindle until you physically change and M600 completes.
+- Your HAL probe gating uses **`halui.tool.number`** (spindle tool). An extra prepared `T` does not match what is physically loaded and can confuse debugging.
+- There is no carousel to prefetch into.
+
+Leave **`preloadTool: false`** unless you add a real ATC later and know you want prepared-tool lookahead.
+
+### Operator notes
+
 - After CAM `M600`, post-probe `M00` may pause — press **Cycle Start**; feed override is unlocked before the pause
 
 ## ATC compatibility

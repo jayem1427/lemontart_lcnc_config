@@ -10,7 +10,7 @@
   FORKID {52A5C3D6-1533-413E-B493-7B93D9E48B30}
 */
 
-description = "TEST LinuxCNC mill with A axis and inverse time feed";
+description = "LinuxCNC mill with A axis, M600 toolsetter, inverse time feed";
 vendor = "LinuxCNC";
 vendorUrl = "http://www.linuxcnc.org";
 legal = "Copyright (C) 2012-2018 by Autodesk, Inc.";
@@ -39,7 +39,7 @@ allowedCircularPlanes = undefined; // allow any circular motion
 properties = {
   writeMachine: true, // write machine
   writeTools: true, // writes the tools
-  preloadTool: true, // preloads next tool on tool change if any
+  preloadTool: false, // bare T-word after tool change; off for manual collet + M600 toolsetter
   showSequenceNumbers: true, // show sequence numbers
   sequenceNumberStart: 10, // first sequence number
   sequenceNumberIncrement: 5, // increment for sequence numbers
@@ -55,7 +55,7 @@ properties = {
 propertyDefinitions = {
   writeMachine: {title:"Write machine", description:"Output the machine settings in the header of the code.", group:0, type:"boolean"},
   writeTools: {title:"Write tool list", description:"Output a tool list in the header of the code.", group:0, type:"boolean"},
-  preloadTool: {title:"Preload tool", description:"Preloads the next tool at a tool change (if any).", type:"boolean"},
+  preloadTool: {title:"Preload tool", description:"After each tool change, output a bare T-word for the next tool (no M600). Turn off for manual collet spindles: the extra T-word only updates the prepared tool and can disagree with halui.tool.number / probe routing until the next M600.", type:"boolean"},
   showSequenceNumbers: {title:"Use sequence numbers", description:"Use sequence numbers for each block of outputted code.", group:1, type:"boolean"},
   sequenceNumberStart: {title:"Start sequence number", description:"The number at which to start the sequence numbers.", group:1, type:"integer"},
   sequenceNumberIncrement: {title:"Sequence number increment", description:"The amount by which the sequence number is incremented by in each block.", group:1, type:"integer"},
@@ -659,7 +659,7 @@ function onSection() {
       warning(localize("Tool number exceeds maximum value."));
     }
 
-    writeBlock("T" + toolFormat.format(tool.number), mFormat.format(6));
+    writeBlock("T" + toolFormat.format(tool.number), mFormat.format(600));
     if (tool.comment) {
       writeComment(tool.comment);
     }
@@ -1516,7 +1516,7 @@ var mapCommand = {
   COMMAND_SPINDLE_COUNTERCLOCKWISE:4,
   COMMAND_STOP_SPINDLE:5,
   COMMAND_ORIENTATE_SPINDLE:19,
-  COMMAND_LOAD_TOOL: 6
+  COMMAND_LOAD_TOOL: 600
 };
 
 function onCommand(command) {
