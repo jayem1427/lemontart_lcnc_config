@@ -62,30 +62,33 @@ TooTall18T `tool_touch_off` + `M600` integration for manual collet tool changes 
 
 ### Touch probe vs toolsetter routing
 
-Both sensors share one LinuxCNC probe input (`motion.probe-input`), but `ethercat_mill.hal` **muxes** them by prepared tool number — only one source is active at a time:
+Both sensors share one LinuxCNC probe input (`motion.probe-input`), but `ethercat_mill.hal` **gates** them by **spindle tool** (`halui.tool.number`) — only one source can assert `motion.probe-input` at a time:
 
-| Prepared tool | Active input | Ignored |
-|---------------|--------------|---------|
+| Spindle tool | Active input | Ignored |
+|--------------|--------------|---------|
 | **T99** (touch probe) | Touch probe — Slave 1 DI5 | Toolsetter — Slave 1 DI2 |
 | **Any other tool** | Toolsetter — Slave 1 DI2 | Touch probe — Slave 1 DI5 |
 
-Both are wired **NC (NPN), direct** (no HAL inversion). Routing uses `iocontrol.0.tool-prep-number` compared to 99 via `near.3`, driving `probe_mux.sel`.
+Both are wired **NC (NPN), direct** (no HAL inversion). Routing compares `halui.tool.number` to **99** with `comp.0.equal` (not `tool-prep-number`, which can disagree with the tool actually in the spindle after M61 or restart).
 
 ```
-T99 loaded?  near.3.out ──► probe_mux.sel
-                              ├─ sel=0 → toolsetter (DI2) ──► motion.probe-input
-                              └─ sel=1 → touch probe (DI5) ──► motion.probe-input
+halui.tool.number ──► comp.0.equal (== 99?)
+                         │
+           ├─ TRUE  ──► touch probe (DI5) ──┐
+           └─ FALSE ──► toolsetter (DI2) ────┼── or2.0 ──► motion.probe-input
 ```
 
-This lets you unplug the NC touch probe while running M600/toolsetter with a cutter loaded — the unplugged probe cannot false-trip probing when T99 is not prepared.
+Bit gating uses `and2.3` / `and2.4` and `or2.0` (`mux2` is float-only and cannot mux digital probe inputs). `or2.1` in `custom.hal` is reserved for VFD fault OR (do not `loadrt or2` with `names=` in other HAL files).
 
-Probe tool number is hardcoded to **99** in HAL (`setp near.3.in2 99`), matching `T99` in `probe_basic/tool.tbl` and Probe Basic `#3014`.
+This lets you unplug the NC touch probe while running M600/toolsetter with a cutter loaded — the unplugged probe cannot false-trip probing when T99 is not in the spindle.
+
+Probe tool number is **99** in HAL (`setp probe-tool-num.value 99`), matching `T99` in `probe_basic/tool.tbl` and Probe Basic `#3014` in `linuxcnc.var`.
 
 ## Current machine behavior (captured config)
 
 - Built-in M6 tool-change motion is **disabled** (`TOOL_CHANGE_AT_G30=0`, `TOOL_CHANGE_QUILL_UP=0`); retract and G30 are handled by `tool_touch_off.ngc` / `M600`.
 - Home/limit inputs below are wired active-low NC and inverted in HAL (`not.*`).
-- Touch probe (Slave 1 DI5) and contact toolsetter (Slave 1 DI2 / DB15 pin 9) are NC and **muxed** to `motion.probe-input` by prepared tool (T99 → probe, else → toolsetter). See **Touch probe vs toolsetter routing** above.
+- Touch probe (Slave 1 DI5) and contact toolsetter (Slave 1 DI2 / DB15 pin 9) are NC and **gated** to `motion.probe-input` by spindle tool (T99 → probe, else → toolsetter). See **Touch probe vs toolsetter routing** above.
 - Software E-stop is wired NC on Slave 3 DI1 / DB15 pin 10 and gates `iocontrol.0.emc-enable-in`.
 
 | Drive / EtherCAT slave | DI input | Signal use |
@@ -96,8 +99,8 @@ Probe tool number is hardcoded to **99** in HAL (`setp near.3.in2 99`), matching
 | Slave 0 (X/Y drive IO) | DI2 | Y limit chain (`joint.1.neg-lim-sw-in`, `joint.1.pos-lim-sw-in`) |
 | Slave 1 (Z/probe IO) | DI4 | Z home at +Z (`joint.2.home-sw-in`) |
 | Slave 2 (Z/aux IO) | DI2 | Z negative limit (`joint.2.neg-lim-sw-in`) |
-| Slave 1 (Z/probe IO) | DI2 / DB15 pin 9 | Contact toolsetter (`toolsetter-in` → `probe_mux.in0`) |
-| Slave 1 (Z/probe IO) | DI5 | Touch probe (`touch-probe-in` → `probe_mux.in1`) |
+| Slave 1 (Z/probe IO) | DI2 / DB15 pin 9 | Contact toolsetter (`toolsetter-in` → `and2.4` when not T99) |
+| Slave 1 (Z/probe IO) | DI5 | Touch probe (`touch-probe-in` → `and2.3` when T99) |
 | Slave 3 (A axis IO) | DI1 / DB15 pin 10 | Software E-stop NC switch (`iocontrol.0.emc-enable-in`) |
 | Slave 3 (A axis IO) | DI3 (planned) | A home (currently commented out in HAL) |
 
