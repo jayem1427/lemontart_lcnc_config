@@ -16,7 +16,7 @@ loadrt mult2 count=12
 loadrt ilowpass count=4
 loadrt limit1 count=4
 loadrt div2 count=4
-loadrt not count=9
+loadrt not count=8
 loadrt and2 count=3
 loadrt mux2 names=probe_mux
 loadrt near count=4
@@ -51,9 +51,7 @@ addf not.2 servo-thread
 addf not.3 servo-thread
 addf not.4 servo-thread
 addf not.5 servo-thread
-addf not.6 servo-thread
 addf not.7 servo-thread
-addf not.8 servo-thread
 setp and2.0.in0 0
 setp and2.0.in1 0
 
@@ -209,7 +207,7 @@ net z-home       not.7.out => joint.2.home-sw-in
 net za-lims-gagged and2.0.out => joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
 
 # --- TOUCH PROBE + TOOLSETTER (active-high at trip -> motion.probe-input) ---
-# Touch probe: Slave 1 DI5, NO (NPN). Idle open = di HIGH; trip closed = di LOW; inverted in HAL.
+# Touch probe: Slave 1 DI5, NC (NPN). Idle closed = di inactive; trip open = di TRUE. Direct.
 # Toolsetter: Slave 1 DI2 (DB15 pin 9), NC (NPN). Direct, no inversion.
 # Route by prepared tool: T99 (touch probe) -> DI5; any other tool -> toolsetter DI2.
 # Unplugged NC touch probe no longer false-trips toolsetter when a cutter is loaded.
@@ -219,8 +217,7 @@ setp near.3.difference 0.5
 setp near.3.in2 99
 net tool-num-float conv-s32-float.4.out => near.3.in1
 net probe-tool-loaded near.3.out => probe_mux.sel
-net touch-probe-raw  lcec.0.1.di-5 => not.6.in
-net touch-probe-in   not.6.out => probe_mux.in1
+net touch-probe-in   lcec.0.1.di-5 => probe_mux.in1
 net toolsetter-in    lcec.0.1.di-2 => probe_mux.in0
 net probe-in         probe_mux.out => motion.probe-input
 
