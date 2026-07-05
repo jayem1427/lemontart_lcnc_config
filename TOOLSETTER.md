@@ -131,7 +131,11 @@ Fusion post for this config. Install in Fusion **Posts** folder.
 |---------|-------|-----|
 | Tool change | **`T<n> M600`** (not M6) | Runs `m600.ngc` → `tool_touch_off.ngc` (retract, G30, probe, `G10` length) |
 | **Preload tool** | **Off** (`preloadTool: false`) | Avoids a bare `T` for the next tool after M600; see below |
+| **Use A axis (4th axis)** | **On** (`hasAAxis: true`) | Post property group **4th axis** — enables A output and kinematics |
+| **G93 inverse time** | **On** (`useInverseTimeFeed: true`) | Simultaneous `G1 X Y Z A` uses inverse-time `F` |
 | Spindle after tool change | Post emits `M3`/`M4` after M600 | M600 stops spindle; CAM must restart it (post does this) |
+
+In Fusion’s post dialog, open the **4th axis** group. If you use a Fusion **Machine Definition** on the setup, its kinematics override the post’s hardcoded A axis (leave **Use A axis** on unless you intentionally want 3-axis output only).
 
 Do **not** end programs with `T0 M600`. Keep touch probe **T99** out of CAM tool-change lists (load via Probe Basic only).
 

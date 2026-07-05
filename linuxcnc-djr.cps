@@ -22,7 +22,7 @@ longDescription = "LinuxCNC XYZA (table A), M600 toolsetter, G93 inverse time on
 extension = "ngc";
 setCodePage("ascii");
 
-capabilities = CAPABILITY_MILLING;
+capabilities = CAPABILITY_MILLING | CAPABILITY_MACHINE_SIMULATION;
 tolerance = spatial(0.002, MM);
 
 minimumChordLength = spatial(0.25, MM);
@@ -49,13 +49,19 @@ properties = {
   useParametricFeed: false, // specifies that feed should be output using Q values
   showNotes: false, // specifies that operation notes should be output
   useG28: false, // turn on to use G28 instead of G53 for machine retracts
+  hasAAxis: true, // table rotary A on X (Lemontart XYZA)
+  aAxisPositive: true, // A rotates around +X; uncheck if your table is -X
+  useInverseTimeFeed: true, // G93 inverse time on simultaneous X/Y/Z/A moves
 };
 
 // user-defined property definitions
 propertyDefinitions = {
   writeMachine: {title:"Write machine", description:"Output the machine settings in the header of the code.", group:0, type:"boolean"},
   writeTools: {title:"Write tool list", description:"Output a tool list in the header of the code.", group:0, type:"boolean"},
-  preloadTool: {title:"Preload tool", description:"After each tool change, output a bare T-word for the next tool (no M600). Turn off for manual collet spindles: the extra T-word only updates the prepared tool and can disagree with halui.tool.number / probe routing until the next M600.", type:"boolean"},
+  preloadTool: {title:"Preload tool", description:"After each tool change, output a bare T-word for the next tool (no M600). Turn off for manual collet spindles: the extra T-word only updates the prepared tool and can disagree with halui.tool.number / probe routing until the next M600.", group:0, type:"boolean"},
+  hasAAxis: {title:"Use A axis (4th axis)", description:"Enable table rotary A axis output (G0/G1 A words). Required for 4-axis indexing and simultaneous toolpaths. Uses hardcoded kinematics below unless a Fusion Machine Definition is assigned to the setup.", group:2, type:"boolean"},
+  aAxisPositive: {title:"A axis around +X", description:"Table rotary rotates around positive X. Uncheck if your A axis is configured as -X in LinuxCNC.", group:2, type:"boolean"},
+  useInverseTimeFeed: {title:"G93 inverse time (simultaneous XYZA)", description:"On coordinated X/Y/Z/A cuts, output G93 with inverse-time F. Plain 3-axis moves still use G94 feed/min.", group:2, type:"boolean"},
   showSequenceNumbers: {title:"Use sequence numbers", description:"Use sequence numbers for each block of outputted code.", group:1, type:"boolean"},
   sequenceNumberStart: {title:"Start sequence number", description:"The number at which to start the sequence numbers.", group:1, type:"integer"},
   sequenceNumberIncrement: {title:"Sequence number increment", description:"The amount by which the sequence number is incremented by in each block.", group:1, type:"integer"},
@@ -64,8 +70,26 @@ propertyDefinitions = {
   useRadius: {title:"Radius arcs", description:"If yes is selected, arcs are outputted using radius values rather than IJK.", type:"boolean"},
   useParametricFeed:  {title:"Parametric feed", description:"Specifies the feed value that should be output using a Q value.", type:"boolean"},
   showNotes: {title:"Show notes", description:"Writes operation notes as comments in the outputted code.", type:"boolean"},
-  useG28: {title:"G28 Safe retracts", description:"Disable to avoid G28 output for safe machine retracts. When disabled, you must manually ensure safe retracts.", type:"boolean"},
+  useG28: {title:"G28 Safe retracts", description:"Disable to avoid G28 output for safe machine retracts. When disabled, you must manually ensure safe retracts.", group:3, type:"boolean"},
 };
+
+var propertyGroups = {
+  0: "General",
+  1: "Sequence numbers",
+  2: "4th axis",
+  3: "Retracts"
+};
+
+function getProperty(name) {
+  if (!(name in properties)) {
+    return undefined;
+  }
+  var value = properties[name];
+  if (value !== null && typeof value === "object" && ("value" in value)) {
+    return value.value;
+  }
+  return value;
+}
 
 var permittedCommentChars = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,=_-";
 
@@ -139,6 +163,94 @@ var currentFeedId;
 var retracted = false; // specifies that the tool has been retracted to the safe plane
 var previousABC = new Vector(0, 0, 0);
 
+// machine configuration (defineMachine / activateMachine)
+var receivedMachineConfiguration = false;
+var tcpIsSupported = false;
+
+function defineMachine() {
+  if (receivedMachineConfiguration) {
+    return; // Fusion Machine Definition on the setup takes precedence
+  }
+  if (!getProperty("hasAAxis")) {
+    machineConfiguration = new MachineConfiguration();
+    machineConfiguration.setVendor("LinuxCNC");
+    machineConfiguration.setModel("XYZ");
+    machineConfiguration.setDescription("3-axis (A axis disabled in post)");
+    setMachineConfiguration(machineConfiguration);
+    return;
+  }
+  var useTCP = false;
+  var aDir = getProperty("aAxisPositive") ? 1 : -1;
+  var aAxis = createAxis({
+    coordinate: 0,
+    table: true,
+    axis: [aDir, 0, 0],
+    cyclic: true,
+    preference: 0,
+    tcp: useTCP
+  });
+  machineConfiguration = new MachineConfiguration(aAxis);
+  machineConfiguration.setVendor("LinuxCNC");
+  machineConfiguration.setModel("Lemontart XYZA");
+  machineConfiguration.setDescription("Table A on X, non-TCP, G93 inverse time on simultaneous moves");
+  setMachineConfiguration(machineConfiguration);
+}
+
+function setFeedrateMode() {
+  if (!machineConfiguration.isMultiAxisConfiguration()) {
+    return;
+  }
+  if (getProperty("useInverseTimeFeed")) {
+    machineConfiguration.setMultiAxisFeedrate(
+      FEED_INVERSE_TIME,
+      maxInverseTime,
+      INVERSE_MINUTES,
+      0.5,
+      dpmBPW
+    );
+  } else {
+    machineConfiguration.setMultiAxisFeedrate(
+      FEED_FPM,
+      99999.999,
+      INVERSE_MINUTES,
+      0.5,
+      dpmBPW
+    );
+  }
+  if (!receivedMachineConfiguration) {
+    setMachineConfiguration(machineConfiguration);
+  }
+}
+
+function activateMachine() {
+  tcpIsSupported = false;
+  var axes = [machineConfiguration.getAxisU(), machineConfiguration.getAxisV(), machineConfiguration.getAxisW()];
+  for (var i in axes) {
+    if (axes[i].isEnabled() && axes[i].isTCPEnabled()) {
+      tcpIsSupported = true;
+      break;
+    }
+  }
+
+  if (!machineConfiguration.isMachineCoordinate(0)) {
+    aOutput.disable();
+  }
+  if (!machineConfiguration.isMachineCoordinate(1)) {
+    bOutput.disable();
+  }
+  if (!machineConfiguration.isMachineCoordinate(2)) {
+    cOutput.disable();
+  }
+
+  if (!machineConfiguration.isMultiAxisConfiguration()) {
+    return;
+  }
+
+  setFeedrateMode();
+  optimizeMachineAngles2(tcpIsSupported ? 0 : 1);
+  useInverseTimeFeed = getProperty("useInverseTimeFeed") !== false;
+}
+
 /**
   Writes the specified block.
 */
@@ -188,28 +300,16 @@ function writeComment(text) {
 }
 
 function onOpen() {
+  receivedMachineConfiguration = (typeof machineConfiguration.isReceived == "function") ? machineConfiguration.isReceived() : false;
+  if (typeof defineMachine == "function") {
+    defineMachine();
+  }
+  activateMachine();
+
   if (properties.useRadius) {
     maximumCircularSweep = toRad(90); // avoid potential center calculation errors for CNC
   }
 
-  if (true) { // note: setup your machine here
-    var aAxis = createAxis({coordinate:0, table:true, axis:[1, 0, 0], cyclic:true, preference:0});
-    machineConfiguration = new MachineConfiguration(aAxis);
-
-    setMachineConfiguration(machineConfiguration);
-    optimizeMachineAngles2(0); // table rotary, non-TCP — matches LinuxCNC trivkins XYZA
-  }
-
-  if (!machineConfiguration.isMachineCoordinate(0)) {
-    aOutput.disable();
-  }
-  if (!machineConfiguration.isMachineCoordinate(1)) {
-    bOutput.disable();
-  }
-  if (!machineConfiguration.isMachineCoordinate(2)) {
-    cOutput.disable();
-  }
-  
   if (!properties.separateWordsWithSpace) {
     setWordSeparator("");
   }
@@ -1129,7 +1229,7 @@ function getMultiaxisFeed(_x, _y, _z, _a, _b, _c, feed) {
 
   var length = getMoveLength(_x, _y, _z, _a, _b, _c);
 
-  if (useInverseTimeFeed) { // inverse time (G93) for coordinated XYZA
+  if (useInverseTimeFeed) { // G93 inverse time (G93) for coordinated XYZA
     f.frn = inverseTimeOutput.format(getInverseTime(length, feed));
     f.fmode = 93;
     feedOutput.reset();
