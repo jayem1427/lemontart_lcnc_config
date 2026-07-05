@@ -125,7 +125,11 @@ Update README cross-references if you document a non-99 default elsewhere.
 
 ## CAM / post processor (`linuxcnc-djr.cps`)
 
-Fusion post for this config. Install in Fusion **Posts** folder.
+Fusion post for this config. Install in Fusion **Posts** folder (replace the old file completely — Fusion caches posts).
+
+**Post engine 45702+ required** (current Fusion). Properties use the unified format; you should see a **4th axis** group in the post dialog with **Use A axis**, **A axis around +X**, and **G93 inverse time**.
+
+If options still look like the old stock list, Fusion is still using a cached copy: remove `linuxcnc-djr.cps` from Personal Posts, restart Fusion, copy the new file in, and re-select it when posting.
 
 | Setting | Value | Why |
 |---------|-------|-----|

@@ -15,7 +15,7 @@ vendor = "LinuxCNC";
 vendorUrl = "http://www.linuxcnc.org";
 legal = "Copyright (C) 2012-2018 by Autodesk, Inc.";
 certificationLevel = 2;
-minimumRevision = 40783;
+minimumRevision = 45702;
 
 longDescription = "LinuxCNC XYZA (table A), M600 toolsetter, G93 inverse time on simultaneous 4-axis moves";
 
@@ -35,60 +35,167 @@ allowedCircularPlanes = undefined; // allow any circular motion
 
 
 
-// user-defined properties
+// user-defined properties (unified format — post engine 45702+)
 properties = {
-  writeMachine: true, // write machine
-  writeTools: true, // writes the tools
-  preloadTool: false, // bare T-word after tool change; off for manual collet + M600 toolsetter
-  showSequenceNumbers: true, // show sequence numbers
-  sequenceNumberStart: 10, // first sequence number
-  sequenceNumberIncrement: 5, // increment for sequence numbers
-  optionalStop: true, // optional stop
-  separateWordsWithSpace: true, // specifies that the words should be separated with a white space
-  useRadius: false, // specifies that arcs should be output using the radius (R word) instead of the I, J, and K words
-  useParametricFeed: false, // specifies that feed should be output using Q values
-  showNotes: false, // specifies that operation notes should be output
-  useG28: false, // turn on to use G28 instead of G53 for machine retracts
-  hasAAxis: true, // table rotary A on X (Lemontart XYZA)
-  aAxisPositive: true, // A rotates around +X; uncheck if your table is -X
-  useInverseTimeFeed: true, // G93 inverse time on simultaneous X/Y/Z/A moves
+  writeMachine: {
+    title: "Write machine",
+    description: "Output the machine settings in the header of the code.",
+    group: "general",
+    type: "boolean",
+    value: true,
+    scope: "post"
+  },
+  writeTools: {
+    title: "Write tool list",
+    description: "Output a tool list in the header of the code.",
+    group: "general",
+    type: "boolean",
+    value: true,
+    scope: "post"
+  },
+  preloadTool: {
+    title: "Preload tool",
+    description: "After each tool change, output a bare T-word for the next tool (no M600). Leave off for manual collet spindles.",
+    group: "general",
+    type: "boolean",
+    value: false,
+    scope: "post"
+  },
+  hasAAxis: {
+    title: "Use A axis (4th axis)",
+    description: "Enable table rotary A (G0/G1 A words) for 4-axis indexing and simultaneous toolpaths. Hardcoded kinematics unless a Fusion Machine Definition is on the setup.",
+    group: "fourthAxis",
+    type: "boolean",
+    value: true,
+    scope: "post"
+  },
+  aAxisPositive: {
+    title: "A axis around +X",
+    description: "Table rotary rotates around positive X. Uncheck if your A axis is -X in LinuxCNC.",
+    group: "fourthAxis",
+    type: "boolean",
+    value: true,
+    scope: "post"
+  },
+  useInverseTimeFeed: {
+    title: "G93 inverse time (simultaneous XYZA)",
+    description: "Coordinated X/Y/Z/A cuts use G93 with inverse-time F. Plain 3-axis moves still use G94 feed/min.",
+    group: "fourthAxis",
+    type: "boolean",
+    value: true,
+    scope: "post"
+  },
+  showSequenceNumbers: {
+    title: "Use sequence numbers",
+    description: "Use sequence numbers for each block of outputted code.",
+    group: "sequenceNumbers",
+    type: "boolean",
+    value: true,
+    scope: "post"
+  },
+  sequenceNumberStart: {
+    title: "Start sequence number",
+    description: "The number at which to start the sequence numbers.",
+    group: "sequenceNumbers",
+    type: "integer",
+    value: 10,
+    scope: "post"
+  },
+  sequenceNumberIncrement: {
+    title: "Sequence number increment",
+    description: "The amount by which the sequence number is incremented by in each block.",
+    group: "sequenceNumbers",
+    type: "integer",
+    value: 5,
+    scope: "post"
+  },
+  optionalStop: {
+    title: "Optional stop",
+    description: "Output optional stop (M1) between tool changes when appropriate.",
+    group: "general",
+    type: "boolean",
+    value: true,
+    scope: "post"
+  },
+  separateWordsWithSpace: {
+    title: "Separate words with space",
+    description: "Adds spaces between G-code words.",
+    group: "general",
+    type: "boolean",
+    value: true,
+    scope: "post"
+  },
+  useRadius: {
+    title: "Radius arcs",
+    description: "Output arcs using R instead of I/J/K.",
+    group: "general",
+    type: "boolean",
+    value: false,
+    scope: "post"
+  },
+  useParametricFeed: {
+    title: "Parametric feed",
+    description: "Output feed using # parameters instead of F words.",
+    group: "general",
+    type: "boolean",
+    value: false,
+    scope: "post"
+  },
+  showNotes: {
+    title: "Show notes",
+    description: "Write operation notes as comments in the output.",
+    group: "general",
+    type: "boolean",
+    value: false,
+    scope: "post"
+  },
+  useG28: {
+    title: "G28 safe retracts",
+    description: "Use G28 instead of G53 for machine retracts.",
+    group: "retracts",
+    type: "boolean",
+    value: false,
+    scope: "post"
+  }
 };
 
-// user-defined property definitions
-propertyDefinitions = {
-  writeMachine: {title:"Write machine", description:"Output the machine settings in the header of the code.", group:0, type:"boolean"},
-  writeTools: {title:"Write tool list", description:"Output a tool list in the header of the code.", group:0, type:"boolean"},
-  preloadTool: {title:"Preload tool", description:"After each tool change, output a bare T-word for the next tool (no M600). Turn off for manual collet spindles: the extra T-word only updates the prepared tool and can disagree with halui.tool.number / probe routing until the next M600.", group:0, type:"boolean"},
-  hasAAxis: {title:"Use A axis (4th axis)", description:"Enable table rotary A axis output (G0/G1 A words). Required for 4-axis indexing and simultaneous toolpaths. Uses hardcoded kinematics below unless a Fusion Machine Definition is assigned to the setup.", group:2, type:"boolean"},
-  aAxisPositive: {title:"A axis around +X", description:"Table rotary rotates around positive X. Uncheck if your A axis is configured as -X in LinuxCNC.", group:2, type:"boolean"},
-  useInverseTimeFeed: {title:"G93 inverse time (simultaneous XYZA)", description:"On coordinated X/Y/Z/A cuts, output G93 with inverse-time F. Plain 3-axis moves still use G94 feed/min.", group:2, type:"boolean"},
-  showSequenceNumbers: {title:"Use sequence numbers", description:"Use sequence numbers for each block of outputted code.", group:1, type:"boolean"},
-  sequenceNumberStart: {title:"Start sequence number", description:"The number at which to start the sequence numbers.", group:1, type:"integer"},
-  sequenceNumberIncrement: {title:"Sequence number increment", description:"The amount by which the sequence number is incremented by in each block.", group:1, type:"integer"},
-  optionalStop: {title:"Optional stop", description:"Outputs optional stop code during when necessary in the code.", type:"boolean"},
-  separateWordsWithSpace: {title:"Separate words with space", description:"Adds spaces between words if 'yes' is selected.", type:"boolean"},
-  useRadius: {title:"Radius arcs", description:"If yes is selected, arcs are outputted using radius values rather than IJK.", type:"boolean"},
-  useParametricFeed:  {title:"Parametric feed", description:"Specifies the feed value that should be output using a Q value.", type:"boolean"},
-  showNotes: {title:"Show notes", description:"Writes operation notes as comments in the outputted code.", type:"boolean"},
-  useG28: {title:"G28 Safe retracts", description:"Disable to avoid G28 output for safe machine retracts. When disabled, you must manually ensure safe retracts.", group:3, type:"boolean"},
-};
-
-var propertyGroups = {
-  0: "General",
-  1: "Sequence numbers",
-  2: "4th axis",
-  3: "Retracts"
+groupDefinitions = {
+  general: {
+    title: "General",
+    description: "Header, tool change, and formatting"
+  },
+  fourthAxis: {
+    title: "4th axis",
+    description: "Table A axis and G93 inverse time for simultaneous moves"
+  },
+  sequenceNumbers: {
+    title: "Sequence numbers",
+    description: "Optional N-word block numbering"
+  },
+  retracts: {
+    title: "Retracts",
+    description: "Safe retract behavior"
+  }
 };
 
 function getProperty(name) {
   if (!(name in properties)) {
     return undefined;
   }
-  var value = properties[name];
-  if (value !== null && typeof value === "object" && ("value" in value)) {
-    return value.value;
+  var property = properties[name];
+  if (property !== null && typeof property === "object") {
+    if ("current" in property) {
+      return property.current;
+    }
+    if ("value" in property) {
+      return property.value;
+    }
   }
-  return value;
+  return property;
+}
+
+function setProperty(property, value) {
+  properties[property].current = value;
 }
 
 var permittedCommentChars = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,=_-";
@@ -259,11 +366,11 @@ function writeBlock() {
   if (!text) {
     return;
   }
-  if (properties.showSequenceNumbers) {
+  if (getProperty("showSequenceNumbers")) {
     writeWords2("N" + sequenceNumber, arguments);
-    sequenceNumber += properties.sequenceNumberIncrement;
+    sequenceNumber += getProperty("sequenceNumberIncrement");
     if (sequenceNumber > 99999) {
-      sequenceNumber = properties.sequenceNumberStart;
+      sequenceNumber = getProperty("sequenceNumberStart");
     }
   } else {
     writeWords(arguments);
@@ -274,13 +381,13 @@ function writeBlock() {
   Writes the specified optional block.
 */
 function writeOptionalBlock() {
-  if (properties.showSequenceNumbers) {
+  if (getProperty("showSequenceNumbers")) {
     var words = formatWords(arguments);
     if (words) {
       writeWords("/", "N" + sequenceNumber, words);
-      sequenceNumber += properties.sequenceNumberIncrement;
+      sequenceNumber += getProperty("sequenceNumberIncrement");
       if (sequenceNumber > 99999) {
-        sequenceNumber = properties.sequenceNumberStart;
+        sequenceNumber = getProperty("sequenceNumberStart");
       }
     }
   } else {
@@ -306,15 +413,15 @@ function onOpen() {
   }
   activateMachine();
 
-  if (properties.useRadius) {
+  if (getProperty("useRadius")) {
     maximumCircularSweep = toRad(90); // avoid potential center calculation errors for CNC
   }
 
-  if (!properties.separateWordsWithSpace) {
+  if (!getProperty("separateWordsWithSpace")) {
     setWordSeparator("");
   }
 
-  sequenceNumber = properties.sequenceNumberStart;
+  sequenceNumber = getProperty("sequenceNumberStart");
   writeln("%");
 
   if (programName) {
@@ -329,7 +436,7 @@ function onOpen() {
   var model = machineConfiguration.getModel();
   var description = machineConfiguration.getDescription();
 
-  if (properties.writeMachine && (vendor || model || description)) {
+  if (getProperty("writeMachine") && (vendor || model || description)) {
     writeComment(localize("Machine"));
     if (vendor) {
       writeComment("  " + localize("vendor") + ": " + vendor);
@@ -343,7 +450,7 @@ function onOpen() {
   }
 
   // dump tool information
-  if (properties.writeTools) {
+  if (getProperty("writeTools")) {
     var zRanges = {};
     if (is3D()) {
       var numberOfSections = getNumberOfSections();
@@ -731,7 +838,7 @@ function onSection() {
     }
   }
   
-  if (properties.showNotes && hasParameter("notes")) {
+  if (getProperty("showNotes") && hasParameter("notes")) {
     var notes = getParameter("notes");
     if (notes) {
       var lines = String(notes).split("\n");
@@ -751,7 +858,7 @@ function onSection() {
     
     setCoolant(COOLANT_OFF);
   
-    if (!isFirstSection() && properties.optionalStop) {
+    if (!isFirstSection() && getProperty("optionalStop")) {
       onCommand(COMMAND_OPTIONAL_STOP);
     }
 
@@ -780,7 +887,7 @@ function onSection() {
       }
     }
 
-    if (properties.preloadTool) {
+    if (getProperty("preloadTool")) {
       var nextTool = getNextTool(tool.number);
       if (nextTool) {
         writeBlock("T" + toolFormat.format(nextTool.number));
@@ -917,7 +1024,7 @@ function onSection() {
   }
 
 
-  if (properties.useParametricFeed &&
+  if (getProperty("useParametricFeed") &&
       hasParameter("operation-strategy") &&
       (getParameter("operation-strategy") != "drill") && // legacy
       !useInverseTimeFeed &&
@@ -1436,7 +1543,7 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
   var start = getCurrentPosition();
 
   if (isFullCircle()) {
-    if (properties.useRadius || isHelical()) { // radius mode does not support full arcs
+    if (getProperty("useRadius") || isHelical()) { // radius mode does not support full arcs
       linearize(tolerance);
       return;
     }
@@ -1453,7 +1560,7 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
     default:
       linearize(tolerance);
     }
-  } else if (!properties.useRadius) {
+  } else if (!getProperty("useRadius")) {
     switch (getCircularPlane()) {
     case PLANE_XY:
       writeBlock(gAbsIncModal.format(90), gPlaneModal.format(17), gFeedModeModal.format(94), gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), zOutput.format(z), iOutput.format(cx - start.x, 0), jOutput.format(cy - start.y, 0), getFeed(feed));
@@ -1699,7 +1806,7 @@ function writeRetract() {
     }
   }
   if (words.length > 0) {
-    if (properties.useG28) {
+    if (getProperty("useG28")) {
       gAbsIncModal.reset();
       writeBlock(gFormat.format(28), gAbsIncModal.format(91), words); // retract
       writeBlock(gAbsIncModal.format(90));
