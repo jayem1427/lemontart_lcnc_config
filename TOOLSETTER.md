@@ -147,6 +147,22 @@ On a **manual collet** mill that is usually wrong:
 
 Leave **`preloadTool: false`** unless you add a real ATC later and know you want prepared-tool lookahead.
 
+### Simultaneous 4th axis (G93 inverse time)
+
+The post outputs standard LinuxCNC blocks for coordinated **X Y Z A** moves:
+
+```ngc
+G93 G1 X... Y... Z... A... F...
+```
+
+- **Indexing** (tilt A, then 3-axis cut): `G0`/`G1` with A on plane changes — no special token.
+- **Simultaneous** (swarf / multi-axis): `onLinear5D` uses **`getMultiaxisFeed`** to compute an inverse-time **`F`** from the combined linear + rotary move length, then posts **`G93 G1`** (not the invalid `linear5D` word).
+- **Plain 3-axis** cuts still use **`G94`** and a normal feed-per-minute `F`.
+
+Machine definition in the post: **table A** on X, **`optimizeMachineAngles2(0)`** (non-TCP) to match **`trivkins coordinates=XYZA`** in `ethercat_mill.ini`. Do not enable TCP in Fusion for this config unless you add TCP kinematics in LinuxCNC.
+
+In Fusion, use **4-axis simultaneous** / multi-axis strategies with this post selected; verify the first program on air with low feed override.
+
 ### Operator notes
 
 - After CAM `M600`, post-probe `M00` may pause — press **Cycle Start**; feed override is unlocked before the pause

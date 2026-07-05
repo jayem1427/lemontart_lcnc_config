@@ -17,7 +17,7 @@ legal = "Copyright (C) 2012-2018 by Autodesk, Inc.";
 certificationLevel = 2;
 minimumRevision = 40783;
 
-longDescription = "Special post for 3-axis + A-axis using inverse time feed";
+longDescription = "LinuxCNC XYZA (table A), M600 toolsetter, G93 inverse time on simultaneous 4-axis moves";
 
 extension = "ngc";
 setCodePage("ascii");
@@ -125,8 +125,8 @@ var gRetractModal = createModal({}, gFormat); // modal group 10 // G98-99
 
 // fixed settings
 var firstFeedParameter = 100;
-var useInverseTimeFeed = true; // enable to use inverse-time feed for multi axis
-var maxInverseTime = 45000;
+var useInverseTimeFeed = true; // G93 inverse time on simultaneous X/Y/Z/A moves
+var maxInverseTime = 99999.999; // max F word in G93 mode (minutes^-1 scale from getInverseTime)
 
 var WARNING_WORK_OFFSET = 0;
 
@@ -197,7 +197,7 @@ function onOpen() {
     machineConfiguration = new MachineConfiguration(aAxis);
 
     setMachineConfiguration(machineConfiguration);
-    optimizeMachineAngles2(1); // TCP mode
+    optimizeMachineAngles2(0); // table rotary, non-TCP — matches LinuxCNC trivkins XYZA
   }
 
   if (!machineConfiguration.isMachineCoordinate(0)) {
@@ -1118,7 +1118,6 @@ function onLinear(_x, _y, _z, feed) {
 /***** The feedrate mode must be included in motion block output (linear, circular, etc. *****/
 var dpmBPW = 0.1; // ratio of rotary accuracy to linear accuracy for DPM calculations
 var inverseTimeUnits = 1.0; // 1.0 = minutes, 60.0 = seconds
-var maxInverseTime = 999999; // maximum value to output for Inverse Time feeds
 
 /** Calculate the multi-axis feedrate number. */
 function getMultiaxisFeed(_x, _y, _z, _a, _b, _c, feed) {
@@ -1130,7 +1129,7 @@ function getMultiaxisFeed(_x, _y, _z, _a, _b, _c, feed) {
 
   var length = getMoveLength(_x, _y, _z, _a, _b, _c);
 
-  if (true) { // inverse time
+  if (useInverseTimeFeed) { // inverse time (G93) for coordinated XYZA
     f.frn = inverseTimeOutput.format(getInverseTime(length, feed));
     f.fmode = 93;
     feedOutput.reset();
@@ -1318,7 +1317,7 @@ function onLinear5D(_x, _y, _z, _a, _b, _c, feed) {
   }
 
   if (x || y || z || a || b || c) {
-    writeBlock("linear5D",gFeedModeModal.format(f.fmode), gMotionModal.format(1), x, y, z, a, b, c, f.frn);
+    writeBlock(gFeedModeModal.format(f.fmode), gMotionModal.format(1), x, y, z, a, b, c, f.frn);
   } else if (f.frn) {
     if (getNextRecord().isMotion()) { // try not to output feed without motion
       forceFeed(); // force feed on next line
