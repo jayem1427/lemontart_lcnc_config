@@ -1,0 +1,17 @@
+(author: ethercat_mill)
+(version: 1.0)
+(Set active WCO Z to the given coordinate at the current position)
+(Use after probing or touching off: e.g. 0.05 for a 50um shim, -5 for 5mm below the part)
+
+o<set_wco_z> sub
+  #<z_value> = #1
+
+  (Cancel G92 offsets)
+  G92.1
+
+  (Set current position to Z = #<z_value> in active WCO)
+  G10 L20 P0 Z#<z_value>
+
+o<set_wco_z> endsub [1]
+
+M2
