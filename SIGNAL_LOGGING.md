@@ -12,11 +12,15 @@ One CSV per session with all configured HAL signals. See **[PYTHON_PACKAGES.md](
 4. Logger starts when the cycle starts and stops when it finishes.
 5. A dialog and status line show the saved CSV path.
 
-### Live logging (no program)
+### Live plot (while logging)
 
-1. Click **Start live log** (jog, tune, idle checks — no `.ngc` required).
-2. Click **Stop live log** when done.
-3. Saved path is shown the same way.
+The **Signal Monitor** tab shows a single plot with:
+
+- **Quick picks:** All FErr, XYZ FErr, Torque, Velocity, All, Clear
+- **Per-signal checkboxes** — e.g. check only `X FErr` for one axis, or all four for every axis
+- **Y scale:** Auto, Symmetric, Fixed ±0.25 (mm ferr), Fixed ±60 (deg ferr), Fixed ±100% (torque)
+
+CSV always logs all channels; checkboxes only affect what you see on screen.
 
 All logs go to `logs/signals/` as one `.csv` + `.summary.txt` per session.
 
