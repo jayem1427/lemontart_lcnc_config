@@ -1,7 +1,7 @@
 {
   "name": "signals",
   "description": "All HAL signals in one CSV — following error, torque, velocity",
-  "rate_hz": 50,
+  "rate_hz": 100,
   "log_subdir": "signals",
   "context": ["line", "feed", "enabled"],
   "channels": [
