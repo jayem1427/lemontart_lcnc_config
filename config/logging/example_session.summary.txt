@@ -1,0 +1,22 @@
+config: signals
+session: face_mill_test
+duration_s: 12.45
+samples: 623
+csv: logs/signals/20260707_141532_face_mill_test.csv
+
+x_ferr: max=0.041200 mm rms=0.018456 mm pin=joint.0.f-error
+  vs_limit: 16.5% of 0.25
+y_ferr: max=0.033500 mm rms=0.014823 mm pin=joint.1.f-error
+  vs_limit: 13.4% of 0.25
+z_ferr: max=0.019800 mm rms=0.009124 mm pin=joint.2.f-error
+  vs_limit: 7.9% of 0.25
+a_ferr: max=2.480000 deg rms=0.982145 deg pin=joint.3.f-error
+  vs_limit: 4.1% of 60.0
+x_torque: max=32.500000 % rms=14.218456 % pin=tune-torque.0.out
+y_torque: max=26.800000 % rms=11.452318 % pin=tune-torque.1.out
+z_torque: max=28.100000 % rms=15.824561 % pin=tune-torque.2.out
+a_torque: max=5.600000 % rms=2.145678 % pin=tune-torque.3.out
+x_vel: max=120.500000 mm/s rms=42.156789 mm/s pin=tune-velocity.0.out
+y_vel: max=180.000000 mm/s rms=68.452134 mm/s pin=tune-velocity.1.out
+z_vel: max=2.520000 mm/s rms=1.245678 mm/s pin=tune-velocity.2.out
+a_vel: max=14.500000 deg/s rms=5.824561 deg/s pin=tune-velocity.3.out
