@@ -94,11 +94,9 @@ Generic framework for logging **any HAL pin** defined in JSON presets, with CSV 
 
 ### Dependencies
 
-```bash
-pip install --user pyqtgraph
-```
+Optional plotting: `sudo apt install python3-pyqtgraph`. CSV logging needs no extra packages.
 
-Probe Basic already ships QtPyVCP / qtpy. `pyqtgraph` is only required for plots (the Signal Monitor tab and `plot_signal_log.py`).
+See **[SIGNAL_LOGGING.md](SIGNAL_LOGGING.md)** (usage + test plan) and **[PYTHON_PACKAGES.md](PYTHON_PACKAGES.md)** (version control).
 
 ### Presets (`config/logging/`)
 
