@@ -1,94 +1,54 @@
 # Signal logging
 
-Guide for running and verifying the HAL signal logging framework.
+One CSV per session with all configured HAL signals. See **[PYTHON_PACKAGES.md](PYTHON_PACKAGES.md)** for dependency policy.
 
-See **[PYTHON_PACKAGES.md](PYTHON_PACKAGES.md)** for Python version and package install policy.
+## Workflow
 
-## Overview
+### Program logging (CAM cycle)
 
-| Layer | Path | Purpose |
-|-------|------|---------|
-| HAL telemetry | `custom.hal`, `ethercat-conf.xml` | Torque/velocity pins for logging |
-| Presets | `config/logging/*.json` | Channels, rate, trigger, plot layout |
-| Core engine | `probe_basic/python/hal_signal_logger.py` | Sample pins → CSV + summary + live buffers |
-| Terminal runner | `scripts/run_signal_logger.py` | Headless logging |
-| Probe Basic tab | `probe_basic/user_tabs/signal_monitor/` | Live plots + manual start/stop |
-| Offline plot | `scripts/plot_signal_log.py` | Replay a finished CSV |
+1. Open **Signal Monitor** in Probe Basic.
+2. Check **Log signals for next program**.
+3. Run your `.ngc` in AUTO.
+4. Logger starts when the cycle starts and stops when it finishes.
+5. A dialog and status line show the saved CSV path.
 
-Logging runs in userspace Python and does not load onto `servo-thread`.
+### Live logging (no program)
 
----
+1. Click **Start live log** (jog, tune, idle checks — no `.ngc` required).
+2. Click **Stop live log** when done.
+3. Saved path is shown the same way.
 
-## Usage
+All logs go to `logs/signals/` as one `.csv` + `.summary.txt` per session.
 
-### Terminal (no extra packages)
+### Config
 
-```bash
-python3 scripts/run_signal_logger.py --list-presets
-python3 scripts/run_signal_logger.py --preset tune_idle        # manual trigger
-python3 scripts/run_signal_logger.py --preset cut_ferr         # auto on AUTO program
-```
-
-### Probe Basic
-
-`ethercat_mill.ini` sets `USER_TABS_PATH = probe_basic/user_tabs/`. Open **Signal Monitor**, pick a preset, start/stop manual presets or let program presets auto-run.
-
-### Offline plot (requires pyqtgraph)
-
-```bash
-python3 scripts/plot_signal_log.py logs/cut_ferr/<file>.csv --preset config/logging/cut_ferr.json
-```
-
----
-
-## Best practices
-
-- **CSV logging works without plots** — pyqtgraph is optional.
-- **Sample rates:** 50 Hz for cuts (`cut_ferr`, `motor_torque`); 100 Hz for short manual sessions (`tune_idle`) only.
-- **Presets:** copy `custom_template.json`; verify pins with `halcmd show pin <name>`.
-- **Logs:** written to `logs/<log_subdir>/`; CSV/summary are gitignored.
-- **Torque scaling:** verify `tune-torque.N.out` units on the bench before trusting absolute % values.
+Edit `config/logging/signals.json` to add or remove HAL pins. Default channels: following error, torque, and velocity on X/Y/Z/A.
 
 ---
 
 ## Test plan
 
-Work top-down. Each phase should pass before the next.
-
 | Phase | Verify |
 |-------|--------|
-| **0 — Setup** | LinuxCNC starts; [dependency smoke test](PYTHON_PACKAGES.md#smoke-test) passes |
-| **1 — HAL** | `tune-torque.N.out`, `tune-velocity.N.out`, `joint.N.f-error` exist and respond to jog |
-| **2 — Presets** | `--list-presets` works; each JSON loads; CSV columns populate while jogging |
-| **3 — Terminal logger** | Manual session writes `.csv` + `.summary.txt`; row count ≈ rate × duration |
-| **4 — Program trigger** | `cut_ferr` auto-starts/stops with AUTO programs; filename includes program name |
-| **5 — Probe Basic tab** | Tab loads; preset switch works; manual + program triggers behave |
-| **6 — Plots** | Live curves draw; `plot_signal_log.py` replays a CSV (needs pyqtgraph) |
-| **7 — Integration** | No motion regression during a real cut; e-stop safe; restart LinuxCNC → still works |
-
-**Quick HAL check (phase 1):**
+| **0 — Setup** | LinuxCNC starts; [smoke test](PYTHON_PACKAGES.md#smoke-test) passes |
+| **1 — HAL** | Torque, velocity, and following-error pins respond to jog |
+| **2 — Program log** | Arm checkbox → run `.ngc` → CSV auto-created, dialog on finish |
+| **3 — Live log** | Start/stop live → CSV written while jogging, no program needed |
+| **4 — CSV content** | One file, all channel columns populated |
+| **5 — Integration** | No motion regression; e-stop safe |
 
 ```bash
 halcmd getp tune-torque.0.out
-halcmd getp tune-velocity.0.out
-halcmd getp joint.0.f-error
-```
-
-**Quick logger check (phases 3–4):**
-
-```bash
-python3 scripts/run_signal_logger.py --preset tune_idle
-# jog, Ctrl+C, inspect logs/tune_idle/
+python3 scripts/run_signal_logger.py --live   # Ctrl+C to stop, check logs/signals/
 ```
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| Empty CSV columns | Bad pin name or HAL not running | `halcmd show pin <name>` |
-| Torque always 0 | PDO not mapped | Check `ethercat-conf.xml`, jog axis |
-| Logger won't start on program | Not AUTO + running | Check LinuxCNC task state |
-| No plots | pyqtgraph missing | See [PYTHON_PACKAGES.md](PYTHON_PACKAGES.md) |
-| High CPU | Too many channels × rate | Lower `rate_hz` in preset JSON |
+| Symptom | Fix |
+|---------|-----|
+| Empty CSV columns | `halcmd show pin <name>` — check `signals.json` |
+| Never starts on program | Must be AUTO with program running |
+| No dialog on save | Check status line; look in `logs/signals/` |
+| No plots | `sudo apt install python3-pyqtgraph` |

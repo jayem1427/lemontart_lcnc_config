@@ -14,8 +14,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("csv_path", help="CSV log file to plot")
     parser.add_argument(
-        "--preset",
-        help="Optional preset JSON for titles/colors/y-axis groups",
+        "--config",
+        default=os.path.join(
+            os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)),
+            "config",
+            "logging",
+            "signals.json",
+        ),
+        help="Signals JSON config for titles/colors/y-axis groups",
     )
     return parser.parse_args()
 
@@ -49,8 +55,8 @@ def main() -> int:
     plot_groups = [{"id": "all", "title": os.path.basename(args.csv_path), "channels": signal_columns}]
     colors = {}
 
-    if args.preset and os.path.isfile(args.preset):
-        with open(args.preset, "r", encoding="utf-8") as handle:
+    if args.config and os.path.isfile(args.config):
+        with open(args.config, "r", encoding="utf-8") as handle:
             preset = json.load(handle)
         if preset.get("plot_groups"):
             plot_groups = preset["plot_groups"]
