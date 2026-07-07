@@ -56,11 +56,39 @@ Note: **`PROGRAM_PREFIX`** points at `nc_files/` (next to the INI). Put your G-c
 
 Many of these files are connected to eachother. Using a tool like Cursor or Claude Code will absolutely make your life easier since you can expand the context window to multiple files, but please always verify any changes that AI makes. Add testable features one-at-a-time, and verify they work before proceeding forward.
 
+## Toolsetter (semi-auto tool length)
+
+TooTall18T `tool_touch_off` + `M600` integration for manual collet tool changes with probing. See **[TOOLSETTER.md](TOOLSETTER.md)** for INI/HAL/macro details and Probe Basic button map.
+
+### Touch probe vs toolsetter routing
+
+Both sensors share one LinuxCNC probe input (`motion.probe-input`), but `ethercat_mill.hal` **gates** them by **spindle tool** (`halui.tool.number`) — only one source can assert `motion.probe-input` at a time:
+
+| Spindle tool | Active input | Ignored |
+|--------------|--------------|---------|
+| **T99** (touch probe) | Touch probe — Slave 1 DI5 | Toolsetter — Slave 1 DI2 |
+| **Any other tool** | Toolsetter — Slave 1 DI2 | Touch probe — Slave 1 DI5 |
+
+Both are wired **NC (NPN), direct** (no HAL inversion). Routing compares `halui.tool.number` to **99** with `comp.0.equal` (not `tool-prep-number`, which can disagree with the tool actually in the spindle after M61 or restart).
+
+```
+halui.tool.number ──► comp.0.equal (== 99?)
+                         │
+           ├─ TRUE  ──► touch probe (DI5) ──┐
+           └─ FALSE ──► toolsetter (DI2) ────┼── or2.0 ──► motion.probe-input
+```
+
+Bit gating uses `and2.3` / `and2.4` and `or2.0` (`mux2` is float-only and cannot mux digital probe inputs). `or2.1` in `custom.hal` is reserved for VFD fault OR (do not `loadrt or2` with `names=` in other HAL files).
+
+This lets you unplug the NC touch probe while running M600/toolsetter with a cutter loaded — the unplugged probe cannot false-trip probing when T99 is not in the spindle.
+
+Default probe tool is **T99**; `#3014`, `tool.tbl`, and HAL must all match. See **[Touch probe tool number](TOOLSETTER.md#touch-probe-tool-number-setup-and-renumbering)** in TOOLSETTER.md for first-time setup and renumbering.
+
 ## Current machine behavior (captured config)
 
-- Manual tool changes are **retract-only**: `TOOL_CHANGE_QUILL_UP = 1` and no `TOOL_CHANGE_POSITION`, so LinuxCNC does not command an X/Y move for tool change.
+- Built-in M6 tool-change motion is **disabled** (`TOOL_CHANGE_AT_G30=0`, `TOOL_CHANGE_QUILL_UP=0`); retract and G30 are handled by `tool_touch_off.ngc` / `M600`.
 - Home/limit inputs below are wired active-low NC and inverted in HAL (`not.*`).
-- Touch probe is wired NC on Slave 1 DI5 and mapped directly to `motion.probe-input` (no HAL inverter).
+- Touch probe (Slave 1 DI5) and contact toolsetter (Slave 1 DI2 / DB15 pin 9) are NC and **gated** to `motion.probe-input` by spindle tool (T99 → probe, else → toolsetter). See **Touch probe vs toolsetter routing** above.
 - Software E-stop is wired NC on Slave 3 DI1 / DB15 pin 10 and gates `iocontrol.0.emc-enable-in`.
 
 | Drive / EtherCAT slave | DI input | Signal use |
@@ -71,7 +99,8 @@ Many of these files are connected to eachother. Using a tool like Cursor or Clau
 | Slave 0 (X/Y drive IO) | DI2 | Y limit chain (`joint.1.neg-lim-sw-in`, `joint.1.pos-lim-sw-in`) |
 | Slave 1 (Z/probe IO) | DI4 | Z home at +Z (`joint.2.home-sw-in`) |
 | Slave 2 (Z/aux IO) | DI2 | Z negative limit (`joint.2.neg-lim-sw-in`) |
-| Slave 1 (Z/probe IO) | DI5 | Touch probe (`motion.probe-input`) |
+| Slave 1 (Z/probe IO) | DI2 / DB15 pin 9 | Contact toolsetter (`toolsetter-in` → `and2.4` when not T99) |
+| Slave 1 (Z/probe IO) | DI5 | Touch probe (`touch-probe-in` → `and2.3` when T99) |
 | Slave 3 (A axis IO) | DI1 / DB15 pin 10 | Software E-stop NC switch (`iocontrol.0.emc-enable-in`) |
 | Slave 3 (A axis IO) | DI3 (planned) | A home (currently commented out in HAL) |
 

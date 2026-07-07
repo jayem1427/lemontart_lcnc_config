@@ -12,13 +12,17 @@ loadrt lcec
 loadrt cia402 count=4
 loadrt conv_float_s32 count=4
 loadrt conv_s32_float count=4
+loadrt conv_u32_float count=1
 loadrt mult2 count=12
 loadrt ilowpass count=4
 loadrt limit1 count=4
 loadrt div2 count=4
-loadrt not count=9
-loadrt and2 count=3
+loadrt not count=8
+loadrt and2 count=5
+loadrt or2 count=2
 loadrt near count=3
+loadrt comp count=1
+loadrt constant names=probe-tool-num
 
 # =========================================================
 # 3. THREAD EXECUTION ORDER (Read -> Compute -> Write)
@@ -41,14 +45,20 @@ addf div2.3 servo-thread
 addf and2.0 servo-thread
 addf and2.1 servo-thread
 addf and2.2 servo-thread
+addf and2.3 servo-thread
+addf and2.4 servo-thread
+addf or2.0 servo-thread
+addf conv-u32-float.0 servo-thread
+addf comp.0 servo-thread
+addf probe-tool-num servo-thread
 # not.0 is reserved by probe_basic_postgui.hal.
 addf not.1 servo-thread
 addf not.2 servo-thread
 addf not.3 servo-thread
 addf not.4 servo-thread
 addf not.5 servo-thread
+addf not.6 servo-thread
 addf not.7 servo-thread
-addf not.8 servo-thread
 setp and2.0.in0 0
 setp and2.0.in1 0
 
@@ -161,10 +171,10 @@ net a-amp-fault     cia402.3.drv-fault => joint.3.amp-fault-in
 # =========================================================
 # The dummy estop loop is removed because we use a physical switch below
 net tool-prep-loop iocontrol.0.tool-prepare => iocontrol.0.tool-prepared
-# Manual tool change: iocontrol <-> qtpyvcp_manualtoolchange (see probe_basic_postgui.hal)
+# TooTall18T Integration — M6 opens tool-change OK dialog; do not auto-confirm tool-changed
 net tool-change-request <= iocontrol.0.tool-change
 net tool-change-confirmed => iocontrol.0.tool-changed
-net tool-number <= iocontrol.0.tool-prep-number
+net tool-number iocontrol.0.tool-prep-number
 
 # =========================================================
 # 6. PHYSICAL LIMIT & HOME SWITCH WIRING
@@ -194,17 +204,33 @@ net y-limit      not.4.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in
 # --- Z home on Slave 1 DI4 (+Z); -Z limit on Slave 2 DI2; no +Z limit ---
 net z-home-raw   lcec.0.1.di-4 => not.7.in
 net z-home       not.7.out => joint.2.home-sw-in
-net z-limit-raw  lcec.0.2.di-2 => not.8.in
-net z-limit      not.8.out => joint.2.neg-lim-sw-in
+# Z - limit on Slave 2 DI2 (DB15 pin 9) — disabled; pin free if needed later.
+# net z-limit-raw  lcec.0.2.di-2 => not.8.in
+# net z-limit      not.8.out => joint.2.neg-lim-sw-in
 
 # --- A still on breakout (no homing yet) ---
 # A axis home on slave 3 DI3:
 # net a-home-sw    lcec.0.3.di-3 => joint.3.home-sw-in
 net za-lims-gagged and2.0.out => joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
 
-# --- TOUCH PROBE (Y drive / Slave 1 DI5, NC / active-high at trip) ---
-# Probe changed from NO to NC: DI goes TRUE when the contact opens on trigger.
-net probe-in     lcec.0.1.di-5 => motion.probe-input
+# --- TOUCH PROBE + TOOLSETTER (active-high at trip -> motion.probe-input) ---
+# Touch probe: Slave 1 DI5, NC (NPN). Idle closed = di inactive; trip open = di TRUE. Direct.
+# Toolsetter: Slave 1 DI2 (DB15 pin 9), NC (NPN). Direct, no inversion.
+# Route by spindle tool (halui.tool.number): T99 -> DI5; any other tool -> toolsetter DI2.
+# Unplugged NC touch probe no longer false-trips toolsetter when a cutter is loaded.
+setp probe-tool-num.value 99
+setp comp.0.hyst 0.1
+net spindle-tool halui.tool.number => conv-u32-float.0.in
+net spindle-tool-float conv-u32-float.0.out => comp.0.in0
+net probe-tool-num-val probe-tool-num.out => comp.0.in1
+net probe-tool-loaded comp.0.equal => and2.3.in0
+net touch-probe-in   lcec.0.1.di-5 => and2.3.in1
+net touch-probe-active and2.3.out => or2.0.in0
+net probe-tool-loaded comp.0.equal => not.6.in
+net cutter-loaded not.6.out => and2.4.in0
+net toolsetter-in    lcec.0.1.di-2 => and2.4.in1
+net toolsetter-active and2.4.out => or2.0.in1
+net probe-in         or2.0.out => motion.probe-input
 
 # Standard Software GUI E-Stop Loop (Physical Master E-Stop cuts Mains Power)
 # Software E-stop switch is NC on Slave 3 DI1 / DB15 pin 10.

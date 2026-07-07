@@ -15,7 +15,8 @@ o<load_spindle_safety> sub
 #<load_spindle_tool_number> = #1 ; this is the value form the ATC tab
 #<probe_tool_number> = #3014
 
-; Update atc pocket count based on INI settings
+; Update atc pocket count based on INI settings (default 1 for manual collet spindle)
+#<number_of_pockets> = 1
 o101 if [EXISTS[#<_ini[atc]pockets>]]
     #<number_of_pockets> = #<_ini[atc]pockets>
 o101 endif

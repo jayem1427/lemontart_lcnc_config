@@ -56,8 +56,7 @@ net spindle-current mult2.6.out
 # Decimal 64 = E.OCS (overcurrent), decimal 92 = E.oHS (inverter overheating).
 addf near.1 servo-thread
 addf near.2 servo-thread
-loadrt or2 names=vfd_fault_or
-addf vfd_fault_or servo-thread
+addf or2.1 servo-thread
 
 setp near.1.scale 1.0
 setp near.1.difference 0.5
@@ -68,7 +67,7 @@ setp near.2.difference 0.5
 setp near.2.in2 92.0
 
 net spindle-vfd-fault-code mb2hal.vfd_fault.00.float => near.1.in1 near.2.in1
-net spindle-vfd-overcurrent near.1.out => vfd_fault_or.in0
-net spindle-vfd-overtemperature near.2.out => vfd_fault_or.in1
-net spindle-vfd-critical-fault vfd_fault_or.out => halui.estop.activate
+net spindle-vfd-overcurrent near.1.out => or2.1.in0
+net spindle-vfd-overtemperature near.2.out => or2.1.in1
+net spindle-vfd-critical-fault or2.1.out => halui.estop.activate
 
