@@ -26,7 +26,7 @@ if PYTHON_DIR not in sys.path:
     sys.path.insert(0, PYTHON_DIR)
 
 from hal_signal_logger import HalSignalLogger, default_config_path, load_config  # noqa: E402
-from signal_plot_widget import SignalPlotWidget  # noqa: E402
+from signal_plot_widget import LiveSignalPlotWidget  # noqa: E402
 
 
 class UserTab(QWidget):
@@ -98,7 +98,7 @@ class UserTab(QWidget):
             if widget is not None:
                 widget.deleteLater()
 
-        self.plot_widget = SignalPlotWidget(self.logger, self.plot_container)
+        self.plot_widget = LiveSignalPlotWidget(self.logger, self.plot_container)
         self.plot_layout.addWidget(self.plot_widget)
 
     def _sync_controls(self) -> None:
