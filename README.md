@@ -53,10 +53,10 @@ Note: **`PROGRAM_PREFIX`** points at `nc_files/` (next to the INI). Put your G-c
 | `xhc-whb04b-6.hal` | Pendant |
 | `probe_basic/` | Probe Basic YAML, postgui HAL, DROs, macros, `tool.tbl` |
 | `nc_files/` | Default program search path |
-| `config/logging/` | JSON presets for HAL signal logger |
-| `probe_basic/python/hal_signal_logger.py` | Generic logger + live buffers |
-| `scripts/run_signal_logger.py` | Run a preset from a second terminal |
-| `probe_basic/user_tabs/signal_monitor/` | Probe Basic live plot tab |
+| `config/logging/signals.json` | All HAL signals logged to one CSV |
+| `probe_basic/python/hal_signal_logger.py` | Logger + live buffers |
+| `scripts/run_signal_logger.py` | Terminal logging (arm or live) |
+| `probe_basic/user_tabs/signal_monitor/` | Probe Basic log tab |
 
 Many of these files are connected to eachother. Using a tool like Cursor or Claude Code will absolutely make your life easier since you can expand the context window to multiple files, but please always verify any changes that AI makes. Add testable features one-at-a-time, and verify they work before proceeding forward.
 
@@ -88,73 +88,39 @@ This lets you unplug the NC touch probe while running M600/toolsetter with a cut
 
 Default probe tool is **T99**; `#3014`, `tool.tbl`, and HAL must all match. See **[Touch probe tool number](TOOLSETTER.md#touch-probe-tool-number-setup-and-renumbering)** in TOOLSETTER.md for first-time setup and renumbering.
 
-## Signal logging and live plots
+## Signal logging
 
-Generic framework for logging **any HAL pin** defined in JSON presets, with CSV output, per-session summaries, and optional live plotting in Probe Basic.
+One CSV per session with following error, torque, and velocity on all axes. No preset picker — check a box, run a program, get a log.
 
 ### Dependencies
 
 Optional plotting: `sudo apt install python3-pyqtgraph`. CSV logging needs no extra packages.
 
-See **[SIGNAL_LOGGING.md](SIGNAL_LOGGING.md)** (usage + test plan) and **[PYTHON_PACKAGES.md](PYTHON_PACKAGES.md)** (version control).
+See **[SIGNAL_LOGGING.md](SIGNAL_LOGGING.md)** (workflow + test plan) and **[PYTHON_PACKAGES.md](PYTHON_PACKAGES.md)** (version control).
 
-### Presets (`config/logging/`)
+### Probe Basic (recommended)
 
-| Preset | Trigger | What it logs |
-|--------|---------|--------------|
-| `cut_ferr` | AUTO program run | `joint.N.f-error` on all axes |
-| `motor_torque` | AUTO program run | `tune-torque.N.out` (% rated torque) |
-| `tune_idle` | Manual start/stop | Torque + velocity for rigidity / idle hunt tests |
-| `custom_template` | Copy and edit | Any HAL pin you name |
+Open **Signal Monitor**:
 
-Each preset defines:
+1. Check **Log signals for next program** → run your `.ngc` in AUTO → logging starts and stops with the cycle → dialog shows saved path.
+2. Or click **Start live log** to record while jogging (no program) → **Stop live log** when done.
 
-- `channels[]` — `id`, `pin`, `label`, `units`, `color`, optional `scale`
-- `plot_groups[]` — stacked plots with `y_mode`: `auto`, `fixed`, or `sym` (symmetric auto)
-- `trigger` — `program` (auto on cut) or `manual`
+Logs: `logs/signals/YYYYMMDD_HHMMSS_<name>.csv` (+ `.summary.txt`).
 
-Logs land in `logs/<log_subdir>/` as timestamped `.csv` + `.summary.txt`.
-
-### Run beside LinuxCNC (terminal 2)
+### Terminal
 
 ```bash
-./launch.sh
-# other terminal:
-python3 scripts/run_signal_logger.py --preset cut_ferr
-python3 scripts/run_signal_logger.py --preset motor_torque
-python3 scripts/run_signal_logger.py --list-presets
-python3 scripts/run_signal_logger.py --config config/logging/my_preset.json
+python3 scripts/run_signal_logger.py              # arm for next program
+python3 scripts/run_signal_logger.py --live       # live log until Ctrl+C
 ```
 
-### Probe Basic tab
-
-`ethercat_mill.ini` enables `USER_TABS_PATH = probe_basic/user_tabs/`. Open the **Signal Monitor** tab to pick a preset, live-plot channels, and manually start/stop `manual` presets (e.g. `tune_idle` during rigidity sweeps).
-
-`program` presets also auto-start when you run G-code in AUTO.
-
-### Plot a finished CSV
+### Offline plot (requires pyqtgraph)
 
 ```bash
-python3 scripts/plot_signal_log.py logs/cut_ferr/20250629_120000_part.csv --preset config/logging/cut_ferr.json
+python3 scripts/plot_signal_log.py logs/signals/<file>.csv
 ```
 
-### Torque / velocity HAL pins
-
-`ethercat-conf.xml` maps CiA `6077` (torque) and `606C` (velocity) into each drive PDO. `custom.hal` scales them to:
-
-| HAL pin | Meaning |
-|---------|---------|
-| `tune-torque.0.out` … `.3.out` | X/Y/Z/A torque, % of rated |
-| `tune-velocity.0.out` … `.3.out` | X/Y/Z/A velocity (scale gain adjustable) |
-
-Verify torque scaling against the A6 manual on your bench; adjust `torque-pct.N.in1` or `tune-velocity.N.gain` in `custom.hal` if units look wrong.
-
-### Add your own preset
-
-1. Copy `config/logging/custom_template.json`.
-2. Set each channel `pin` to any HAL pin (`halcmd show pin` / `halcmd show sig`).
-3. Group channels into `plot_groups` with `y_mode` `auto`, `fixed`, or `sym`.
-4. Run with `--config your_file.json` or add it under `config/logging/` for the Probe Basic dropdown.
+To add or remove signals, edit `config/logging/signals.json`.
 
 ## Current machine behavior (captured config)
 

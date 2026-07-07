@@ -2,11 +2,13 @@ import os
 import sys
 
 from qtpy import uic
+from qtpy.QtCore import Qt
 from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import (
-    QComboBox,
+    QCheckBox,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -23,12 +25,7 @@ PYTHON_DIR = os.path.join(
 if PYTHON_DIR not in sys.path:
     sys.path.insert(0, PYTHON_DIR)
 
-from hal_signal_logger import (  # noqa: E402
-    HalSignalLogger,
-    default_preset_dir,
-    list_presets,
-    load_preset,
-)
+from hal_signal_logger import HalSignalLogger, default_config_path, load_config  # noqa: E402
 from signal_plot_widget import SignalPlotWidget  # noqa: E402
 
 
@@ -38,12 +35,16 @@ class UserTab(QWidget):
         ui_file = os.path.splitext(os.path.basename(__file__))[0] + ".ui"
         uic.loadUi(os.path.join(os.path.dirname(__file__), ui_file), self)
 
-        self.logger = None
+        self.logger = HalSignalLogger(
+            load_config(default_config_path()),
+            on_session_saved=self._on_session_saved,
+        )
         self.plot_widget = None
+        self._updating_controls = False
 
         self._build_controls()
-        self._load_preset_list()
-        self._on_preset_changed()
+        self._rebuild_plot()
+        self._sync_controls()
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
@@ -56,55 +57,39 @@ class UserTab(QWidget):
             self.setLayout(root_layout)
 
         controls = QWidget(self)
-        controls_layout = QHBoxLayout(controls)
+        controls_layout = QVBoxLayout(controls)
         controls_layout.setContentsMargins(0, 0, 0, 0)
 
-        controls_layout.addWidget(QLabel("Preset:"))
-        self.preset_combo = QComboBox(controls)
-        controls_layout.addWidget(self.preset_combo, stretch=2)
+        row1 = QHBoxLayout()
+        self.arm_checkbox = QCheckBox("Log signals for next program", controls)
+        self.arm_checkbox.toggled.connect(self._on_arm_toggled)
+        row1.addWidget(self.arm_checkbox)
+        row1.addStretch()
+        controls_layout.addLayout(row1)
 
-        self.state_label = QLabel("idle")
-        controls_layout.addWidget(self.state_label, stretch=1)
+        row2 = QHBoxLayout()
+        self.live_start_button = QPushButton("Start live log", controls)
+        self.live_start_button.clicked.connect(self._start_live)
+        row2.addWidget(self.live_start_button)
 
-        self.start_button = QPushButton("Start log")
-        self.start_button.clicked.connect(self._start_manual)
-        controls_layout.addWidget(self.start_button)
+        self.live_stop_button = QPushButton("Stop live log", controls)
+        self.live_stop_button.clicked.connect(self._stop_live)
+        row2.addWidget(self.live_stop_button)
 
-        self.stop_button = QPushButton("Stop log")
-        self.stop_button.clicked.connect(self._stop_manual)
-        controls_layout.addWidget(self.stop_button)
+        self.status_label = QLabel("idle", controls)
+        row2.addWidget(self.status_label, stretch=1)
+        controls_layout.addLayout(row2)
+
+        self.message_label = QLabel("", controls)
+        self.message_label.setWordWrap(True)
+        self.message_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        controls_layout.addWidget(self.message_label)
 
         root_layout.insertWidget(0, controls)
         self.plot_container = QWidget(self)
         self.plot_layout = QVBoxLayout(self.plot_container)
         self.plot_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.addWidget(self.plot_container, stretch=1)
-
-        self.preset_combo.currentIndexChanged.connect(self._on_preset_changed)
-
-    def _load_preset_list(self) -> None:
-        self.preset_combo.clear()
-        for path in list_presets():
-            self.preset_combo.addItem(
-                os.path.splitext(os.path.basename(path))[0],
-                path,
-            )
-        if self.preset_combo.count() == 0:
-            self.preset_combo.addItem(
-                "cut_ferr",
-                os.path.join(default_preset_dir(), "cut_ferr.json"),
-            )
-
-    def _on_preset_changed(self) -> None:
-        preset_path = self.preset_combo.currentData()
-        if not preset_path or not os.path.isfile(preset_path):
-            return
-
-        if self.logger is not None and self.logger.state == "logging":
-            self.logger.stop_manual()
-
-        self.logger = HalSignalLogger(load_preset(preset_path))
-        self._rebuild_plot()
 
     def _rebuild_plot(self) -> None:
         while self.plot_layout.count():
@@ -116,21 +101,47 @@ class UserTab(QWidget):
         self.plot_widget = SignalPlotWidget(self.logger, self.plot_container)
         self.plot_layout.addWidget(self.plot_widget)
 
-    def _start_manual(self) -> None:
-        if self.logger is None:
-            return
-        name = self.preset_combo.currentText()
-        self.logger.start_manual(name)
+    def _sync_controls(self) -> None:
+        self._updating_controls = True
+        status = self.logger.status
+        self.arm_checkbox.setChecked(self.logger.is_armed())
+        self.arm_checkbox.setEnabled(status != "logging")
+        self.live_start_button.setEnabled(status == "idle")
+        self.live_stop_button.setEnabled(self.logger.is_live_session)
+        self.status_label.setText(status)
+        self._updating_controls = False
 
-    def _stop_manual(self) -> None:
-        if self.logger is None:
+    def _on_arm_toggled(self, checked: bool) -> None:
+        if self._updating_controls:
             return
-        self.logger.stop_manual()
+        if checked:
+            self.logger.arm_for_next_program()
+            self.message_label.setText("Armed — logging starts when the next program runs.")
+        else:
+            self.logger.disarm()
+            if self.logger.status == "idle":
+                self.message_label.setText("")
+        self._sync_controls()
+
+    def _start_live(self) -> None:
+        self.logger.start_live()
+        self.message_label.setText("Live logging — all signals to one CSV.")
+        self._sync_controls()
+
+    def _stop_live(self) -> None:
+        self.logger.stop()
+
+    def _on_session_saved(self, csv_path: str, _summary_path: str) -> None:
+        self.message_label.setText(f"Log saved: {csv_path}")
+        QMessageBox.information(
+            self,
+            "Signal log saved",
+            f"Log saved:\n{csv_path}",
+        )
+        self._sync_controls()
 
     def _tick(self) -> None:
-        if self.logger is None:
-            return
         self.logger.poll()
-        self.state_label.setText(self.logger.state)
+        self._sync_controls()
         if self.plot_widget is not None:
             self.plot_widget.refresh()

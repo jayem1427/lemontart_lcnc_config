@@ -100,7 +100,7 @@ Re-run the smoke test after `apt upgrade`, LinuxCNC upgrades, or Probe Basic upd
 Run on the mill PC from the config directory:
 
 ```bash
-python3 scripts/run_signal_logger.py --list-presets
+python3 -c "import sys; sys.path.insert(0,'probe_basic/python'); from hal_signal_logger import load_config; load_config(); print('logger ok')"
 python3 -c "import linuxcnc; print('linuxcnc ok')"
 python3 -c "import qtpy; import qtpyvcp; print('qtpyvcp ok')"
 python3 -c "import pyqtgraph; print('pyqtgraph ok')"   # skip if plots not needed

@@ -1,7 +1,7 @@
 """Generic HAL signal logger for LinuxCNC / Probe Basic.
 
-Loads channel definitions from JSON presets, samples HAL pins on a timer,
-writes CSV logs + text summaries, and exposes live buffers for plotting.
+Loads channel definitions from a single JSON config, samples HAL pins on a timer,
+writes one CSV log + text summary per session, and exposes live buffers for plotting.
 """
 
 from __future__ import annotations
@@ -16,9 +16,11 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Callable, Deque, Dict, List, Optional
 
 import linuxcnc
+
+SessionSavedCallback = Callable[[str, str], None]
 
 
 @dataclass
@@ -66,11 +68,10 @@ class PlotGroupConfig:
 
 
 @dataclass
-class LoggerPreset:
+class LoggerConfig:
     name: str
     description: str
     rate_hz: float
-    trigger: str
     log_subdir: str
     context: List[str]
     channels: List[ChannelConfig]
@@ -78,7 +79,7 @@ class LoggerPreset:
     live_buffer: int = 500
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "LoggerPreset":
+    def from_dict(cls, data: Dict[str, Any]) -> "LoggerConfig":
         channels = [ChannelConfig.from_dict(item) for item in data["channels"]]
         plot_groups = [
             PlotGroupConfig.from_dict(item) for item in data.get("plot_groups", [])
@@ -95,7 +96,6 @@ class LoggerPreset:
             name=data["name"],
             description=data.get("description", ""),
             rate_hz=float(data.get("rate_hz", 50)),
-            trigger=data.get("trigger", "program"),
             log_subdir=data.get("log_subdir", data["name"]),
             context=list(data.get("context", ["line", "feed"])),
             channels=channels,
@@ -104,30 +104,36 @@ class LoggerPreset:
         )
 
 
+# Backward-compatible alias
+LoggerPreset = LoggerConfig
+
+
 def repo_root() -> str:
     return os.path.abspath(
         os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
     )
 
 
-def default_preset_dir() -> str:
+def default_config_dir() -> str:
     return os.path.join(repo_root(), "config", "logging")
 
 
-def load_preset(path: str) -> LoggerPreset:
-    with open(path, "r", encoding="utf-8") as handle:
-        return LoggerPreset.from_dict(json.load(handle))
+def default_preset_dir() -> str:
+    return default_config_dir()
 
 
-def list_presets(preset_dir: Optional[str] = None) -> List[str]:
-    directory = preset_dir or default_preset_dir()
-    if not os.path.isdir(directory):
-        return []
-    return sorted(
-        os.path.join(directory, name)
-        for name in os.listdir(directory)
-        if name.endswith(".json")
-    )
+def default_config_path() -> str:
+    return os.path.join(default_config_dir(), "signals.json")
+
+
+def load_config(path: Optional[str] = None) -> LoggerConfig:
+    config_path = path or default_config_path()
+    with open(config_path, "r", encoding="utf-8") as handle:
+        return LoggerConfig.from_dict(json.load(handle))
+
+
+def load_preset(path: str) -> LoggerConfig:
+    return load_config(path)
 
 
 def hal_getp(pin: str) -> float:
@@ -149,34 +155,38 @@ def _sanitize_name(value: str) -> str:
 
 
 class HalSignalLogger:
-    """Sample configured HAL pins and write CSV logs."""
+    """Sample configured HAL pins and write one CSV log per session."""
 
     def __init__(
         self,
-        preset: LoggerPreset,
+        config: LoggerConfig,
         log_root: Optional[str] = None,
         ini_path: Optional[str] = None,
         live_buffer: Optional[int] = None,
+        on_session_saved: Optional[SessionSavedCallback] = None,
     ) -> None:
-        self.preset = preset
+        self.config = config
+        self.preset = config  # backward-compatible alias
         self.log_root = log_root or os.path.join(repo_root(), "logs")
-        self.log_dir = os.path.join(self.log_root, preset.log_subdir)
+        self.log_dir = os.path.join(self.log_root, config.log_subdir)
         self.ini_path = ini_path or os.environ.get(
             "INI_FILE_NAME", os.path.join(repo_root(), "ethercat_mill.ini")
         )
         self.stat = linuxcnc.stat()
-        self.rate_hz = preset.rate_hz
-        self.trigger = preset.trigger
+        self.rate_hz = config.rate_hz
+        self.on_session_saved = on_session_saved
 
-        buffer_len = live_buffer or preset.live_buffer
+        buffer_len = live_buffer or config.live_buffer
         self._buffers: Dict[str, Deque[float]] = {
-            channel.id: deque(maxlen=buffer_len) for channel in preset.channels
+            channel.id: deque(maxlen=buffer_len) for channel in config.channels
         }
         self._session_max: Dict[str, float] = {}
         self._session_sum_sq: Dict[str, float] = {}
         self._session_count = 0
 
         self.state = "idle"
+        self._armed = False
+        self._auto_stop_on_program_end = False
         self._csv_file = None
         self._csv_writer = None
         self._session_path: Optional[str] = None
@@ -184,16 +194,51 @@ class HalSignalLogger:
         self._session_name = ""
         self._t0 = 0.0
         self._last_sample = 0.0
-        self._last_context: Dict[str, Any] = {}
+        self.last_session_path: Optional[str] = None
+        self.last_summary_path: Optional[str] = None
         self.live_stats: Dict[str, Dict[str, float]] = {}
 
         os.makedirs(self.log_dir, exist_ok=True)
 
+    @property
+    def status(self) -> str:
+        if self.state == "logging":
+            return "logging"
+        if self._armed:
+            return "armed"
+        return "idle"
+
+    def arm_for_next_program(self) -> None:
+        if self.state == "logging":
+            return
+        self._armed = True
+
+    def disarm(self) -> None:
+        self._armed = False
+
+    def is_armed(self) -> bool:
+        return self._armed
+
+    @property
+    def is_live_session(self) -> bool:
+        return self.state == "logging" and not self._auto_stop_on_program_end
+
+    def start_live(self) -> None:
+        if self.state == "logging":
+            return
+        self._armed = False
+        self._auto_stop_on_program_end = False
+        self._begin_session("live")
+
+    def stop(self) -> None:
+        self._end_session()
+
     def poll(self) -> None:
         if self.state == "idle":
-            if self.trigger == "program" and self._program_running():
-                program = self._current_program_name()
-                self.start_manual(program)
+            if self._armed and self._program_running():
+                self._armed = False
+                self._auto_stop_on_program_end = True
+                self._begin_session(self._current_program_name())
             return
 
         if self.state != "logging":
@@ -201,17 +246,41 @@ class HalSignalLogger:
 
         now = time.time()
         if now - self._last_sample < (1.0 / self.rate_hz):
-            if self.trigger == "program" and not self._program_running():
-                self.stop_manual()
+            if self._auto_stop_on_program_end and not self._program_running():
+                self._end_session()
             return
 
         self._sample(now)
         self._last_sample = now
 
-        if self.trigger == "program" and not self._program_running():
-            self.stop_manual()
+        if self._auto_stop_on_program_end and not self._program_running():
+            self._end_session()
 
     def start_manual(self, session_name: str = "manual") -> None:
+        """Backward-compatible alias for start_live or explicit session start."""
+        if self.state == "logging":
+            return
+        self._armed = False
+        self._auto_stop_on_program_end = False
+        self._begin_session(session_name)
+
+    def stop_manual(self) -> None:
+        """Backward-compatible alias for stop."""
+        self._end_session()
+
+    def get_buffers(self) -> Dict[str, Deque[float]]:
+        return self._buffers
+
+    def get_plot_groups(self) -> List[PlotGroupConfig]:
+        return self.config.plot_groups
+
+    def get_channels(self) -> List[ChannelConfig]:
+        return self.config.channels
+
+    def channel_by_id(self) -> Dict[str, ChannelConfig]:
+        return {channel.id: channel for channel in self.config.channels}
+
+    def _begin_session(self, session_name: str) -> None:
         if self.state == "logging":
             return
 
@@ -223,41 +292,41 @@ class HalSignalLogger:
         self._session_name = safe_name
         self._t0 = time.time()
         self._last_sample = 0.0
-        self._session_max = {channel.id: 0.0 for channel in self.preset.channels}
-        self._session_sum_sq = {channel.id: 0.0 for channel in self.preset.channels}
+        self._session_max = {channel.id: 0.0 for channel in self.config.channels}
+        self._session_sum_sq = {channel.id: 0.0 for channel in self.config.channels}
         self._session_count = 0
         for buffer in self._buffers.values():
             buffer.clear()
 
-        header = ["t"] + list(self.preset.context)
-        header.extend(channel.id for channel in self.preset.channels)
+        header = ["t"] + list(self.config.context)
+        header.extend(channel.id for channel in self.config.channels)
 
         self._csv_file = open(self._session_path, "w", newline="", encoding="utf-8")
         self._csv_writer = csv.writer(self._csv_file)
         self._csv_writer.writerow(header)
         self.state = "logging"
 
-    def stop_manual(self) -> None:
+    def _end_session(self) -> None:
         if self.state != "logging":
             return
+
+        csv_path = self._session_path
+        summary_path = self._summary_path
+
         if self._csv_file is not None:
             self._csv_file.close()
             self._csv_file = None
             self._csv_writer = None
+
         self._write_summary()
         self.state = "idle"
+        self._auto_stop_on_program_end = False
 
-    def get_buffers(self) -> Dict[str, Deque[float]]:
-        return self._buffers
-
-    def get_plot_groups(self) -> List[PlotGroupConfig]:
-        return self.preset.plot_groups
-
-    def get_channels(self) -> List[ChannelConfig]:
-        return self.preset.channels
-
-    def channel_by_id(self) -> Dict[str, ChannelConfig]:
-        return {channel.id: channel for channel in self.preset.channels}
+        if csv_path:
+            self.last_session_path = csv_path
+            self.last_summary_path = summary_path
+            if self.on_session_saved is not None:
+                self.on_session_saved(csv_path, summary_path or "")
 
     def _program_running(self) -> bool:
         self.stat.poll()
@@ -273,7 +342,7 @@ class HalSignalLogger:
     def _read_context(self) -> Dict[str, Any]:
         self.stat.poll()
         context: Dict[str, Any] = {}
-        for key in self.preset.context:
+        for key in self.config.context:
             if key == "line":
                 context[key] = self.stat.current_line
             elif key == "feed":
@@ -284,7 +353,6 @@ class HalSignalLogger:
                 context[key] = int(self.stat.enabled)
             else:
                 context[key] = ""
-        self._last_context = context
         return context
 
     def _sample(self, now: Optional[float] = None) -> None:
@@ -294,10 +362,10 @@ class HalSignalLogger:
         sample_time = (now or time.time()) - self._t0
         context = self._read_context()
         row: List[Any] = [f"{sample_time:.3f}"]
-        row.extend(context.get(key, "") for key in self.preset.context)
+        row.extend(context.get(key, "") for key in self.config.context)
 
         self.live_stats = {}
-        for channel in self.preset.channels:
+        for channel in self.config.channels:
             raw = hal_getp(channel.pin) * channel.scale
             if math.isnan(raw):
                 value = raw
@@ -336,7 +404,7 @@ class HalSignalLogger:
         duration = time.time() - self._t0
         limits = self._read_ferror_limits()
         lines = [
-            f"preset: {self.preset.name}",
+            f"config: {self.config.name}",
             f"session: {self._session_name}",
             f"duration_s: {duration:.2f}",
             f"samples: {self._session_count}",
@@ -344,7 +412,7 @@ class HalSignalLogger:
             "",
         ]
 
-        for channel in self.preset.channels:
+        for channel in self.config.channels:
             count = max(self._session_count, 1)
             rms = math.sqrt(self._session_sum_sq[channel.id] / count)
             peak = self._session_max[channel.id]
@@ -375,7 +443,7 @@ class HalSignalLogger:
             "a_ferr": 3,
         }
         for channel_id, joint in mapping.items():
-            if not any(item.id == channel_id for item in self.preset.channels):
+            if not any(item.id == channel_id for item in self.config.channels):
                 continue
             section = f"JOINT_{joint}"
             value = ini.find(section, "FERROR")

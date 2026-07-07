@@ -1,0 +1,51 @@
+{
+  "name": "signals",
+  "description": "All HAL signals in one CSV — following error, torque, velocity",
+  "rate_hz": 50,
+  "log_subdir": "signals",
+  "context": ["line", "feed", "enabled"],
+  "channels": [
+    {"id": "x_ferr", "pin": "joint.0.f-error", "label": "X FErr", "units": "mm", "color": "#3498db", "group": "ferr"},
+    {"id": "y_ferr", "pin": "joint.1.f-error", "label": "Y FErr", "units": "mm", "color": "#2ecc71", "group": "ferr"},
+    {"id": "z_ferr", "pin": "joint.2.f-error", "label": "Z FErr", "units": "mm", "color": "#e74c3c", "group": "ferr"},
+    {"id": "a_ferr", "pin": "joint.3.f-error", "label": "A FErr", "units": "deg", "color": "#9b59b6", "group": "ferr"},
+    {"id": "x_torque", "pin": "tune-torque.0.out", "label": "X TQ", "units": "%", "color": "#c0392b", "group": "torque"},
+    {"id": "y_torque", "pin": "tune-torque.1.out", "label": "Y TQ", "units": "%", "color": "#27ae60", "group": "torque"},
+    {"id": "z_torque", "pin": "tune-torque.2.out", "label": "Z TQ", "units": "%", "color": "#2980b9", "group": "torque"},
+    {"id": "a_torque", "pin": "tune-torque.3.out", "label": "A TQ", "units": "%", "color": "#d35400", "group": "torque"},
+    {"id": "x_vel", "pin": "tune-velocity.0.out", "label": "X Vel", "units": "mm/s", "color": "#1abc9c", "group": "velocity"},
+    {"id": "y_vel", "pin": "tune-velocity.1.out", "label": "Y Vel", "units": "mm/s", "color": "#16a085", "group": "velocity"},
+    {"id": "z_vel", "pin": "tune-velocity.2.out", "label": "Z Vel", "units": "mm/s", "color": "#3498db", "group": "velocity"},
+    {"id": "a_vel", "pin": "tune-velocity.3.out", "label": "A Vel", "units": "deg/s", "color": "#8e44ad", "group": "velocity"}
+  ],
+  "plot_groups": [
+    {
+      "id": "ferr",
+      "title": "Following error",
+      "y_mode": "fixed",
+      "y_min": -0.25,
+      "y_max": 0.25,
+      "channels": ["x_ferr", "y_ferr", "z_ferr"]
+    },
+    {
+      "id": "a_ferr",
+      "title": "A following error (deg)",
+      "y_mode": "fixed",
+      "y_min": -60,
+      "y_max": 60,
+      "channels": ["a_ferr"]
+    },
+    {
+      "id": "torque",
+      "title": "Torque (% rated)",
+      "y_mode": "auto",
+      "channels": ["x_torque", "y_torque", "z_torque", "a_torque"]
+    },
+    {
+      "id": "velocity",
+      "title": "Velocity",
+      "y_mode": "sym",
+      "channels": ["x_vel", "y_vel", "z_vel", "a_vel"]
+    }
+  ]
+}
