@@ -26,7 +26,7 @@ o<400> if [#<_task> EQ 1]
 
 ;-OPTIONS-
 ;--Generally--
-#<brake_after_M600> = 1	      	    ;TooTall18T Integration — 1=M6 OK dialog at G30, 2=M01 optional pause after probe
+#<brake_after_M600> = 1	      	    ;TooTall18T Integration — 1=M6 OK dialog at G30, 2=M01 optional stop at G30
 #<go_back_to_start_pos> = 0         ;If "1" the machine returns to the position where the routine was started.
 #<spindle_stop_m> = 5               ;TooTall18T Integration — M-Code number to stop the spindle default 5 (M5), option 500 (M500).
 #<disable_pre_pos> = 0              ;TooTall18T Integration — move to G30 tool change position before pausing for manual swap
@@ -49,6 +49,8 @@ o<400> if [#<_task> EQ 1]
 ;Adding and changing the variables and transfer parameters leads to the routine not being executed (LinuxCNC/Probe Basic).
 #<mode> = #2000                           (Modes: 0=manual, 1=automatic, 2=check)
 #2000 = 0
+#<requested_tool> = #2002                 (tool number from T word before M600 — set by m600.ngc)
+#2002 = 0
 #<panel_call> = #2001                     (1=Probe Basic TOOL CHANGE PANEL — skip post-probe M00/M01)
 #2001 = 0
 #<fast_probe_fr> = #3004                 (set from probe screen fast probe feed rate)
@@ -157,7 +159,9 @@ o<10>endif
 
 ;-10- Check for manual tool calibration and new parameters
 G92.1
-M50 P0
+o<feed_lock> if [#<mode> EQ 0]
+  M50 P0
+o<feed_lock> endif
 
 
 
@@ -174,32 +178,14 @@ M50 P0
 ; Manual touch-off (Probe Basic button): tool is in spindle via M61, selected_tool often still 0
 o<95> if [#<mode> EQ 0]
   #<tool_selected> = #<tool_in_spindle>
-o<95> elseif [#<tool_selected> EQ 0 AND #<tool_in_spindle> GT 0]
-  #<tool_selected> = #<tool_in_spindle>
+o<95> elseif [#<requested_tool> GT 0]
+  ; M600: use tool number captured by m600.ngc before _selected_tool can go stale
+  #<tool_selected> = #<requested_tool>
 o<95> endif
+o<validate_tool> if [#<mode> EQ 1 AND #<tool_selected> LE 0]
+  (ABORT, M600 requires T before M600 — no tool prepared)
+o<validate_tool> endif
 (LOG, Old tool: #<tool_in_spindle> / New tool: #<tool_selected>)
-
-
-;-40- Compare new and old tool numbers
-;If the tool in the spindle is the same as the one selected, no change is made. Except for manual measurement.
-o<90> if [#<mode> EQ 1]
-  o<92> if [#<tool_in_spindle> EQ #<tool_selected>]
-    G43
-    (DEBUG, Same tool)
-    ;(DEBUG, Selbes Werkzeug)
-    M50 P1
-    o<94> if [#<panel_call> NE 1]
-      o<941> if [ #<brake_after_M600> EQ 1]
-        M00
-      o<941> elseif [#<brake_after_M600> EQ 2]
-        M01
-      o<941> endif
-    o<94> endif
-    (LOG, END same tool)
-    (LOGCLOSE)
-    o<tool_touch_off> return
-  o<92> endif
-o<90> endif
 
 
 ;-50- Change to T0
@@ -209,7 +195,8 @@ o<90> endif
 o<100> if [#<tool_selected> EQ 0]
   G90
   G53 G1 F#<traverse_fr> Z0
-  M6 T#<tool_selected> 
+  M50 P1
+  M6 T#<tool_selected>
   G49
   M50 P1
   (LOG, END M6 T0)
@@ -239,6 +226,7 @@ o<200> do
     G53 G1 F#<traverse_fr> X#5181 Y#5182
     G53 G1 F#<traverse_fr> Z#5183
     o<106a> if [#<brake_after_M600> EQ 1 AND #<fastprobefailed> EQ 0]
+      M50 P1
       M6 T#<tool_selected>  ; Probe Basic OK dialog: shows tool number + remark, waits for OK
       #<tool_changed_at_g30> = 1
     o<106a> elseif [#<brake_after_M600> EQ 2 AND #<fastprobefailed> EQ 0]
@@ -280,6 +268,7 @@ o<200> do
   ;-90- Tool change (M600: M6 OK dialog at G30 unless already done; manual touch-off uses T only)
   o<235> if [#<mode> EQ 1]
     o<237> if [#<tool_changed_at_g30> EQ 0]
+      M50 P1
       M6 T#<tool_selected>
     o<237> endif
   o<235> else
@@ -359,6 +348,7 @@ o<200> do
 
 
   ;-120- Move to Z start position for length measurement
+  M50 P0
   G53 G1 F#<traverse_fr> Z#<probe_start_pos_z>
   #<offset_z> = #5422              (work Z at probe start — required for length math)
 
@@ -451,20 +441,11 @@ G90    (set absolute coordinates)
 G53 G1 F#<traverse_fr> Z0 (Send spindle to home zero position)
 
 
-;-210- Return to hold position and choose pause
-;M50 P1 before M00/M01 — feed override must unlock even when program pauses.
-;Post-probe M00/M01 is for CAM M600 only — panel calls set #2001=1 to skip.
+;-210- Return to hold position (optional)
 M50 P1
-o<140> if [#<mode> EQ 1 AND #<panel_call> NE 1]
-  o<141> if [#<go_back_to_start_pos> EQ 1]
-    G1 F#<traverse_fr> X[#<stop_position_x>] Y[#<stop_position_y>]
-    G1 F#<traverse_fr> Z[#<stop_position_z>]
-  o<141> endif
-  o<142> if [ #<brake_after_M600> EQ 1]
-    M00
-  o<142> elseif [#<brake_after_M600> EQ 2]
-    M01
-  o<142> endif
+o<140> if [#<mode> EQ 1 AND #<go_back_to_start_pos> EQ 1]
+  G1 F#<traverse_fr> X[#<stop_position_x>] Y[#<stop_position_y>]
+  G1 F#<traverse_fr> Z[#<stop_position_z>]
 o<140> endif
 
 (LOG, END)
