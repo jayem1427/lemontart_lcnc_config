@@ -1,4 +1,4 @@
-# lemontart_lcnc_config
+# laser-setter
 
 LinuxCNC configuration for a **Lemontart**-class EtherCAT mill:
 
@@ -40,6 +40,12 @@ If you want to really understand how LinuxCNC works, would HIGHLY recommend star
 
 Note: **`PROGRAM_PREFIX`** points at `nc_files/` (next to the INI). Put your G-code there or change it in `ethercat_mill.ini`.
 
+## Signal logging (servo tuning)
+
+HAL telemetry, CSV logging, and a **Logging** tab in Probe Basic for following error, torque, and velocity on X/Y/Z/A. See **[SIGNAL_LOGGING.md](SIGNAL_LOGGING.md)** for the tab UI, HAL chain, drive SDO limits, tuning G-code, and test plan.
+
+Branch: `cursor/signal-logging-framework-0633`.
+
 ## Layout
 
 | File | Purpose |
@@ -51,12 +57,8 @@ Note: **`PROGRAM_PREFIX`** points at `nc_files/` (next to the INI). Put your G-c
 | `custom.hal` | Modbus spindle mux, extras |
 | `h100.mb2hal` | Modbus register map for VFD |
 | `xhc-whb04b-6.hal` | Pendant |
-| `probe_basic/` | Probe Basic YAML, postgui HAL, DROs, macros, `tool.tbl` |
+| `probe_basic/` | Probe Basic YAML, postgui HAL, DROs, macros, `tool.tbl`, Logging tab |
 | `nc_files/` | Default program search path |
-| `config/logging/signals.json` | All HAL signals logged to one CSV |
-| `probe_basic/python/hal_signal_logger.py` | Logger + live buffers |
-| `scripts/run_signal_logger.py` | Terminal logging (arm or live) |
-| `probe_basic/user_tabs/signal_monitor/` | Probe Basic log tab |
 
 Many of these files are connected to eachother. Using a tool like Cursor or Claude Code will absolutely make your life easier since you can expand the context window to multiple files, but please always verify any changes that AI makes. Add testable features one-at-a-time, and verify they work before proceeding forward.
 
@@ -87,40 +89,6 @@ Bit gating uses `and2.3` / `and2.4` and `or2.0` (`mux2` is float-only and cannot
 This lets you unplug the NC touch probe while running M600/toolsetter with a cutter loaded — the unplugged probe cannot false-trip probing when T99 is not in the spindle.
 
 Default probe tool is **T99**; `#3014`, `tool.tbl`, and HAL must all match. See **[Touch probe tool number](TOOLSETTER.md#touch-probe-tool-number-setup-and-renumbering)** in TOOLSETTER.md for first-time setup and renumbering.
-
-## Signal logging
-
-One CSV per session with following error, torque, and velocity on all axes. No preset picker — check a box, run a program, get a log.
-
-### Dependencies
-
-Optional plotting: `sudo apt install python3-pyqtgraph`. CSV logging needs no extra packages.
-
-See **[SIGNAL_LOGGING.md](SIGNAL_LOGGING.md)** (workflow + test plan) and **[PYTHON_PACKAGES.md](PYTHON_PACKAGES.md)** (version control).
-
-### Probe Basic (recommended)
-
-Open **Signal Monitor**:
-
-1. Check **Log signals for next program** → run your `.ngc` in AUTO → logging starts and stops with the cycle → dialog shows saved path.
-2. Or click **Start live log** to record while jogging (no program) → **Stop live log** when done.
-
-Logs: `logs/signals/YYYYMMDD_HHMMSS_<name>.csv` (+ `.summary.txt`).
-
-### Terminal
-
-```bash
-python3 scripts/run_signal_logger.py              # arm for next program
-python3 scripts/run_signal_logger.py --live       # live log until Ctrl+C
-```
-
-### Offline plot (requires pyqtgraph)
-
-```bash
-python3 scripts/plot_signal_log.py logs/signals/<file>.csv
-```
-
-To add or remove signals, edit `config/logging/signals.json`.
 
 ## Current machine behavior (captured config)
 
@@ -220,6 +188,54 @@ To revert to immediate at-speed (no 5 s settle), edit `custom.hal`: remove the `
 
 Either fault sets `spindle-vfd-critical-fault`, which triggers
 `halui.estop.activate`.
+
+## Laser tool setter (in progress)
+
+Dedicated Probe Basic tab for an upcoming laser tool setter (tool length + diameter + runout + broken-tool detect). Branch: `cursor/laser-setter-1afc`.
+
+**Current state:** UI and setup-parameter plumbing are in place; measure buttons still call skeleton NGC macros (DEBUG + exit). No HAL pins or real probing yet.
+
+### Loading the tab
+
+- `USER_TABS_PATH = probe_basic/user_tabs/` in `ethercat_mill.ini` `[DISPLAY]`
+- Tab source: `probe_basic/user_tabs/laser_setter/` (`.ui`, `.py`, `.qss`, `kexin_tool_setter.png`)
+- Skeleton macros: `probe_basic/subroutines/laser_*.ngc`
+
+### Setup fields (Measure column)
+
+Before any measure action, the tab syncs three values into LinuxCNC via `o<laser_set_start_xy> call [X] [Y] [RPM]`:
+
+| UI field | NGC parameter | Notes |
+|----------|---------------|-------|
+| START X | `#5181` | Editable; **CAPTURE CURRENT X/Y** fills from machine position |
+| START Y | `#5182` | Same as START X |
+| PROBE RPM | `#5183` | Must be &gt; 0; default 1000 |
+
+**CAPTURE CURRENT X/Y** writes the current machine X/Y into the fields, then runs the same sync MDI. Length / diameter / runout / broken-check / calibrate buttons call `_sync_setup_params()` first; invalid X/Y/RPM blocks the MDI with a status error.
+
+### Measure buttons
+
+| Button | MDI macro | Z-touch gate |
+|--------|-----------|--------------|
+| MEASURE LENGTH | `o<laser_length> call` | Required first (sets `_z_touched`) |
+| MEASURE DIAMETER | `o<laser_diameter> call` | After length |
+| MEASURE RUNOUT | `o<laser_runout> call` | After length |
+| BROKEN TOOL CHECK | `o<laser_broken_check> call` | After length |
+| CALIBRATE | `o<laser_calibrate> call` | After length |
+| AIR BLAST | `o<laser_air_blast_toggle> call` | No gate |
+
+Removed from earlier skeleton: **MEASURE FULL TOOL**, **UPDATE TOOL TABLE**, footer **ABORT** (use LinuxCNC stop/estop). Header **?** opens a help placeholder dialog.
+
+### UI / theme
+
+- Probe Basic dark palette (`#2e3436` / `#363b3d`), BebasKai font (loaded from `/usr/share/fonts/truetype/BebasKai.ttf`)
+- Three-column layout: Measure | Results + tool-setter diagram | Calibration
+- `kexin_tool_setter.png` scales with tab resize (`IMAGE_DISPLAY_SCALE = 0.624`)
+- Units combo converts START X/Y and all linear readouts between mm and inch
+
+### Roadmap (staged PRs)
+
+Hardware pick → HAL wiring → length-only macro → calibration → diameter measure → broken-tool M-code → per-flute profiling. Each phase on its own branch.
 
 ## What was left out of git, but is helpful to keep in the config
 
