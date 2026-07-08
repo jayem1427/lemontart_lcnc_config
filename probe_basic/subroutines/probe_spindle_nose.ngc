@@ -27,6 +27,8 @@ o<probe_spindle_nose> sub
   o100 endif
 
   #<offset_z> = #5422
+  (Current Z for failed-probe recovery — must match sibling probe_* macros)
+  #<z> = #5422
 
   (Initial Fast Z- Probe)
   G91

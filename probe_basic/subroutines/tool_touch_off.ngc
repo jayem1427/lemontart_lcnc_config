@@ -81,10 +81,13 @@ o<param_defaults2> endif
 #<tool_touch_y_coords> = #5182
 #<tool_touch_z_coords> = #5183
 
-; Harden: refuse to run with unset or out-of-limit setter coordinates
-o<validate_setter> if [[ABS[#<tool_touch_x_coords>] LT 0.001] AND [ABS[#<tool_touch_y_coords>] LT 0.001]]
-  (ABORT, Tool setter XY not configured. Jog over setter and press SET TOOL TOUCH OFF POS in Probe Basic.)
-o<validate_setter> endif
+; Harden: refuse unset setter coords (either axis near zero means not taught)
+o<validate_setter_x> if [ABS[#<tool_touch_x_coords>] LT 0.001]
+  (ABORT, Tool setter X not configured. Jog over setter and press SET TOOL TOUCH OFF POS in Probe Basic.)
+o<validate_setter_x> endif
+o<validate_setter_y> if [ABS[#<tool_touch_y_coords>] LT 0.001]
+  (ABORT, Tool setter Y not configured. Jog over setter and press SET TOOL TOUCH OFF POS in Probe Basic.)
+o<validate_setter_y> endif
 o<validate_xmin> if [#<tool_touch_x_coords> LT #<_ini[AXIS_X]MIN_LIMIT>]
   (ABORT, Tool setter X below machine limit. Re-teach with SET TOOL TOUCH OFF POS.)
 o<validate_xmin> endif
