@@ -7,19 +7,19 @@ LinuxCNC configuration for a **Lemontart**-class EtherCAT mill:
 - **XHC WHB04B-6** wireless pendant, with low-pass filter for smooth jogging
 - **H100 VFD** over Modbus RTU via `mb2hal` (`h100.mb2hal`)
 
-Please treat this repo as a reference, not a guaranteed drop-in. Expect to adjust EtherCAT XML, scales, limits, serial port, and homing before cutting metal.
+Please treat this repo as a **reference built from examples**, not a guaranteed drop-in. Expect to adjust EtherCAT XML, scales, limits, serial port, and homing before cutting metal.
 
-If you want to really understand how LinuxCNC works, would HIGHLY recommend starting from a default axis example, and adding features one at a time. Probe Basic will likely give you a headache if you jump straight to it. A road map might look like:
+## Documentation
 
-- getting linuxcnc installed
-- play around with some of the simulation configs, get familiar in the UI
-- copy a built-in config to start as your baseline
-- adjusting hal and ini files for motor scaling and direction
-- getting linuxcnc-ethercat installed and configured (see my xml example)
-- getting familiar within axis, learn how to watch pin states, learn how to jog
-- configure homing properly, test carefully
-- servo tuning in the StepperOnline software
-- once you confirm that's all working, then duplicate your config to convert it to Probe Basic
+| Doc | Contents |
+|-----|----------|
+| **[GETTING_STARTED.md](GETTING_STARTED.md)** | Zero-to-hero path, external links, first boot, troubleshooting |
+| **[DEVIATIONS.md](DEVIATIONS.md)** | How this config differs from stock LinuxCNC / Probe Basic |
+| **[TOOLSETTER.md](TOOLSETTER.md)** | M600 toolsetter, touch-probe routing, Fusion post |
+| **[PROBE_BASIC_UI.md](PROBE_BASIC_UI.md)** | Custom DRO (SET Z), spindle widgets, UI paths |
+| [probe_basic/subroutines/metrology/README.md](probe_basic/subroutines/metrology/README.md) | Z repeatability test macros |
+
+New to LinuxCNC? Start with [GETTING_STARTED.md](GETTING_STARTED.md) — do not jump straight to Probe Basic. Something behaves unlike the manual? Check [DEVIATIONS.md](DEVIATIONS.md) first.
 
 ## Requirements
 
@@ -29,16 +29,18 @@ If you want to really understand how LinuxCNC works, would HIGHLY recommend star
 
 ## Quick start
 
-1. Install linuxcnc: https://linuxcnc.org/downloads/
-2. Install linuxcnc-ethercat: https://github.com/linuxcnc-ethercat/linuxcnc-ethercat.
-3. Find your corresponding ethernet address using the "ip a" command in terminal.
-5. Edit etc/ethercat.xml so that ethernet address matches the result of previous command.
-6. Copy a default config from the LinuxCNC wizard.
-7. Edit .hal files and .ini files to get motors and homing working. Use my examples as reference.
-8. Paste and edit **`ethercat-conf.xml`** from this repo so slave types, positions, and PDOs match your chain (and your A6 drive tuning).
-9. Paste and edit **`h100.mb2hal`** — set `SERIAL_PORT` (often `/dev/ttyUSB0`) and confirm register addresses match your VFD manual.
+1. Install LinuxCNC: [linuxcnc.org/downloads](https://linuxcnc.org/downloads/)
+2. Install [linuxcnc-ethercat](https://github.com/linuxcnc-ethercat/linuxcnc-ethercat)
+3. Set the EtherCAT NIC in `/etc/ethercat.conf` (`ip link` on the dedicated port)
+4. Copy a default wizard config; get one axis moving before cloning this repo
+5. Edit **`ethercat-conf.xml`** — slave order, PDOs, and A6 SDOs for your chain
+6. Edit **`ethercat_mill.ini`** / **`ethercat_mill.hal`** — scales, limits, homing
+7. Edit **`h100.mb2hal`** — `SERIAL_PORT` (often `/dev/ttyUSB0`) and VFD registers
+8. Launch with **`./launch.sh`** or `linuxcnc ethercat_mill.ini`
 
-Note: **`PROGRAM_PREFIX`** points at `nc_files/` (next to the INI). Put your G-code there or change it in `ethercat_mill.ini`.
+Note: **`PROGRAM_PREFIX`** in the committed INI is an absolute developer path. Point it at this repo’s `nc_files/` or your own folder.
+
+Full staged path (sim → EtherCAT → Probe Basic → CAM): **[GETTING_STARTED.md](GETTING_STARTED.md)**.
 
 ## Layout
 
@@ -53,12 +55,26 @@ Note: **`PROGRAM_PREFIX`** points at `nc_files/` (next to the INI). Put your G-c
 | `xhc-whb04b-6.hal` | Pendant |
 | `probe_basic/` | Probe Basic YAML, postgui HAL, DROs, macros, `tool.tbl` |
 | `nc_files/` | Default program search path |
+| `linuxcnc-djr.cps` | Fusion 360 post (M600, XYZA, G93) |
+| `GETTING_STARTED.md` | Learning path and troubleshooting |
+| `DEVIATIONS.md` | Differences vs stock LinuxCNC / Probe Basic |
+| `PROBE_BASIC_UI.md` | SET Z DRO and UI customizations |
 
-Many of these files are connected to eachother. Using a tool like Cursor or Claude Code will absolutely make your life easier since you can expand the context window to multiple files, but please always verify any changes that AI makes. Add testable features one-at-a-time, and verify they work before proceeding forward.
+Many of these files are connected to each other. Using a tool like Cursor or Claude Code will absolutely make your life easier since you can expand the context window to multiple files, but please always verify any changes that AI makes. Add testable features one-at-a-time, and verify they work before proceeding forward.
+
+## Operator shortcuts (Probe Basic)
+
+| Action | Where |
+|--------|--------|
+| SET WCO Z (shim / manual touch-off) | XYZA DRO **SET Z** — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
+| Load cutter + probe length | **LOAD SPINDLE** or CAM `T<n> M600` — [TOOLSETTER.md](TOOLSETTER.md) |
+| Z repeatability tests | MDI metrology macros — [metrology README](probe_basic/subroutines/metrology/README.md) |
+
+Feed override runs to **250%** (`MAX_FEED_OVERRIDE = 2.5`); pendant WHB knob uses the same limit.
 
 ## Toolsetter (semi-auto tool length)
 
-TooTall18T `tool_touch_off` + `M600` integration for manual collet tool changes with probing. See **[TOOLSETTER.md](TOOLSETTER.md)** for INI/HAL/macro details and Probe Basic button map.
+TooTall18T [`tool_length_probe`](https://github.com/TooTall18T/tool_length_probe) + `M600` integration for manual collet tool changes with probing. See **[TOOLSETTER.md](TOOLSETTER.md)** for INI/HAL/macro details and Probe Basic button map.
 
 ### Touch probe vs toolsetter routing
 
