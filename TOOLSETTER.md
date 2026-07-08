@@ -87,8 +87,9 @@ Update README cross-references if you document a non-99 default elsewhere.
 - `brake_after_M600=1`, `disable_pre_pos=0` — collet wrench at G30, then probe
 - Flow: `G49` → `G53 Z0` → stop spindle → `G53` G30 XY/Z → **M6 OK dialog** → setter XY → probe → `G10 L1` → `T G43` → `G53 Z0`
 - G30 and setter position both use `#5181`–`#5183` (teach via **SET TOOL TOUCH OFF POS**)
-- Post-probe `M00` when `brake_after_M600=1` (for CAM); skipped when `#2001=1` (panel call)
-- `M50 P1` runs **before** any `M00`/`M01` so feed override unlocks even if program pauses
+- `M50 P1` runs **before** M6 at G30 so feed override is enabled when the OK dialog appears; confirming the dialog continues the program without an extra pause
+- No post-probe `M00`/`M01` — CAM resumes cutting immediately after the probe cycle
+- M600 always runs the full change+probe sequence (no same-tool skip that could false-positive and pause with `M00`)
 
 ### `tool_touch_off.ngc` — manual touch-off (`#2000=0`, Probe Basic button)
 
@@ -115,7 +116,7 @@ Update README cross-references if you document a non-99 default elsewhere.
 
 | Control | Subroutine | Behavior |
 |---------|------------|----------|
-| **LOAD SPINDLE** (TOOL CHANGE PANEL) | `load_spindle_safety_2.ngc` | Cutters: `T#` → `#2001=1` → `m600`. Touch probe (`#3014`): `T M6` + `G43` + `M5` only |
+| **LOAD SPINDLE** (TOOL CHANGE PANEL) | `load_spindle_safety_2.ngc` | Cutters: `T#` → `m600`. Touch probe (`#3014`): `T M6` + `G43` + `M5` only |
 | **M6 G43** (tool page / bottom bar) | `m6_tool_call_*.ngc` | `T M6` + `G43` only — OK dialog, no move, no probe; uses existing table length |
 | **TOUCH OFF CURRENT TOOL** | `tool_touch_off.ngc` | Re-measure tool already in spindle (manual mode) |
 
@@ -190,7 +191,7 @@ In Fusion, use **4-axis simultaneous** / multi-axis strategies with this post se
 
 ### Operator notes
 
-- After CAM `M600`, post-probe `M00` may pause — press **Cycle Start**; feed override is unlocked before the pause
+- At G30, click **OK** on the Manual Tool Change dialog to confirm the collet change; the program continues automatically — no extra Cycle Start or feed-unhold step
 
 ## ATC compatibility
 
