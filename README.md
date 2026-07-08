@@ -183,15 +183,53 @@ To revert to immediate at-speed (no 5 s settle), edit `custom.hal`: remove the `
 Either fault sets `spindle-vfd-critical-fault`, which triggers
 `halui.estop.activate`.
 
-## Laser tool setter (skeleton, in progress)
+## Laser tool setter (in progress)
 
-A dedicated Probe Basic tab for an upcoming laser tool setter (tool length + diameter + runout + broken-tool detect). Currently UI-only — buttons fire NGC subroutines that print a DEBUG line and exit. No HAL pins, no actual probing.
+Dedicated Probe Basic tab for an upcoming laser tool setter (tool length + diameter + runout + broken-tool detect). Branch: `cursor/laser-setter-1afc`.
 
-- Tab loaded via `USER_TABS_PATH = probe_basic/user_tabs/` (added in `ethercat_mill.ini` `[DISPLAY]`).
-- Tab source: `probe_basic/user_tabs/laser_setter/` (`.ui`, `.py`, `.qss`).
-- Skeleton macros: `probe_basic/subroutines/laser_*.ngc`.
+**Current state:** UI and setup-parameter plumbing are in place; measure buttons still call skeleton NGC macros (DEBUG + exit). No HAL pins or real probing yet.
 
-Roadmap is staged: hardware pick + HAL wiring + length-only macro + calibration + diameter measure + PB button polish + broken-tool M-code + per-flute profiling. Each phase ships on its own branch and PR.
+### Loading the tab
+
+- `USER_TABS_PATH = probe_basic/user_tabs/` in `ethercat_mill.ini` `[DISPLAY]`
+- Tab source: `probe_basic/user_tabs/laser_setter/` (`.ui`, `.py`, `.qss`, `kexin_tool_setter.png`)
+- Skeleton macros: `probe_basic/subroutines/laser_*.ngc`
+
+### Setup fields (Measure column)
+
+Before any measure action, the tab syncs three values into LinuxCNC via `o<laser_set_start_xy> call [X] [Y] [RPM]`:
+
+| UI field | NGC parameter | Notes |
+|----------|---------------|-------|
+| START X | `#5181` | Editable; **CAPTURE CURRENT X/Y** fills from machine position |
+| START Y | `#5182` | Same as START X |
+| PROBE RPM | `#5183` | Must be &gt; 0; default 1000 |
+
+**CAPTURE CURRENT X/Y** writes the current machine X/Y into the fields, then runs the same sync MDI. Length / diameter / runout / broken-check / calibrate buttons call `_sync_setup_params()` first; invalid X/Y/RPM blocks the MDI with a status error.
+
+### Measure buttons
+
+| Button | MDI macro | Z-touch gate |
+|--------|-----------|--------------|
+| MEASURE LENGTH | `o<laser_length> call` | Required first (sets `_z_touched`) |
+| MEASURE DIAMETER | `o<laser_diameter> call` | After length |
+| MEASURE RUNOUT | `o<laser_runout> call` | After length |
+| BROKEN TOOL CHECK | `o<laser_broken_check> call` | After length |
+| CALIBRATE | `o<laser_calibrate> call` | After length |
+| AIR BLAST | `o<laser_air_blast_toggle> call` | No gate |
+
+Removed from earlier skeleton: **MEASURE FULL TOOL**, **UPDATE TOOL TABLE**, footer **ABORT** (use LinuxCNC stop/estop). Header **?** opens a help placeholder dialog.
+
+### UI / theme
+
+- Probe Basic dark palette (`#2e3436` / `#363b3d`), BebasKai font (loaded from `/usr/share/fonts/truetype/BebasKai.ttf`)
+- Three-column layout: Measure | Results + tool-setter diagram | Calibration
+- `kexin_tool_setter.png` scales with tab resize (`IMAGE_DISPLAY_SCALE = 0.624`)
+- Units combo converts START X/Y and all linear readouts between mm and inch
+
+### Roadmap (staged PRs)
+
+Hardware pick → HAL wiring → length-only macro → calibration → diameter measure → broken-tool M-code → per-flute profiling. Each phase on its own branch.
 
 ## What was left out of git, but is helpful to keep in the config
 

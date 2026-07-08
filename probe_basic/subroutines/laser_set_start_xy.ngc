@@ -6,7 +6,8 @@
 o<laser_set_start_xy> sub
     #5181 = #1
     #5182 = #2
-    (DEBUG, LASER: start XY saved to #5181/#5182, Z unchanged)
+    #5183 = #3
+    (DEBUG, LASER: start XY saved to #5181/#5182, probe RPM #5183)
 o<laser_set_start_xy> endsub
 
 M2

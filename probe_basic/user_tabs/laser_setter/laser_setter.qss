@@ -1,95 +1,98 @@
 /* ============================================================
- * Laser Tool Setter — stylesheet
- * Matches Probe Basic dark theme: gray panels with glossy controls.
- * Scope: applied via self.setStyleSheet() in laser_setter.py,
- * cascades through the LASER_SETTER root QWidget only.
+ * Laser Tool Setter — Probe Basic dark theme
+ * Font: BebasKai (Qt family name — not "Bebas Kai")
+ * Base: #2e3436  |  Panels: #363b3d
  * ============================================================ */
 
 QWidget#LASER_SETTER {
-    background-color: rgb(90, 90, 90);
+    background-color: #2e3436;
     color: rgb(238, 238, 236);
-    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
-    font-size: 12px;
+    font: 12pt "BebasKai";
 }
 
-/* ---------- Header / footer panels ---------- */
+/* ---------- Header / footer ---------- */
 
 QFrame#headerBar,
 QFrame#footerBar {
-    background-color: rgb(82, 82, 83);
-    border: 1px solid rgb(176, 179, 172);
-    border-radius: 4px;
+    background-color: #363b3d;
+    border: 1px solid #8a8484;
+    border-radius: 6px;
 }
 
 QFrame#headerDivider1,
 QFrame#headerDivider3,
-QFrame#headerDivider4,
-QFrame#resultsDivider,
-QFrame#calDivider {
-    color: rgb(130, 130, 130);
-    background-color: rgb(130, 130, 130);
+QFrame#headerDivider4 {
+    color: #6e7375;
+    background-color: #6e7375;
     max-width: 1px;
 }
 
 QLabel#lblTitle {
     color: white;
-    font-family: "Bebas Mono", "Bebas Kai", "Roboto", sans-serif;
-    font-size: 22px;
-    font-weight: bold;
-    letter-spacing: 2px;
+    font: 24pt "BebasKai";
+    letter-spacing: 1px;
 }
 
 QLabel#lblLedLaser,
 QLabel#lblLedAir,
 QLabel#lblActiveTool,
-QLabel#lblStatusBar,
 QLabel#lblUnitsCap {
     color: rgb(238, 238, 236);
-    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
-    font-size: 13px;
+    font: 13pt "BebasKai";
     letter-spacing: 1px;
 }
 
-/* ---------- Status LEDs (placeholder gray; later driven by HAL) ---------- */
-
 QLabel#ledLaserHealthy,
 QLabel#ledAirBlast {
-    background-color: #555555;
+    background-color: #4a4f51;
     border: 1px solid #2a2a2a;
     border-radius: 9px;
 }
 
-/* ---------- Group boxes (column containers) ---------- */
+/* ---------- Panels ---------- */
 
 QGroupBox {
-    background-color: rgb(82, 82, 83);
-    border: 1px solid rgb(176, 179, 172);
-    border-radius: 4px;
+    background-color: #363b3d;
+    border: 1px solid #8a8484;
+    border-radius: 6px;
     margin-top: 0px;
-    padding-top: 22px;
+    padding-top: 24px;
+    font: 16pt "BebasKai";
+}
+
+QGroupBox#grpMeasure,
+QGroupBox#grpResults,
+QGroupBox#grpCalibration {
+    background-color: #363b3d;
 }
 
 QGroupBox::title {
     subcontrol-origin: padding;
     subcontrol-position: top center;
     left: 0px;
-    top: 2px;
-    padding: 0 6px;
+    top: 4px;
+    padding: 0 8px;
     color: white;
-    font-family: "Bebas Mono", "Bebas Kai", "Roboto", sans-serif;
-    font-size: 14px;
-    font-weight: bold;
-    letter-spacing: 2px;
+    font: 16pt "BebasKai";
+    letter-spacing: 1px;
+}
+
+/* ---------- Section sub-headers inside panels ---------- */
+
+QLabel#lblBeamOffsetsCap {
+    color: #b8bcbe;
+    font: 12pt "BebasKai";
+    letter-spacing: 1px;
+    padding-top: 6px;
+    padding-bottom: 2px;
 }
 
 /* ---------- Buttons ---------- */
 
 QPushButton {
     color: white;
-    border-color: black;
-    border-style: solid;
-    border-width: 2px;
-    border-radius: 5px;
+    border: 2px solid black;
+    border-radius: 6px;
     padding: 6px 12px;
     background: qlineargradient(
         spread:pad, x1:0, y1:1, x2:0, y2:0,
@@ -101,9 +104,21 @@ QPushButton {
         stop:0.86 rgba(82, 82, 83, 255),
         stop:1 rgba(213, 218, 216, 255)
     );
-    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
-    font-size: 15pt;
+    font: 15pt "BebasKai";
     letter-spacing: 1px;
+}
+
+QPushButton#btnGetStartPos {
+    font: 13pt "BebasKai";
+}
+
+QPushButton#btnHelp {
+    font: 18pt "BebasKai";
+    padding: 0;
+    min-width: 36px;
+    max-width: 36px;
+    min-height: 36px;
+    max-height: 36px;
 }
 
 QPushButton:hover {
@@ -128,55 +143,35 @@ QPushButton:disabled {
     color: rgb(170, 170, 170);
 }
 
-QPushButton#btnAbortSafe {
-    color: white;
-    border: 2px solid #4a0000;
-    border-radius: 5px;
-    background: qlineargradient(
-        x1:0, y1:1, x2:0, y2:0,
-        stop:0 #5a1111, stop:0.5 #a61f1f, stop:1 #d84a4a
-    );
-}
-
-QPushButton#btnAbortSafe:hover {
-    background: qlineargradient(
-        x1:0, y1:1, x2:0, y2:0,
-        stop:0 #6a1a1a, stop:0.5 #b82b2b, stop:1 #ee6a6a
-    );
-}
-
-QPushButton#btnAbortSafe:pressed {
-    background: qlineargradient(
-        x1:0, y1:0, x2:0, y2:1,
-        stop:0 #7a1414, stop:1 #cf2a2a
-    );
-}
-
-/* ---------- Line edits (calibration entry) ---------- */
+/* ---------- Inputs ---------- */
 
 QLineEdit {
     background-color: rgb(235, 235, 235);
     color: black;
-    border: 1px solid rgb(180, 180, 180);
+    border: 1px solid rgb(160, 160, 160);
     border-radius: 5px;
     padding: 4px 8px;
-    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
-    font-size: 18px;
+    font: 15pt "BebasKai";
+    min-height: 30px;
 }
 
 QLineEdit:focus {
-    border-color: rgb(85, 85, 238);
+    border: 2px solid rgb(85, 85, 238);
     background-color: rgb(245, 245, 255);
 }
 
-/* ---------- Result / cal value labels (DRO-style) ---------- */
+/* ---------- Value readouts (DRO-style) ---------- */
+
+QLabel#lblToolSetterImage {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+}
 
 QLabel#lblResLength,
 QLabel#lblResDiam,
 QLabel#lblResRunout,
-QLabel#lblResRpm,
-QLabel#lblResTool,
-QLabel#lblResTime,
 QLabel#lblBeamX,
 QLabel#lblBeamY,
 QLabel#lblBeamZ,
@@ -184,47 +179,73 @@ QLabel#lblZOffset,
 QLabel#lblBeamDia {
     color: black;
     background-color: rgb(235, 235, 235);
-    border: 1px solid rgb(180, 180, 180);
+    border: 1px solid rgb(160, 160, 160);
     border-radius: 5px;
     padding: 4px 10px;
-    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
-    font-size: 20px;
-    min-width: 90px;
+    font: 17pt "BebasKai";
+    min-width: 96px;
+    min-height: 30px;
 }
 
-QLabel#lblResLengthCap,
-QLabel#lblResDiamCap,
-QLabel#lblResRunoutCap,
-QLabel#lblResRpmCap,
-QLabel#lblResToolCap,
-QLabel#lblResTimeCap,
-QLabel#lblBeamXCap,
-QLabel#lblBeamYCap,
-QLabel#lblBeamZCap,
-QLabel#lblZOffsetCap,
-QLabel#lblBeamDiaCap,
-QLabel#lblMasterPinCap,
-QLabel#lblCalRpmCap {
+/* ---------- Field labels ---------- */
+
+QGroupBox#grpResults QLabel#lblResLengthCap,
+QGroupBox#grpResults QLabel#lblResDiamCap,
+QGroupBox#grpResults QLabel#lblResRunoutCap {
     color: rgb(238, 238, 236);
-    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
-    font-size: 15px;
+    font: 15pt "BebasKai";
     letter-spacing: 1px;
+    min-width: 88px;
 }
 
-QLabel#lblResLengthUnit,
-QLabel#lblResDiamUnit,
-QLabel#lblResRunoutUnit,
-QLabel#lblResRpmUnit,
-QLabel#lblBeamXUnit,
-QLabel#lblBeamYUnit,
-QLabel#lblBeamZUnit,
-QLabel#lblZOffsetUnit,
-QLabel#lblBeamDiaUnit,
-QLabel#lblMasterPinUnit,
-QLabel#lblCalRpmUnit {
-    color: white;
-    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
-    font-size: 15px;
+QGroupBox#grpResults QLabel#lblResLengthUnit,
+QGroupBox#grpResults QLabel#lblResDiamUnit,
+QGroupBox#grpResults QLabel#lblResRunoutUnit {
+    color: #d6dadc;
+    font: 15pt "BebasKai";
+    min-width: 28px;
+}
+
+QGroupBox#grpMeasure QLabel#lblStartXCap,
+QGroupBox#grpMeasure QLabel#lblStartYCap,
+QGroupBox#grpMeasure QLabel#lblProbeRpmCap,
+QGroupBox#grpCalibration QLabel#lblMasterPinCap,
+QGroupBox#grpCalibration QLabel#lblBeamXCap,
+QGroupBox#grpCalibration QLabel#lblBeamYCap,
+QGroupBox#grpCalibration QLabel#lblBeamZCap,
+QGroupBox#grpCalibration QLabel#lblZOffsetCap,
+QGroupBox#grpCalibration QLabel#lblBeamDiaCap {
+    color: rgb(238, 238, 236);
+    font: 14pt "BebasKai";
+    letter-spacing: 1px;
+    min-width: 88px;
+}
+
+QGroupBox#grpMeasure QLabel#lblStartXUnit,
+QGroupBox#grpMeasure QLabel#lblStartYUnit,
+QGroupBox#grpMeasure QLabel#lblProbeRpmUnit,
+QGroupBox#grpCalibration QLabel#lblMasterPinUnit,
+QGroupBox#grpCalibration QLabel#lblBeamXUnit,
+QGroupBox#grpCalibration QLabel#lblBeamYUnit,
+QGroupBox#grpCalibration QLabel#lblBeamZUnit,
+QGroupBox#grpCalibration QLabel#lblZOffsetUnit,
+QGroupBox#grpCalibration QLabel#lblBeamDiaUnit {
+    color: #d6dadc;
+    font: 14pt "BebasKai";
+    min-width: 28px;
+}
+
+QGroupBox#grpMeasure QLineEdit,
+QGroupBox#grpCalibration QLineEdit {
+    font: 15pt "BebasKai";
+    max-width: 120px;
+}
+
+QGroupBox#grpCalibration QPushButton#btnCalibrate {
+    font: 15pt "BebasKai";
+    min-height: 38px;
+    margin-top: 2px;
+    margin-bottom: 2px;
 }
 
 QComboBox#cmbUnits {
@@ -243,8 +264,7 @@ QComboBox#cmbUnits {
         stop:0.86 rgba(82, 82, 83, 255),
         stop:1 rgba(213, 218, 216, 255)
     );
-    font-family: "Bebas Kai", "Bebas Mono", sans-serif;
-    font-size: 13pt;
+    font: 13pt "BebasKai";
 }
 
 QComboBox#cmbUnits:hover {
@@ -261,7 +281,8 @@ QComboBox#cmbUnits::drop-down {
 
 QComboBox#cmbUnits QAbstractItemView {
     color: white;
-    background-color: rgb(60, 60, 60);
+    background-color: #363b3d;
     border: 1px solid black;
     selection-background-color: rgb(85, 85, 238);
+    font: 13pt "BebasKai";
 }

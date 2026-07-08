@@ -22,24 +22,27 @@ import os
 import linuxcnc
 
 from qtpy import uic
-from qtpy.QtWidgets import QWidget
+from qtpy.QtCore import Qt, QSize
+from qtpy.QtGui import QPixmap, QColor, QPalette, QFont, QFontDatabase
+from qtpy.QtWidgets import QWidget, QMessageBox
 
 from qtpyvcp.utilities import logger
 
 LOG = logger.getLogger(__name__)
 MM_PER_INCH = 25.4
+IMAGE_DISPLAY_SCALE = 0.624  # 20% larger than prior 0.52 setting
+PB_FONT = "BebasKai"
+PB_FONT_PATH = "/usr/share/fonts/truetype/BebasKai.ttf"
 
 
 # Button objectName  ->  MDI command string
 BUTTON_MDI = {
     'btnMeasureLength':   "o<laser_length> call",
     'btnMeasureDiameter': "o<laser_diameter> call",
-    'btnMeasureFull':     "o<laser_full_tool> call",
     'btnMeasureRunout':   "o<laser_runout> call",
     'btnBrokenCheck':     "o<laser_broken_check> call",
     'btnCalibrate':       "o<laser_calibrate> call",
     'btnAirBlastToggle':  "o<laser_air_blast_toggle> call",
-    'btnUpdateToolTable': "o<laser_update_tool_table> call",
 }
 
 REQUIRES_Z_FIRST = {
@@ -69,7 +72,17 @@ LINEAR_UNIT_WIDGETS = (
     'lblZOffsetUnit',
     'lblBeamDiaUnit',
     'lblMasterPinUnit',
+    'lblStartXUnit',
+    'lblStartYUnit',
 )
+
+SETUP_SYNC_BUTTONS = {
+    'btnMeasureLength',
+    'btnMeasureDiameter',
+    'btnMeasureRunout',
+    'btnBrokenCheck',
+    'btnCalibrate',
+}
 
 
 class UserTab(QWidget):
@@ -79,7 +92,21 @@ class UserTab(QWidget):
         here = os.path.dirname(os.path.abspath(__file__))
         uic.loadUi(os.path.join(here, "laser_setter.ui"), self)
 
+        self._ensure_font()
+
+        panel = QColor(46, 52, 54)
+        self.setAutoFillBackground(True)
+        palette = self.palette()
+        palette.setColor(self.backgroundRole(), panel)
+        self.setPalette(palette)
+        for group_name in ('grpMeasure', 'grpResults', 'grpCalibration', 'headerBar', 'footerBar'):
+            widget = getattr(self, group_name, None)
+            if widget is not None:
+                widget.setAttribute(Qt.WA_StyledBackground, True)
+
         self._load_stylesheet(here)
+        self._tool_setter_pixmap = None
+        self._load_tool_setter_image(here)
 
         try:
             self._cmd = linuxcnc.command()
@@ -90,10 +117,48 @@ class UserTab(QWidget):
             self._stat = None
 
         self._wire_buttons()
-        self._wire_abort()
+        self._wire_help()
         self._wire_start_position()
         self._init_units()
         self._z_touched = False
+
+    def _ensure_font(self):
+        """Probe Basic uses BebasKai; Qt family name has no space."""
+        if os.path.exists(PB_FONT_PATH):
+            QFontDatabase.addApplicationFont(PB_FONT_PATH)
+        self.setFont(QFont(PB_FONT))
+
+    def _load_tool_setter_image(self, here):
+        image_path = os.path.join(here, "kexin_tool_setter.png")
+        lbl = getattr(self, 'lblToolSetterImage', None)
+        if lbl is None:
+            return
+        if not os.path.exists(image_path):
+            LOG.warning("laser_setter: image %s missing", image_path)
+            return
+        lbl.setAutoFillBackground(False)
+        lbl.setAlignment(Qt.AlignCenter)
+        self._tool_setter_pixmap = QPixmap(image_path)
+        self._update_tool_setter_image()
+
+    def _update_tool_setter_image(self):
+        lbl = getattr(self, 'lblToolSetterImage', None)
+        if lbl is None or self._tool_setter_pixmap is None or self._tool_setter_pixmap.isNull():
+            return
+        slot = lbl.size()
+        target = QSize(
+            max(1, int(slot.width() * IMAGE_DISPLAY_SCALE)),
+            max(1, int(slot.height() * IMAGE_DISPLAY_SCALE)),
+        )
+        lbl.setPixmap(self._tool_setter_pixmap.scaled(
+            target,
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation,
+        ))
+
+    def resizeEvent(self, event):
+        super(UserTab, self).resizeEvent(event)
+        self._update_tool_setter_image()
 
     def _load_stylesheet(self, here):
         qss_path = os.path.join(here, "laser_setter.qss")
@@ -114,11 +179,18 @@ class UserTab(QWidget):
                 continue
             btn.clicked.connect(self._make_handler(mdi_cmd))
 
-    def _wire_abort(self):
-        btn = getattr(self, 'btnAbortSafe', None)
+    def _wire_help(self):
+        btn = getattr(self, 'btnHelp', None)
         if btn is None:
             return
-        btn.clicked.connect(self._abort)
+        btn.clicked.connect(self._show_help_placeholder)
+
+    def _show_help_placeholder(self, checked=False):
+        QMessageBox.information(
+            self,
+            "Laser Tool Setter Help",
+            "Help documentation for the laser tool setter is coming soon.",
+        )
 
     def _wire_start_position(self):
         btn = getattr(self, 'btnGetStartPos', None)
@@ -158,6 +230,8 @@ class UserTab(QWidget):
             return
         factor = 1.0 / MM_PER_INCH if old_units == 'mm' else MM_PER_INCH
         self._convert_numeric_widget('leMasterPin', factor)
+        self._convert_numeric_widget('leStartX', factor)
+        self._convert_numeric_widget('leStartY', factor)
         for widget_name in LINEAR_VALUE_WIDGETS:
             self._convert_numeric_widget(widget_name, factor)
 
@@ -171,6 +245,52 @@ class UserTab(QWidget):
             return
         widget.setText("{:.4f}".format(value * factor))
 
+    def _parse_setup_fields(self):
+        try:
+            x_pos = float(self.leStartX.text().strip())
+            y_pos = float(self.leStartY.text().strip())
+            rpm = float(self.leProbeRpm.text().strip())
+        except (AttributeError, ValueError):
+            return None
+        if rpm <= 0:
+            return None
+        return x_pos, y_pos, rpm
+
+    def _sync_setup_params(self):
+        setup = self._parse_setup_fields()
+        if setup is None:
+            self._set_status("ERROR: invalid start X/Y or probe RPM")
+            return False
+        if self._cmd is None or self._stat is None:
+            self._set_status("ERROR: linuxcnc unavailable")
+            return False
+
+        x_pos, y_pos, rpm = setup
+        try:
+            self._stat.poll()
+            if self._stat.estop:
+                self._set_status("BLOCKED: E-STOP")
+                return False
+            if not self._stat.enabled:
+                self._set_status("BLOCKED: machine off")
+                return False
+            self._cmd.mode(linuxcnc.MODE_MDI)
+            self._cmd.wait_complete()
+            self._cmd.mdi(
+                "o<laser_set_start_xy> call [{:.6f}] [{:.6f}] [{:.0f}]".format(
+                    x_pos, y_pos, rpm
+                )
+            )
+            LOG.info(
+                "laser_setter: setup synced X%.6f Y%.6f RPM%.0f",
+                x_pos, y_pos, rpm,
+            )
+            return True
+        except Exception as exc:
+            LOG.error("laser_setter: failed to sync setup params: %s", exc)
+            self._set_status("ERROR: " + str(exc))
+            return False
+
     def _make_handler(self, mdi_cmd):
         def handler(checked=False):
             btn = self.sender()
@@ -178,6 +298,8 @@ class UserTab(QWidget):
             if btn_name in REQUIRES_Z_FIRST and not self._z_touched:
                 self._set_status("BLOCKED: TOUCH Z FIRST")
                 LOG.warning("laser_setter: blocked %s until Z touch", btn_name)
+                return
+            if btn_name in SETUP_SYNC_BUTTONS and not self._sync_setup_params():
                 return
             self._issue_mdi(mdi_cmd, btn_name)
         return handler
@@ -200,7 +322,7 @@ class UserTab(QWidget):
             self._cmd.mode(linuxcnc.MODE_MDI)
             self._cmd.wait_complete()
             self._cmd.mdi(mdi_cmd)
-            if btn_name in ('btnMeasureLength', 'btnMeasureFull'):
+            if btn_name == 'btnMeasureLength':
                 self._z_touched = True
             self._set_status("SENT: " + mdi_cmd)
             LOG.info("laser_setter: %s", mdi_cmd)
@@ -224,28 +346,15 @@ class UserTab(QWidget):
             x_pos = float(self._stat.position[0])
             y_pos = float(self._stat.position[1])
 
-            self._cmd.mode(linuxcnc.MODE_MDI)
-            self._cmd.wait_complete()
-            self._cmd.mdi(
-                "o<laser_set_start_xy> call [{:.6f}] [{:.6f}]".format(x_pos, y_pos)
-            )
+            self.leStartX.setText("{:.4f}".format(x_pos))
+            self.leStartY.setText("{:.4f}".format(y_pos))
+            if not self._sync_setup_params():
+                return
             self._set_status("START XY SET: X{:.4f} Y{:.4f}".format(x_pos, y_pos))
-            LOG.info("laser_setter: start XY set to X%.6f Y%.6f", x_pos, y_pos)
+            LOG.info("laser_setter: start XY captured X%.6f Y%.6f", x_pos, y_pos)
         except Exception as exc:
             LOG.error("laser_setter: failed to capture start XY: %s", exc)
             self._set_status("ERROR: " + str(exc))
 
-    def _abort(self, checked=False):
-        if self._cmd is None:
-            return
-        try:
-            self._cmd.abort()
-            self._set_status("ABORTED")
-            LOG.info("laser_setter: abort")
-        except Exception as exc:
-            LOG.error("laser_setter: abort failed: %s", exc)
-
     def _set_status(self, text):
-        lbl = getattr(self, 'lblStatusBar', None)
-        if lbl is not None:
-            lbl.setText(text)
+        LOG.info("laser_setter: %s", text)
