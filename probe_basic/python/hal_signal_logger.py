@@ -445,6 +445,10 @@ class HalSignalLogger:
             "y_ferr": 1,
             "z_ferr": 2,
             "a_ferr": 3,
+            "x_ferr_drive": 0,
+            "y_ferr_drive": 1,
+            "z_ferr_drive": 2,
+            "a_ferr_drive": 3,
         }
         for channel_id, joint in mapping.items():
             if not any(item.id == channel_id for item in self.config.channels):

@@ -76,8 +76,10 @@ net spindle-vfd-critical-fault or2.1.out => halui.estop.activate
 # extend with additional count= loads (cannot mix count= and names= on same module).
 loadrt conv_s32_float count=4
 loadrt conv_s32_float count=4
+loadrt conv_s32_float count=4
 loadrt mult2 count=4
-loadrt scale names=tune-torque.0,tune-torque.1,tune-torque.2,tune-torque.3,tune-velocity.0,tune-velocity.1,tune-velocity.2,tune-velocity.3
+loadrt div2 count=4
+loadrt scale names=tune-torque.0,tune-torque.1,tune-torque.2,tune-torque.3,tune-velocity.0,tune-velocity.1,tune-velocity.2,tune-velocity.3,tune-drive-ferr.0,tune-drive-ferr.1,tune-drive-ferr.2,tune-drive-ferr.3
 
 addf conv-s32-float.4 servo-thread
 addf conv-s32-float.5 servo-thread
@@ -87,6 +89,10 @@ addf conv-s32-float.8 servo-thread
 addf conv-s32-float.9 servo-thread
 addf conv-s32-float.10 servo-thread
 addf conv-s32-float.11 servo-thread
+addf conv-s32-float.12 servo-thread
+addf conv-s32-float.13 servo-thread
+addf conv-s32-float.14 servo-thread
+addf conv-s32-float.15 servo-thread
 addf mult2.12 servo-thread
 addf mult2.13 servo-thread
 addf mult2.14 servo-thread
@@ -99,6 +105,14 @@ addf tune-velocity.0 servo-thread
 addf tune-velocity.1 servo-thread
 addf tune-velocity.2 servo-thread
 addf tune-velocity.3 servo-thread
+addf div2.4 servo-thread
+addf div2.5 servo-thread
+addf div2.6 servo-thread
+addf div2.7 servo-thread
+addf tune-drive-ferr.0 servo-thread
+addf tune-drive-ferr.1 servo-thread
+addf tune-drive-ferr.2 servo-thread
+addf tune-drive-ferr.3 servo-thread
 
 # A6 6077 is typically 0.1% rated torque per count -> percent = raw * 0.1
 setp mult2.12.in1 0.1
@@ -123,6 +137,20 @@ setp tune-velocity.0.offset 0.0
 setp tune-velocity.1.offset 0.0
 setp tune-velocity.2.offset 0.0
 setp tune-velocity.3.offset 0.0
+
+# 60F4 following error actual (encoder counts) -> mm or deg via joint SCALE
+setp div2.4.in1 [JOINT_0]SCALE
+setp div2.5.in1 [JOINT_1]SCALE
+setp div2.6.in1 [JOINT_2]SCALE
+setp div2.7.in1 [JOINT_3]SCALE
+setp tune-drive-ferr.0.gain 1.0
+setp tune-drive-ferr.1.gain 1.0
+setp tune-drive-ferr.2.gain 1.0
+setp tune-drive-ferr.3.gain 1.0
+setp tune-drive-ferr.0.offset 0.0
+setp tune-drive-ferr.1.offset 0.0
+setp tune-drive-ferr.2.offset 0.0
+setp tune-drive-ferr.3.offset 0.0
 
 net x-torque-s32 lcec.0.0.torque-fb => conv-s32-float.4.in
 net x-torque-float conv-s32-float.4.out => mult2.12.in0
@@ -151,4 +179,20 @@ net z-vel-float conv-s32-float.10.out => tune-velocity.2.in
 
 net a-vel-s32 lcec.0.3.vel-fb => conv-s32-float.11.in
 net a-vel-float conv-s32-float.11.out => tune-velocity.3.in
+
+net x-ferr-s32 lcec.0.0.ferr-fb => conv-s32-float.12.in
+net x-ferr-float conv-s32-float.12.out => div2.4.in0
+net x-drive-ferr div2.4.out => tune-drive-ferr.0.in
+
+net y-ferr-s32 lcec.0.1.ferr-fb => conv-s32-float.13.in
+net y-ferr-float conv-s32-float.13.out => div2.5.in0
+net y-drive-ferr div2.5.out => tune-drive-ferr.1.in
+
+net z-ferr-s32 lcec.0.2.ferr-fb => conv-s32-float.14.in
+net z-ferr-float conv-s32-float.14.out => div2.6.in0
+net z-drive-ferr div2.6.out => tune-drive-ferr.2.in
+
+net a-ferr-s32 lcec.0.3.ferr-fb => conv-s32-float.15.in
+net a-ferr-float conv-s32-float.15.out => div2.7.in0
+net a-drive-ferr div2.7.out => tune-drive-ferr.3.in
 

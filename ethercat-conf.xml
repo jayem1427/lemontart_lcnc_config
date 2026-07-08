@@ -32,6 +32,7 @@
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb" halType="s32"/>
           <pdoEntry idx="606c" subIdx="00" bitLen="32" halPin="vel-fb" halType="s32"/>
           <pdoEntry idx="6077" subIdx="00" bitLen="16" halPin="torque-fb" halType="s32"/>
+          <pdoEntry idx="60f4" subIdx="00" bitLen="32" halPin="ferr-fb" halType="s32"/>
           <pdoEntry idx="2040" subIdx="05" bitLen="16" halType="complex">
             <complexEntry bitLen="1" halPin="di-1" halType="bit"/>
             <complexEntry bitLen="1" halPin="di-2" halType="bit"/>
@@ -75,6 +76,7 @@
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb" halType="s32"/>
           <pdoEntry idx="606c" subIdx="00" bitLen="32" halPin="vel-fb" halType="s32"/>
           <pdoEntry idx="6077" subIdx="00" bitLen="16" halPin="torque-fb" halType="s32"/>
+          <pdoEntry idx="60f4" subIdx="00" bitLen="32" halPin="ferr-fb" halType="s32"/>
           <pdoEntry idx="2040" subIdx="05" bitLen="16" halType="complex">
             <complexEntry bitLen="1" halPin="di-1" halType="bit"/>
             <complexEntry bitLen="1" halPin="di-2" halType="bit"/>
@@ -118,6 +120,7 @@
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb" halType="s32"/>
           <pdoEntry idx="606c" subIdx="00" bitLen="32" halPin="vel-fb" halType="s32"/>
           <pdoEntry idx="6077" subIdx="00" bitLen="16" halPin="torque-fb" halType="s32"/>
+          <pdoEntry idx="60f4" subIdx="00" bitLen="32" halPin="ferr-fb" halType="s32"/>
           <pdoEntry idx="2040" subIdx="05" bitLen="16" halType="complex">
             <complexEntry bitLen="1" halPin="di-1" halType="bit"/>
             <complexEntry bitLen="1" halPin="di-2" halType="bit"/>
@@ -156,6 +159,7 @@
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb" halType="s32"/>
           <pdoEntry idx="606c" subIdx="00" bitLen="32" halPin="vel-fb" halType="s32"/>
           <pdoEntry idx="6077" subIdx="00" bitLen="16" halPin="torque-fb" halType="s32"/>
+          <pdoEntry idx="60f4" subIdx="00" bitLen="32" halPin="ferr-fb" halType="s32"/>
           <pdoEntry idx="2040" subIdx="05" bitLen="16" halType="complex">
             <complexEntry bitLen="1" halPin="di-1" halType="bit"/>
             <complexEntry bitLen="1" halPin="di-2" halType="bit"/>

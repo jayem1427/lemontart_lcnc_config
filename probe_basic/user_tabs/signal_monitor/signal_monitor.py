@@ -37,14 +37,15 @@ from hal_signal_logger import HalSignalLogger, default_config_path, load_config 
 from signal_plot_widget import LiveSignalPlotWidget, SCALE_MODES  # noqa: E402
 
 AXIS_SIGNALS = {
-    "X": {"FERR": "x_ferr", "TORQUE": "x_torque", "VEL": "x_vel"},
-    "Y": {"FERR": "y_ferr", "TORQUE": "y_torque", "VEL": "y_vel"},
-    "Z": {"FERR": "z_ferr", "TORQUE": "z_torque", "VEL": "z_vel"},
-    "A": {"FERR": "a_ferr", "TORQUE": "a_torque", "VEL": "a_vel"},
+    "X": {"FERR": "x_ferr", "DRIVE": "x_ferr_drive", "TORQUE": "x_torque", "VEL": "x_vel"},
+    "Y": {"FERR": "y_ferr", "DRIVE": "y_ferr_drive", "TORQUE": "y_torque", "VEL": "y_vel"},
+    "Z": {"FERR": "z_ferr", "DRIVE": "z_ferr_drive", "TORQUE": "z_torque", "VEL": "z_vel"},
+    "A": {"FERR": "a_ferr", "DRIVE": "a_ferr_drive", "TORQUE": "a_torque", "VEL": "a_vel"},
 }
 
 SIGNAL_Y_DEFAULTS = {
     "FERR": "Fixed ±0.25",
+    "DRIVE": "Fixed ±0.25",
     "TORQUE": "Fixed ±100%",
     "VEL": "Symmetric",
 }
@@ -177,7 +178,7 @@ class UserTab(QWidget):
         self.signal_group = QButtonGroup(panel)
         self.signal_group.setExclusive(True)
         self.signal_buttons = {}
-        for signal in ("FERR", "TORQUE", "VEL"):
+        for signal in ("FERR", "DRIVE", "TORQUE", "VEL"):
             btn = QPushButton(signal, panel)
             btn.setObjectName("btnSignal")
             btn.setCheckable(True)
@@ -282,6 +283,7 @@ class UserTab(QWidget):
 
         titles = {
             "FERR": "FERR",
+            "DRIVE": "DRIVE FERR",
             "TORQUE": "TORQUE",
             "VEL": "VELOCITY",
         }
@@ -338,7 +340,7 @@ class UserTab(QWidget):
 
     def _suggested_scale(self) -> str:
         axes = self._selected_axes()
-        if self._current_signal == "FERR":
+        if self._current_signal == "FERR" or self._current_signal == "DRIVE":
             if axes == {"A"}:
                 return "Fixed ±60"
             if "A" in axes:

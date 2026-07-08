@@ -74,7 +74,7 @@ Presets live under `config/tuning/presets/<axis>/*.json`. Shipped examples:
 
 1. Select axis → **READ FROM DRIVE** (optional baseline).
 2. Adjust **Speed loop gain (C01.01)** first if you hear whine or see ringing.
-3. **APPLY TO DRIVE** → switch to **Signal Logging** → run `nc_files/x_tuning.ngc`.
+3. **APPLY TO DRIVE** → switch to **Signal Logging** → select **DRIVE** (CiA 60F4) → run `nc_files/x_tuning.ngc`.
 4. When happy, **SAVE** preset (e.g. `x_after_softening`) for that axis only.
 5. Repeat per axis; Z and A can differ from X/Y.
 

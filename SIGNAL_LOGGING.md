@@ -27,7 +27,7 @@ Open the **Logging** tab (`probe_basic/user_tabs/signal_monitor/`). The tab uses
 | **LOG NEXT PROGRAM** | Arms logging; starts when the next program runs in **AUTO**, stops when the cycle ends |
 | **START LIVE** / **STOP** | Continuous logging while jogging or testing (no G-code required) |
 | **AXIS** (X Y Z A) | Checkable toggles — multi-select which axes appear on the plot |
-| **SIGNAL** (FERR / TORQUE / VEL) | Exclusive — one signal family at a time on the plot |
+| **SIGNAL** (FERR / DRIVE / TORQUE / VEL) | Exclusive — one signal family at a time on the plot |
 | **Y SCALE** | Auto, Symmetric, Fixed ±0.25 (mm ferr), Fixed ±60 (deg ferr), Fixed ±100% (torque) |
 | **RATE** | Sample rate: 25 / 50 / 100 / 200 / 500 Hz |
 
@@ -42,7 +42,7 @@ The legend panel on the right of the LOGGING box always shows all four axes for 
 - **Selected** axes: white text + white swatch border
 - **Unselected** axes: dimmed gray text
 
-The legend title updates with the signal family: `FERR`, `TORQUE`, or `VELOCITY`.
+The legend title updates with the signal family: `FERR`, `DRIVE FERR`, `TORQUE`, or `VELOCITY`.
 
 Y scale auto-suggests when you change axis or signal (e.g. FERR with only A → Fixed ±60; linear axes → Fixed ±0.25).
 
@@ -70,7 +70,7 @@ Logs are written to `logs/signals/` as one `.csv` + `.summary.txt` per session.
 
 ## HAL telemetry chain
 
-Torque and velocity come from CiA 402 PDOs on each A6 drive, converted in `custom.hal`:
+Torque, velocity, and **drive following error** come from CiA 402 PDOs on each A6 drive, converted in `custom.hal`:
 
 ```
 lcec.0.N.torque-fb (6077, 0.1% per count)
@@ -78,9 +78,14 @@ lcec.0.N.torque-fb (6077, 0.1% per count)
 
 lcec.0.N.vel-fb (606C, drive units)
   → conv-s32-float → tune-velocity.N.out  (mm/s or deg/s after scale)
+
+lcec.0.N.ferr-fb (60F4, encoder counts)
+  → conv-s32-float → div2 (÷ joint SCALE) → tune-drive-ferr.N.out  (mm or deg)
 ```
 
-Following error is read from LinuxCNC after pipeline compensation in `servo_tuning.hal`:
+Drive **60F4** is the primary metric for loop tuning: computed inside the A6 at its servo rate (internal demand vs encoder), not inflated by host cmd−fb lag.
+
+LinuxCNC following error (after pipeline compensation in `servo_tuning.hal`):
 
 ```
 joint.N.vel-cmd × ferr-lag.N  →  ghost lag (default 2 ms per axis)
@@ -100,14 +105,22 @@ See **[A6_TUNING.md](A6_TUNING.md)** for SDO gain defaults and tuning workflow.
 loadrt scale names=tune-torque.0,…,tune-velocity.3
 ```
 
-Instance numbers for the telemetry converters start at `conv-s32-float.4` / `mult2.12` (after existing HAL loads).
+Instance numbers for the telemetry converters start at `conv-s32-float.4` / `mult2.12` (after existing HAL loads). Drive following error uses `conv-s32-float.12`–`.15` and `div2.4`–`.7`.
 
 Verify after LinuxCNC start:
 
 ```bash
 halcmd getp tune-torque.0.out
 halcmd getp tune-velocity.0.out
+halcmd getp tune-drive-ferr.0.out
 halcmd getp joint.0.f-error
+```
+
+If LinuxCNC fails to reach OP with the new PDO mapping, verify the A6 exposes **60F4** on your firmware:
+
+```bash
+sudo ethercat upload -p 0 0x60F4 0
+sudo ethercat pdos -p 0
 ```
 
 ---
@@ -150,6 +163,7 @@ Default channels (100 Hz):
 | Group | Pins | Units |
 |-------|------|-------|
 | Following error (comp.) | `joint.0..3.f-error` | mm / deg |
+| Following error (drive 60F4) | `tune-drive-ferr.0..3.out` | mm / deg |
 | Following error (raw) | `x-ferr-raw` … `a-ferr-raw` | mm / deg |
 | Ghost lag term | `x-ghost-lag` … `a-ghost-lag` | mm / deg |
 | Torque | `tune-torque.0..3.out` | % rated |
@@ -167,10 +181,10 @@ Context columns in each CSV row: `line`, `feed`, `enabled`.
 | `probe_basic/python/signal_plot_widget.py` | Live plot widget |
 | `probe_basic/user_tabs/signal_monitor/` | Logging tab (`.py`, `.ui`, `.qss`) |
 | `config/logging/signals.json` | Channel definitions |
-| `custom.hal` | Torque/velocity conversion → `tune-*` pins |
+| `custom.hal` | Torque/velocity/drive-ferr conversion → `tune-*` pins |
 | `servo_tuning.hal` | Feedback lag compensation → `joint.*.motor-pos-fb` |
 | `A6_TUNING.md` | A6 SDO gain defaults + tuning procedure |
-| `ethercat-conf.xml` | PDO 606C/6077 + SDO 6065/6066 + loop gains |
+| `ethercat-conf.xml` | PDO 606C/6077/60F4 + SDO 6065/6066 + loop gains |
 | `nc_files/x_tuning.ngc` | Example axis tuning program |
 | `scripts/run_signal_logger.py` | Headless CLI logger (optional) |
 
