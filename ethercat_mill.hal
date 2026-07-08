@@ -17,8 +17,8 @@ loadrt mult2 count=12
 loadrt ilowpass count=4
 loadrt limit1 count=4
 loadrt div2 count=4
-loadrt not count=8
-loadrt and2 count=5
+loadrt not count=10
+loadrt and2 count=6
 loadrt or2 count=2
 loadrt near count=3
 loadrt comp count=1
@@ -47,6 +47,7 @@ addf and2.1 servo-thread
 addf and2.2 servo-thread
 addf and2.3 servo-thread
 addf and2.4 servo-thread
+addf and2.5 servo-thread
 addf or2.0 servo-thread
 addf conv-u32-float.0 servo-thread
 addf comp.0 servo-thread
@@ -59,6 +60,8 @@ addf not.4 servo-thread
 addf not.5 servo-thread
 addf not.6 servo-thread
 addf not.7 servo-thread
+addf not.8 servo-thread
+addf not.9 servo-thread
 setp and2.0.in0 0
 setp and2.0.in1 0
 
@@ -198,15 +201,20 @@ net x-limit-inv  not.2.out => and2.1.in0
 net x-limit      and2.1.out => joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in
 net y-home-raw   lcec.0.0.di-5 => not.3.in
 net y-home       not.3.out => joint.1.home-sw-in
+# Suppress Y limit chain while homing (same pattern as X: home at negative end shares limit).
+net j1-homing    joint.1.homing => not.8.in
+net j1-lim-on    not.8.out => and2.5.in1
 net y-limit-raw  lcec.0.0.di-2 => not.4.in
-net y-limit      not.4.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in
+net y-limit-inv  not.4.out => and2.5.in0
+net y-limit      and2.5.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in
 
 # --- Z home on Slave 1 DI4 (+Z); -Z limit on Slave 2 DI2; no +Z limit ---
 net z-home-raw   lcec.0.1.di-4 => not.7.in
 net z-home       not.7.out => joint.2.home-sw-in
 # Z - limit on Slave 2 DI2 (DB15 pin 9) — disabled; pin free if needed later.
-# net z-limit-raw  lcec.0.2.di-2 => not.8.in
-# net z-limit      not.8.out => joint.2.neg-lim-sw-in
+# When re-enabling, use not.9 (not.8 is Y homing limit gate).
+# net z-limit-raw  lcec.0.2.di-2 => not.9.in
+# net z-limit      not.9.out => joint.2.neg-lim-sw-in
 
 # --- A still on breakout (no homing yet) ---
 # A axis home on slave 3 DI3:
