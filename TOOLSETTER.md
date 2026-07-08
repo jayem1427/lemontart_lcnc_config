@@ -122,7 +122,7 @@ Update README cross-references if you document a non-99 default elsewhere.
 ## Teach before first use
 
 1. Jog over setter → **SET TOOL TOUCH OFF POS** (`#5181`–`#5183`)
-2. **PROBE SPINDLE NOSE ZERO** → `#3010`
+2. **PROBE SPINDLE NOSE ZERO** → `#3010` (touch probe `T#3014` must **not** be in the spindle — HAL routes probe input to the touch probe only when that tool is loaded)
 3. Set probe feeds / retract in Tool Setter screen → **UPDATE** (`tool_setter_param_update.ngc`)
 
 ## CAM / post processor (`linuxcnc-djr.cps`)

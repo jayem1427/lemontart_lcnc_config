@@ -11,6 +11,11 @@ o<probe_spindle_nose> sub
   (uses NGCGUI style arg spec)
   (number after "=" in comment is default value)
 
+  #<probe_tool_number> = #3014
+  o<probe_guard> if [#<_current_tool> GT 0 AND [#<_current_tool> EQ #<probe_tool_number>]]
+    (ABORT, Touch probe cannot be measured on the contact toolsetter. Unload T#<probe_tool_number> first.)
+  o<probe_guard> endif
+
   #<probe_fast_fr> = #3004        (=10.0)
   #<probe_slow_fr> = #3005        (=0)
   #<probe_traverse_fr> = #3006    (=50)
