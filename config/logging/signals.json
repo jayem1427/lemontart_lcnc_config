@@ -1,6 +1,6 @@
 {
   "name": "signals",
-  "description": "All HAL signals in one CSV — following error, torque, velocity",
+  "description": "HAL telemetry — following error (compensated + raw), torque, velocity, ghost lag",
   "rate_hz": 100,
   "log_subdir": "signals",
   "context": ["line", "feed", "enabled"],
@@ -9,6 +9,14 @@
     {"id": "y_ferr", "pin": "joint.1.f-error", "label": "Y FErr", "units": "mm", "color": "#2ecc71", "group": "ferr"},
     {"id": "z_ferr", "pin": "joint.2.f-error", "label": "Z FErr", "units": "mm", "color": "#e74c3c", "group": "ferr"},
     {"id": "a_ferr", "pin": "joint.3.f-error", "label": "A FErr", "units": "deg", "color": "#9b59b6", "group": "ferr"},
+    {"id": "x_ferr_raw", "pin": "x-ferr-raw", "label": "X FErr raw", "units": "mm", "color": "#5dade2", "group": "ferr_raw"},
+    {"id": "y_ferr_raw", "pin": "y-ferr-raw", "label": "Y FErr raw", "units": "mm", "color": "#58d68d", "group": "ferr_raw"},
+    {"id": "z_ferr_raw", "pin": "z-ferr-raw", "label": "Z FErr raw", "units": "mm", "color": "#ec7063", "group": "ferr_raw"},
+    {"id": "a_ferr_raw", "pin": "a-ferr-raw", "label": "A FErr raw", "units": "deg", "color": "#bb8fce", "group": "ferr_raw"},
+    {"id": "x_ghost", "pin": "x-ghost-lag", "label": "X lag", "units": "mm", "color": "#85c1e9", "group": "ghost"},
+    {"id": "y_ghost", "pin": "y-ghost-lag", "label": "Y lag", "units": "mm", "color": "#82e0aa", "group": "ghost"},
+    {"id": "z_ghost", "pin": "z-ghost-lag", "label": "Z lag", "units": "mm", "color": "#f1948a", "group": "ghost"},
+    {"id": "a_ghost", "pin": "a-ghost-lag", "label": "A lag", "units": "deg", "color": "#d7bde2", "group": "ghost"},
     {"id": "x_torque", "pin": "tune-torque.0.out", "label": "X TQ", "units": "%", "color": "#c0392b", "group": "torque"},
     {"id": "y_torque", "pin": "tune-torque.1.out", "label": "Y TQ", "units": "%", "color": "#27ae60", "group": "torque"},
     {"id": "z_torque", "pin": "tune-torque.2.out", "label": "Z TQ", "units": "%", "color": "#2980b9", "group": "torque"},
@@ -21,11 +29,19 @@
   "plot_groups": [
     {
       "id": "ferr",
-      "title": "Following error",
+      "title": "Following error (compensated)",
       "y_mode": "fixed",
       "y_min": -0.25,
       "y_max": 0.25,
       "channels": ["x_ferr", "y_ferr", "z_ferr"]
+    },
+    {
+      "id": "ferr_raw",
+      "title": "Following error (raw, lag-inflated)",
+      "y_mode": "fixed",
+      "y_min": -0.25,
+      "y_max": 0.25,
+      "channels": ["x_ferr_raw", "y_ferr_raw", "z_ferr_raw"]
     },
     {
       "id": "a_ferr",
@@ -33,7 +49,7 @@
       "y_mode": "fixed",
       "y_min": -60,
       "y_max": 60,
-      "channels": ["a_ferr"]
+      "channels": ["a_ferr", "a_ferr_raw"]
     },
     {
       "id": "torque",

@@ -44,9 +44,9 @@ Full staged path (sim → EtherCAT → Probe Basic → CAM): **[GETTING_STARTED.
 
 ## Signal logging (servo tuning)
 
-HAL telemetry, CSV logging, and a **Logging** tab in Probe Basic for following error, torque, and velocity on X/Y/Z/A. See **[SIGNAL_LOGGING.md](SIGNAL_LOGGING.md)** for the tab UI, HAL chain, drive SDO limits, tuning G-code, and test plan.
+HAL telemetry, CSV logging, and a **Logging** tab in Probe Basic for following error, torque, and velocity on X/Y/Z/A. See **[SIGNAL_LOGGING.md](SIGNAL_LOGGING.md)** for the tab UI, HAL chain, drive SDO limits, tuning G-code, and test plan. **A6 loop tuning + ferror lag compensation:** **[A6_TUNING.md](A6_TUNING.md)**.
 
-Branch: `cursor/signal-logging-framework-0633`.
+Branch: `cursor/a6-tuning-ferror-comp-70f6` (extends signal-logging work).
 
 ## Layout
 

@@ -80,11 +80,17 @@ lcec.0.N.vel-fb (606C, drive units)
   → conv-s32-float → tune-velocity.N.out  (mm/s or deg/s after scale)
 ```
 
-Following error is read directly from LinuxCNC:
+Following error is read from LinuxCNC after pipeline compensation in `servo_tuning.hal`:
 
 ```
-joint.N.f-error   (mm for XYZ, deg for A — already in machine units)
+joint.N.vel-cmd × ferr-lag-sec  →  ghost lag (default 2 ms)
+raw_fb + ghost_lag              →  joint.N.motor-pos-fb
+joint.N.f-error                 →  cmd − compensated_fb (physical estimate)
+
+x-ferr-raw … a-ferr-raw         →  cmd − raw_fb (lag-inflated; for A/B compare)
 ```
+
+See **[A6_TUNING.md](A6_TUNING.md)** for SDO gain defaults and tuning workflow.
 
 ### `custom.hal` loadrt note
 
@@ -143,7 +149,9 @@ Default channels (100 Hz):
 
 | Group | Pins | Units |
 |-------|------|-------|
-| Following error | `joint.0..3.f-error` | mm / deg |
+| Following error (comp.) | `joint.0..3.f-error` | mm / deg |
+| Following error (raw) | `x-ferr-raw` … `a-ferr-raw` | mm / deg |
+| Ghost lag term | `x-ghost-lag` … `a-ghost-lag` | mm / deg |
 | Torque | `tune-torque.0..3.out` | % rated |
 | Velocity | `tune-velocity.0..3.out` | mm/s / deg/s |
 
@@ -160,7 +168,9 @@ Context columns in each CSV row: `line`, `feed`, `enabled`.
 | `probe_basic/user_tabs/signal_monitor/` | Logging tab (`.py`, `.ui`, `.qss`) |
 | `config/logging/signals.json` | Channel definitions |
 | `custom.hal` | Torque/velocity conversion → `tune-*` pins |
-| `ethercat-conf.xml` | PDO 606C/6077 + SDO 6065/6066 |
+| `servo_tuning.hal` | Feedback lag compensation → `joint.*.motor-pos-fb` |
+| `A6_TUNING.md` | A6 SDO gain defaults + tuning procedure |
+| `ethercat-conf.xml` | PDO 606C/6077 + SDO 6065/6066 + loop gains |
 | `nc_files/x_tuning.ngc` | Example axis tuning program |
 | `scripts/run_signal_logger.py` | Headless CLI logger (optional) |
 
@@ -208,4 +218,4 @@ ls -lt logs/signals/
 
 ## Branch
 
-Development branch: `cursor/signal-logging-framework-0633` (not merged to `main`).
+Development branch: `cursor/a6-tuning-ferror-comp-70f6` (extends `cursor/signal-logging-framework-0633`). See also **[A6_TUNING.md](A6_TUNING.md)**.
