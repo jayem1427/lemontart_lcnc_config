@@ -54,8 +54,8 @@ class UserDRO(QWidget):
         )
         self.set_z_button.clicked.connect(self._set_wco_z)
 
-        self.set_z_layout.addWidget(self.set_z_entry, 1)
         self.set_z_layout.addWidget(self.set_z_button)
+        self.set_z_layout.addWidget(self.set_z_entry, 1)
 
     def _parse_z_value(self, text):
         text = text.strip()
