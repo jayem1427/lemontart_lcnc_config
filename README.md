@@ -1,4 +1,4 @@
-# lemontart_lcnc_config
+# laser-setter
 
 LinuxCNC configuration for a **Lemontart**-class EtherCAT mill:
 
