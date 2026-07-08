@@ -224,7 +224,8 @@ Removed from earlier skeleton: **MEASURE FULL TOOL**, **UPDATE TOOL TABLE**, foo
 
 - Probe Basic dark palette (`#2e3436` / `#363b3d`), BebasKai font (loaded from `/usr/share/fonts/truetype/BebasKai.ttf`)
 - Three-column layout: Measure | Results + tool-setter diagram | Calibration
-- `kexin_tool_setter.png` scales with tab resize (`IMAGE_DISPLAY_SCALE = 0.624`)
+- `kexin_tool_setter.png` — use the **raw green-screen photo**; the tab auto-applies a green-dominance chroma key at load (preserves the silver plate; does not white-key)
+- Image scales with tab resize (`IMAGE_DISPLAY_SCALE = 0.624`)
 - Units combo converts START X/Y and all linear readouts between mm and inch
 
 ### Roadmap (staged PRs)

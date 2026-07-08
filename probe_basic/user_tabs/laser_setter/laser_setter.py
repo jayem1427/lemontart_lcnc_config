@@ -23,7 +23,7 @@ import linuxcnc
 
 from qtpy import uic
 from qtpy.QtCore import Qt, QSize
-from qtpy.QtGui import QPixmap, QColor, QPalette, QFont, QFontDatabase
+from qtpy.QtGui import QImage, QPixmap, QColor, QPalette, QFont, QFontDatabase
 from qtpy.QtWidgets import QWidget, QMessageBox
 
 from qtpyvcp.utilities import logger
@@ -33,6 +33,25 @@ MM_PER_INCH = 25.4
 IMAGE_DISPLAY_SCALE = 0.624  # 20% larger than prior 0.52 setting
 PB_FONT = "BebasKai"
 PB_FONT_PATH = "/usr/share/fonts/truetype/BebasKai.ttf"
+
+# Chroma key for green-screen tool setter photos. Uses green-channel dominance
+# (not luminance/white) so the silver calibration plate is preserved.
+_CHROMA_NEUTRAL_SPREAD = 35
+_CHROMA_DOMINANCE_THRESH = 20
+_CHROMA_FEATHER = 60
+_CHROMA_MIN_GREEN = 60
+_GREEN_SCREEN_SAMPLE_RATIO = 0.04
+
+
+def _pixel_greenness(r, g, b):
+    """Return 0.0-1.0 green-screen strength; 0 for neutral grays/silver/white."""
+    spread = max(abs(r - g), abs(b - g), abs(r - b))
+    if g < _CHROMA_MIN_GREEN or spread < _CHROMA_NEUTRAL_SPREAD:
+        return 0.0
+    dominance = g - max(r, b)
+    if dominance <= _CHROMA_DOMINANCE_THRESH:
+        return 0.0
+    return min(1.0, (dominance - _CHROMA_DOMINANCE_THRESH) / float(_CHROMA_FEATHER))
 
 
 # Button objectName  ->  MDI command string
@@ -138,8 +157,53 @@ class UserTab(QWidget):
             return
         lbl.setAutoFillBackground(False)
         lbl.setAlignment(Qt.AlignCenter)
-        self._tool_setter_pixmap = QPixmap(image_path)
+        pixmap = QPixmap(image_path)
+        if pixmap.isNull():
+            LOG.warning("laser_setter: failed to load image %s", image_path)
+            return
+        self._tool_setter_pixmap = self._maybe_chroma_key_pixmap(pixmap)
         self._update_tool_setter_image()
+
+    def _maybe_chroma_key_pixmap(self, pixmap):
+        image = pixmap.toImage().convertToFormat(QImage.Format_RGBA8888)
+        if not self._image_has_green_screen(image):
+            return pixmap
+        LOG.info("laser_setter: applying green-screen chroma key to tool setter image")
+        return QPixmap.fromImage(self._chroma_key_image(image))
+
+    def _image_has_green_screen(self, image):
+        width = image.width()
+        height = image.height()
+        if width <= 0 or height <= 0:
+            return False
+        step = max(4, min(width, height) // 50)
+        green_hits = 0
+        samples = 0
+        for y in range(0, height, step):
+            for x in range(0, width, step):
+                color = QColor(image.pixel(x, y))
+                if _pixel_greenness(color.red(), color.green(), color.blue()) >= 0.5:
+                    green_hits += 1
+                samples += 1
+        return samples > 0 and (green_hits / float(samples)) >= _GREEN_SCREEN_SAMPLE_RATIO
+
+    def _chroma_key_image(self, image):
+        keyed = image.convertToFormat(QImage.Format_RGBA8888)
+        width = keyed.width()
+        height = keyed.height()
+        for y in range(height):
+            for x in range(width):
+                color = QColor(keyed.pixel(x, y))
+                r, g, b, a = color.red(), color.green(), color.blue(), color.alpha()
+                greenness = _pixel_greenness(r, g, b)
+                if greenness <= 0.0:
+                    continue
+                new_alpha = int(a * (1.0 - greenness))
+                if new_alpha == a:
+                    continue
+                color.setAlpha(max(0, min(255, new_alpha)))
+                keyed.setPixel(x, y, color.rgba())
+        return keyed
 
     def _update_tool_setter_image(self):
         lbl = getattr(self, 'lblToolSetterImage', None)
