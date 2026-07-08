@@ -110,7 +110,7 @@ which halcmd
 | Check | Required for |
 |-------|--------------|
 | `linuxcnc` | All logging |
-| `qtpyvcp` | Signal Monitor tab |
+| `qtpyvcp` | Logging tab |
 | `pyqtgraph` | Live/offline plots only |
 | `halcmd` | Pin reads |
 
@@ -122,7 +122,7 @@ which halcmd
 |-------------|---------------------------------------------|
 | `run_signal_logger.py` | None |
 | `hal_signal_logger.py` | None |
-| Signal Monitor tab | `python3-pyqtgraph` for plots |
+| Logging tab | `python3-pyqtgraph` for plots |
 | `plot_signal_log.py` | `python3-pyqtgraph` |
 
 ---

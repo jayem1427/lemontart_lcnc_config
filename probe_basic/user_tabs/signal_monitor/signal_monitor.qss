@@ -1,0 +1,217 @@
+/* Signal Logging — Probe Basic dark theme (BebasKai) */
+
+QWidget#SIGNAL_LOGGING {
+    background-color: #2e3436;
+    color: rgb(238, 238, 236);
+    font: 12pt "BebasKai";
+}
+
+QFrame#headerBar {
+    background-color: #363b3d;
+    border: 1px solid #8a8484;
+    border-radius: 6px;
+}
+
+QLabel#lblTitle {
+    color: white;
+    font: 20pt "BebasKai";
+    letter-spacing: 1px;
+}
+
+QLabel#lblStatus {
+    color: rgb(238, 238, 236);
+    font: 13pt "BebasKai";
+    letter-spacing: 1px;
+    padding: 3px 10px;
+    background-color: #4a4f51;
+    border: 1px solid #8a8484;
+    border-radius: 5px;
+}
+
+QLabel#lblStatus[state="logging"] {
+    color: #8ae234;
+}
+
+QLabel#lblStatus[state="armed"] {
+    color: #fcaf3e;
+}
+
+QLabel#lblCaption {
+    color: #b8bcbe;
+    font: 11pt "BebasKai";
+    padding-right: 4px;
+}
+
+QLabel#lblMessage {
+    color: #9a9e9f;
+    font: 11pt "BebasKai";
+    padding: 0 2px;
+}
+
+QGroupBox#grpLogging {
+    background-color: #363b3d;
+    border: 1px solid #8a8484;
+    border-radius: 6px;
+    margin-top: 0px;
+    padding-top: 18px;
+    font: 13pt "BebasKai";
+}
+
+QGroupBox#grpLogging::title {
+    subcontrol-origin: padding;
+    subcontrol-position: top left;
+    left: 10px;
+    top: 2px;
+    color: white;
+    font: 13pt "BebasKai";
+}
+
+QCheckBox {
+    color: rgb(238, 238, 236);
+    font: 12pt "BebasKai";
+    spacing: 6px;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #8a8484;
+    border-radius: 3px;
+    background: #4a4f51;
+}
+
+QCheckBox::indicator:checked {
+    background: rgb(85, 85, 238);
+    border-color: black;
+}
+
+QPushButton {
+    color: white;
+    border: 2px solid black;
+    border-radius: 6px;
+    padding: 5px 12px;
+    background: qlineargradient(
+        spread:pad, x1:0, y1:1, x2:0, y2:0,
+        stop:0 rgba(46, 52, 54, 255),
+        stop:0.5 rgba(82, 82, 83, 255),
+        stop:0.86 rgba(82, 82, 83, 255),
+        stop:1 rgba(213, 218, 216, 255)
+    );
+    font: 13pt "BebasKai";
+    letter-spacing: 1px;
+    min-height: 32px;
+}
+
+QPushButton:hover {
+    background: qlineargradient(
+        x1:0, y1:1, x2:0, y2:0,
+        stop:0 #3d4446, stop:0.5 #6a6d6e, stop:1 #e8ecea
+    );
+}
+
+QPushButton:pressed {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #5a5f61, stop:1 #2e3436
+    );
+}
+
+QPushButton:disabled {
+    background: #4a4f51;
+    color: rgb(170, 170, 170);
+    border-color: #3a3a3a;
+}
+
+QPushButton#btnAxis,
+QPushButton#btnSignal {
+    font: 13pt "BebasKai";
+    min-width: 52px;
+    padding: 4px 10px;
+}
+
+QPushButton#btnAxis:checked,
+QPushButton#btnSignal:checked {
+    background: qlineargradient(
+        x1:0, y1:1, x2:0, y2:0,
+        stop:0 #3a3f9e, stop:0.5 #5555ee, stop:1 #9a9eff
+    );
+    border-color: #2222aa;
+}
+
+QLabel#lblStatPrimary {
+    color: black;
+    background-color: rgb(235, 235, 235);
+    border: 1px solid rgb(160, 160, 160);
+    border-radius: 5px;
+    padding: 6px 10px;
+    font: 12pt "BebasKai";
+}
+
+QFrame#legendPanel {
+    background-color: #3a4042;
+    border: 1px solid #6e7375;
+    border-radius: 5px;
+    min-width: 148px;
+}
+
+QLabel#legendTitle {
+    color: white;
+    font: 12pt "BebasKai";
+    letter-spacing: 1px;
+    padding-bottom: 2px;
+}
+
+QLabel#legendSwatch {
+    background-color: #555;
+    border: 1px solid #8a8484;
+    border-radius: 2px;
+}
+
+QLabel#legendSwatch[active="true"] {
+    border: 2px solid white;
+}
+
+QLabel#legendLabel {
+    color: #9a9e9f;
+    font: 11pt "BebasKai";
+}
+
+QLabel#legendLabel[active="true"] {
+    color: white;
+}
+
+QWidget#SIGNAL_PLOT {
+    background-color: #2e3436;
+}
+
+QComboBox#cmbYScale,
+QComboBox#cmbRate {
+    color: white;
+    background: qlineargradient(
+        spread:pad, x1:0, y1:1, x2:0, y2:0,
+        stop:0 rgba(46, 52, 54, 255),
+        stop:0.86 rgba(82, 82, 83, 255),
+        stop:1 rgba(213, 218, 216, 255)
+    );
+    border: 2px solid black;
+    border-radius: 5px;
+    padding: 4px 8px;
+    font: 12pt "BebasKai";
+    min-height: 30px;
+    min-width: 120px;
+}
+
+QComboBox#cmbYScale::drop-down,
+QComboBox#cmbRate::drop-down {
+    border: none;
+    width: 22px;
+}
+
+QComboBox#cmbYScale QAbstractItemView,
+QComboBox#cmbRate QAbstractItemView {
+    color: white;
+    background-color: #363b3d;
+    border: 1px solid black;
+    selection-background-color: rgb(85, 85, 238);
+    font: 12pt "BebasKai";
+}

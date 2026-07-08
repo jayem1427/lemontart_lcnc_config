@@ -200,6 +200,10 @@ class HalSignalLogger:
 
         os.makedirs(self.log_dir, exist_ok=True)
 
+    def set_rate_hz(self, rate_hz: float) -> None:
+        """Sample rate for CSV logging and live buffers (idle or live session)."""
+        self.rate_hz = max(1.0, min(float(rate_hz), 2000.0))
+
     @property
     def status(self) -> str:
         if self.state == "logging":
@@ -332,7 +336,7 @@ class HalSignalLogger:
         self.stat.poll()
         return (
             self.stat.task_mode == linuxcnc.MODE_AUTO
-            and self.stat.exec_state == linuxcnc.EXEC_ON
+            and self.stat.interp_state != linuxcnc.INTERP_IDLE
         )
 
     def _current_program_name(self) -> str:

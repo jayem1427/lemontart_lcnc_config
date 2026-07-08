@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>USER</class>
- <widget class="QWidget" name="USER">
+ <class>Logging</class>
+ <widget class="QWidget" name="Logging">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -11,9 +11,15 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Signal Monitor</string>
+   <string>Signal Logging</string>
   </property>
-  <layout class="QVBoxLayout" name="rootLayout"/>
+  <layout class="QVBoxLayout" name="rootLayout">
+   <property name="spacing"><number>10</number></property>
+   <property name="leftMargin"><number>10</number></property>
+   <property name="topMargin"><number>10</number></property>
+   <property name="rightMargin"><number>10</number></property>
+   <property name="bottomMargin"><number>10</number></property>
+  </layout>
  </widget>
  <resources/>
  <connections/>
