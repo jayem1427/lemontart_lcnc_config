@@ -202,6 +202,33 @@ o<90> if [#<mode> EQ 1]
 o<90> endif
 
 
+;-45- Touch probe (#3014): load only — never measure on contact toolsetter
+;(When T#3014 is in the spindle, HAL routes motion.probe-input to the touch probe only.)
+#<probe_tool_number> = #3014
+o<probe_skip> if [#<tool_selected> GT 0 AND [#<tool_selected> EQ #<probe_tool_number>]]
+  o<probe_manual> if [#<mode> EQ 0]
+    (ABORT, Touch probe cannot be measured on the contact toolsetter.)
+  o<probe_manual> endif
+  G49
+  G90
+  G53 G1 F#<traverse_fr> Z0
+  M#<spindle_stop_m>
+  o<probe_g30> if [#<disable_pre_pos> EQ 0 AND [#<mode> EQ 1]]
+    G53 G1 F#<traverse_fr> X#5181 Y#5182
+    G53 G1 F#<traverse_fr> Z#5183
+    M6 T#<tool_selected>
+    G53 G1 F#<traverse_fr> Z0
+  o<probe_g30> elseif [#<mode> EQ 1]
+    M6 T#<tool_selected>
+  o<probe_g30> endif
+  G43 H#<tool_selected>
+  M50 P1
+  (LOG, END touch probe load — no setter measure)
+  (LOGCLOSE)
+  o<tool_touch_off> return
+o<probe_skip> endif
+
+
 ;-50- Change to T0
 ;A change at the end of the CNC program using "M600 T0" can cause LinuxCNC to switch from G43 to G49 if the program aborts!
 ;If the program is restarted, it may not switch back to G43. Danger of collision!

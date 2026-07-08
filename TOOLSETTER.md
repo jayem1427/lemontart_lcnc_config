@@ -16,7 +16,7 @@ Semi-automatic tool length measurement for a **manual collet spindle**, based on
 - `probe_basic_postgui.hal` — `qtpyvcp_manualtoolchange` wired for M6 OK dialog (tool number + remark)
 - `ethercat_mill.hal` — removed `tool-change` → `tool-changed` auto-loop; operator must confirm via dialog
 - `ethercat_mill.hal` — touch probe (DI5) vs contact toolsetter (DI2) gated onto `motion.probe-input` by `halui.tool.number` (T99 → probe only; any other tool → toolsetter only). See **Touch probe vs toolsetter routing** in [README.md](README.md).
-- `custom.hal` — VFD fault OR uses `or2.1`; `or2.0` is probe routing in `ethercat_mill.hal` (`loadrt or2 count=2` — do not add a second `or2` load with `names=`)
+- `custom.hal` — VFD fault estop via `vfd_fault_gt` comp; `or2.0` is probe routing in `ethercat_mill.hal` (`loadrt or2 count=2` — do not add a second `or2` load with `names=`)
 
 Probe Basic touch-probe tool number: `#3014` in `linuxcnc.var` (must match the tool table slot and HAL). See **[Touch probe tool number](#touch-probe-tool-number-setup-and-renumbering)** below.
 
@@ -66,7 +66,7 @@ Update README cross-references if you document a non-99 default elsewhere.
 | Item | File / param | Notes |
 |------|----------------|-------|
 | Probe diameter for routines | `#3014` row in tool table `D` column | Used for offset math in probing |
-| Skip M600 when loading probe | `load_spindle_safety_2.ngc` | Uses `#3014`; no edit if `#3014` is correct |
+| Skip M600 when loading probe | `load_spindle_safety_2.ngc`, `tool_touch_off.ngc` | Uses `#3014`; CAM/panel M600 and LOAD SPINDLE skip setter measure for probe tool |
 | Metrology | `probe_basic/subroutines/metrology/README.md` | Assumes probe loaded and `#3014` matches spindle |
 
 ## Macros (`probe_basic/subroutines/`)

@@ -78,7 +78,7 @@ halui.tool.number ──► comp.0.equal (== 99?)
            └─ FALSE ──► toolsetter (DI2) ────┼── or2.0 ──► motion.probe-input
 ```
 
-Bit gating uses `and2.3` / `and2.4` and `or2.0` (`mux2` is float-only and cannot mux digital probe inputs). `or2.1` in `custom.hal` is reserved for VFD fault OR (do not `loadrt or2` with `names=` in other HAL files).
+Bit gating uses `and2.3` / `and2.4` and `or2.0` (`mux2` is float-only and cannot mux digital probe inputs). `or2.1` is unused (reserved).
 
 This lets you unplug the NC touch probe while running M600/toolsetter with a cutter loaded — the unplugged probe cannot false-trip probing when T99 is not in the spindle.
 
@@ -169,19 +169,13 @@ To revert to immediate at-speed (no 5 s settle), edit `custom.hal`: remove the `
 
 ## H100 VFD fault monitoring
 
-`h100.mb2hal` polls H100 input register `0x000A` with Modbus function `0x04`
-(`fnct_04_read_input_registers`). The H100 manual lists this register as
-`Current fault`.
+`h100.mb2hal` polls H100 compatible common-area input register `0h000F` (Modbus
+function `0x04`, `FIRST_ELEMENT = 15`) — **fault trip information** per the H100
+manual. Register `0h000A` is output frequency and must not be used for fault
+detection.
 
-`custom.hal` watches the returned decimal code:
-
-| Decimal code | H100 display | Meaning | HAL signal |
-|--------------|--------------|---------|------------|
-| `64` | `E.OCS` | Overcurrent | `spindle-vfd-overcurrent` |
-| `92` | `E.oHS` | Inverter overheating | `spindle-vfd-overtemperature` |
-
-Either fault sets `spindle-vfd-critical-fault`, which triggers
-`halui.estop.activate`.
+`custom.hal` estops when the fault register is non-zero (`vfd_fault_gt.greater`
+on `spindle-vfd-critical-fault` → `halui.estop.activate`).
 
 ## What was left out of git, but is helpful to keep in the config
 
