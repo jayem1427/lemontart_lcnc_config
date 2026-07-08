@@ -2,8 +2,13 @@ G21          ; Set units to mm
 G90          ; Absolute positioning
 G0 Y0        ; Start at zero
 
-G1 Y15 F30000 ; Move to 15mm at 30000mm/min
-G4 P0.5      ; Dwell 0.5s
-G1 Y0 F30000  ; Return to 0
+#1 = 10      ; Number of oscillation cycles
+o100 while [#1 gt 0]
+  G1 Y15 F30000 ; Move to 15mm
+  G4 P0.5       ; Dwell 0.5s
+  G1 Y0 F30000  ; Return to 0
+  G4 P0.5       ; Dwell 0.5s
+  #1 = [#1 - 1]
+o100 endwhile
 
 M2           ; End program

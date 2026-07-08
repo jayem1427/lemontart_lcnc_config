@@ -62,7 +62,7 @@ Open **Servo Tuning** in Probe Basic (loaded from `probe_basic/user_tabs/servo_t
 | **AXIS** | Select X / Y / Z / A (each EtherCAT slave) |
 | Sliders + spinboxes | Edit C00/C01 gains, adaptive notch, ferr-lag, 6065 limit |
 | **READ FROM DRIVE** | Upload current SDOs + HAL ferr-lag into the form |
-| **APPLY TO DRIVE** | Download SDOs + set `ferr-lag.N` (RAM only until drive store) |
+| **APPLY CHANGES** | Disable motors → write SDOs + `ferr-lag.N` → re-enable (C00/C01 need enable OFF) |
 | **AXIS PRESETS** | Save / load / delete JSON presets per axis |
 
 Presets live under `config/tuning/presets/<axis>/*.json`. Shipped examples:

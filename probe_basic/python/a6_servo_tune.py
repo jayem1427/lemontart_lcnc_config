@@ -6,9 +6,15 @@ import json
 import os
 import re
 import subprocess
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+
+try:
+    import linuxcnc
+except ImportError:  # pragma: no cover - only available under LinuxCNC
+    linuxcnc = None  # type: ignore
 
 AXES: Dict[str, Dict[str, Any]] = {
     "X": {"joint": 0, "slave": 0, "linear": True, "scale": 13107.2},
@@ -253,7 +259,55 @@ def read_axis_params(axis: str) -> AxisTuneParams:
     )
 
 
-def apply_axis_params(axis: str, params: AxisTuneParams) -> None:
+def _lcnc_stat_cmd():
+    if linuxcnc is None:
+        raise RuntimeError("linuxcnc Python module not available")
+    return linuxcnc.stat(), linuxcnc.command()
+
+
+def machine_is_on() -> bool:
+    """True when LinuxCNC machine is ON (amps may be enabled)."""
+    if linuxcnc is None:
+        return False
+    try:
+        stat, _ = _lcnc_stat_cmd()
+        stat.poll()
+        return bool(stat.enabled) and stat.task_state == linuxcnc.STATE_ON
+    except Exception:
+        return False
+
+
+def wait_for_machine(want_on: bool, timeout_s: float = 8.0) -> bool:
+    """Wait until machine enabled state matches want_on."""
+    if linuxcnc is None:
+        return False
+    deadline = time.time() + timeout_s
+    stat, _ = _lcnc_stat_cmd()
+    while time.time() < deadline:
+        stat.poll()
+        is_on = bool(stat.enabled) and stat.task_state == linuxcnc.STATE_ON
+        if is_on == want_on:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def set_machine_enabled(enable: bool) -> None:
+    """Turn machine ON or OFF via linuxcnc.command (disables/enables amps)."""
+    if linuxcnc is None:
+        raise RuntimeError("linuxcnc Python module not available")
+    _, cmd = _lcnc_stat_cmd()
+    if enable:
+        cmd.state(linuxcnc.STATE_ON)
+    else:
+        cmd.state(linuxcnc.STATE_OFF)
+    if not wait_for_machine(enable, timeout_s=8.0):
+        state = "ON" if enable else "OFF"
+        raise RuntimeError(f"timed out waiting for machine {state}")
+
+
+def write_axis_sdos(axis: str, params: AxisTuneParams) -> None:
+    """Write drive SDOs + HAL ferr-lag. Call with motors disabled for C00/C01."""
     slave = AXES[axis]["slave"]
     manual = 0 if params.manual_mode else 1
     ethercat_download_u16(slave, *SDO_MANUAL_MODE, manual)
@@ -267,7 +321,62 @@ def apply_axis_params(axis: str, params: AxisTuneParams) -> None:
         *SDO_FOLLOWING_ERROR,
         params.following_error_counts(axis),
     )
-    hal_setp(ferr_lag_halpin(axis), params.ferr_lag_sec())
+    # HAL ferr-lag can be set anytime; keep it in the same apply path.
+    try:
+        hal_setp(ferr_lag_halpin(axis), params.ferr_lag_sec())
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"failed to set {ferr_lag_halpin(axis)}={params.ferr_lag_sec()}"
+        ) from exc
+
+
+def apply_axis_params(
+    axis: str,
+    params: AxisTuneParams,
+    *,
+    cycle_enable: bool = True,
+) -> Dict[str, Any]:
+    """
+    Apply tuning parameters to one axis.
+
+    Many A6 C00/C01 SDOs reject writes while the servo is enabled. When
+    cycle_enable is True (default), this:
+      1. notes whether the machine was ON
+      2. turns machine OFF (disables amps) if needed
+      3. writes SDOs + ferr-lag
+      4. restores machine ON if it was ON before
+
+    Returns a small status dict for the UI.
+    """
+    was_on = machine_is_on() if cycle_enable else False
+    disabled_here = False
+    try:
+        if cycle_enable and was_on:
+            set_machine_enabled(False)
+            disabled_here = True
+            # Brief settle so drives leave Operation Enabled before SDO writes.
+            time.sleep(0.25)
+
+        write_axis_sdos(axis, params)
+
+        if cycle_enable and was_on:
+            set_machine_enabled(True)
+            disabled_here = False
+
+        return {
+            "axis": axis,
+            "slave": AXES[axis]["slave"],
+            "cycled_enable": bool(cycle_enable and was_on),
+            "machine_on": machine_is_on() if cycle_enable else was_on,
+        }
+    except Exception:
+        # Best-effort restore if we disabled the machine for this apply.
+        if disabled_here and was_on:
+            try:
+                set_machine_enabled(True)
+            except Exception:
+                pass
+        raise
 
 
 def preset_dir(axis: str) -> str:

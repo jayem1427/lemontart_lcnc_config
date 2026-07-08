@@ -48,6 +48,7 @@ from a6_servo_tune import (  # noqa: E402
     delete_preset,
     list_presets,
     load_preset,
+    machine_is_on,
     read_axis_params,
     save_preset,
 )
@@ -155,9 +156,13 @@ class UserTab(QWidget):
         self.read_button.clicked.connect(self._read_from_drive)
         action_row.addWidget(self.read_button)
 
-        self.apply_button = QPushButton("APPLY TO DRIVE", self)
+        self.apply_button = QPushButton("APPLY CHANGES", self)
         self.apply_button.setObjectName("btnPrimary")
         self.apply_button.setFocusPolicy(Qt.NoFocus)
+        self.apply_button.setToolTip(
+            "Disables motors, writes SDOs (C00/C01 need enable OFF), "
+            "then re-enables motors if they were on."
+        )
         self.apply_button.clicked.connect(self._apply_to_drive)
         action_row.addWidget(self.apply_button)
 
@@ -188,7 +193,8 @@ class UserTab(QWidget):
         col.addWidget(scroll, stretch=1)
 
         self.message_label = QLabel(
-            "Use Signal Logging tab with x_tuning.ngc to compare before/after.",
+            "APPLY CHANGES disables motors, writes params, then re-enables. "
+            "Log with Signal Logging + *_tuning.ngc (oscillating moves).",
             self,
         )
         self.message_label.setObjectName("lblMessage")
@@ -521,12 +527,22 @@ class UserTab(QWidget):
 
     def _apply_to_drive(self) -> None:
         params = self._params_from_ui()
+        was_on = machine_is_on()
+        cycle_note = (
+            "Motors are ON — they will be disabled, parameters written, "
+            "then re-enabled."
+            if was_on
+            else "Motors are already OFF — parameters will be written as-is."
+        )
         reply = QMessageBox.question(
             self,
-            "Apply tuning",
-            f"Write these parameters to axis {self._axis} "
+            "Apply changes",
+            f"Apply tuning to axis {self._axis} "
             f"(slave {AXES[self._axis]['slave']})?\n\n"
-            "SDO changes are RAM-only until stored in the drive.",
+            f"{cycle_note}\n\n"
+            "C00/C01 SDOs often reject writes while the servo is enabled.\n"
+            "SDO changes are RAM-only until stored in the drive.\n"
+            "Ensure the machine is idle (no running program).",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -534,13 +550,26 @@ class UserTab(QWidget):
             return
 
         self._set_busy(True)
+        self._set_status("APPLYING", "busy")
+        self.message_label.setText(
+            "Disabling motors / writing SDOs…"
+            if was_on
+            else "Writing SDOs…"
+        )
         try:
-            apply_axis_params(self._axis, params)
+            result = apply_axis_params(self._axis, params, cycle_enable=True)
             self._set_status(f"APPLIED {self._axis}", "ok")
-            self.message_label.setText(
-                f"Applied to slave {AXES[self._axis]['slave']}. "
-                "Log a move on the Signal Logging tab to verify."
-            )
+            if result.get("cycled_enable"):
+                self.message_label.setText(
+                    f"Applied to slave {result['slave']}: "
+                    "motors disabled → SDOs written → motors re-enabled. "
+                    "Log with *_tuning.ngc on the Signal Logging tab."
+                )
+            else:
+                self.message_label.setText(
+                    f"Applied to slave {result['slave']} (motors stayed off). "
+                    "Enable the machine when ready to test."
+                )
         except Exception as exc:
             LOG.exception("apply_axis_params failed")
             self._set_status("ERROR", "error")
