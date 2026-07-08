@@ -2,6 +2,8 @@
 
 Semi-automatic tool length measurement for a **manual collet spindle**, based on [TooTall18T/tool_length_probe](https://github.com/TooTall18T/tool_length_probe) v5.0.2, adapted for Probe Basic.
 
+**See also:** [GETTING_STARTED.md](GETTING_STARTED.md) (learning path) · [DEVIATIONS.md](DEVIATIONS.md) (vs stock configs) · [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) (SET Z, UI)
+
 ## INI (`ethercat_mill.ini`)
 
 - `REMAP=M600 modalgroup=6 ngc=m600` — CAM entry for change + probe (**do not remap M6**)
