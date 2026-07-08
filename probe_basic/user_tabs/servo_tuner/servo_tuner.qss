@@ -1,0 +1,275 @@
+/* Servo Tuning — Probe Basic dark theme (BebasKai) */
+
+QWidget#SERVO_TUNING {
+    background-color: #2e3436;
+    color: rgb(238, 238, 236);
+    font: 12pt "BebasKai";
+}
+
+QFrame#headerBar {
+    background-color: #363b3d;
+    border: 1px solid #8a8484;
+    border-radius: 6px;
+}
+
+QLabel#lblTitle {
+    color: white;
+    font: 20pt "BebasKai";
+    letter-spacing: 1px;
+}
+
+QLabel#lblStatus {
+    color: rgb(238, 238, 236);
+    font: 13pt "BebasKai";
+    letter-spacing: 1px;
+    padding: 3px 10px;
+    background-color: #4a4f51;
+    border: 1px solid #8a8484;
+    border-radius: 5px;
+}
+
+QLabel#lblStatus[state="ok"] {
+    color: #8ae234;
+}
+
+QLabel#lblStatus[state="busy"] {
+    color: #fcaf3e;
+}
+
+QLabel#lblStatus[state="error"] {
+    color: #ef2929;
+}
+
+QLabel#lblCaption {
+    color: #b8bcbe;
+    font: 11pt "BebasKai";
+    padding-right: 4px;
+}
+
+QLabel#lblMessage {
+    color: #9a9e9f;
+    font: 11pt "BebasKai";
+    padding: 2px 2px;
+}
+
+QLabel#lblParamName {
+    color: rgb(238, 238, 236);
+    font: 12pt "BebasKai";
+    min-width: 170px;
+}
+
+QLabel#lblParamHint {
+    color: #7a7e80;
+    font: 10pt "BebasKai";
+}
+
+QGroupBox {
+    background-color: #363b3d;
+    border: 1px solid #8a8484;
+    border-radius: 6px;
+    margin-top: 0px;
+    padding-top: 18px;
+    font: 13pt "BebasKai";
+    color: white;
+}
+
+QGroupBox::title {
+    subcontrol-origin: padding;
+    subcontrol-position: top left;
+    left: 10px;
+    top: 2px;
+    color: white;
+    font: 13pt "BebasKai";
+}
+
+QGroupBox#grpPresets {
+    min-width: 260px;
+}
+
+QCheckBox {
+    color: rgb(238, 238, 236);
+    font: 12pt "BebasKai";
+    spacing: 6px;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #8a8484;
+    border-radius: 3px;
+    background: #4a4f51;
+}
+
+QCheckBox::indicator:checked {
+    background: rgb(85, 85, 238);
+    border-color: black;
+}
+
+QPushButton {
+    color: white;
+    border: 2px solid black;
+    border-radius: 6px;
+    padding: 5px 12px;
+    background: qlineargradient(
+        spread:pad, x1:0, y1:1, x2:0, y2:0,
+        stop:0 rgba(46, 52, 54, 255),
+        stop:0.5 rgba(82, 82, 83, 255),
+        stop:0.86 rgba(82, 82, 83, 255),
+        stop:1 rgba(213, 218, 216, 255)
+    );
+    font: 13pt "BebasKai";
+    letter-spacing: 1px;
+    min-height: 32px;
+}
+
+QPushButton:hover {
+    background: qlineargradient(
+        x1:0, y1:1, x2:0, y2:0,
+        stop:0 #3d4446, stop:0.5 #6a6d6e, stop:1 #e8ecea
+    );
+}
+
+QPushButton:pressed {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #5a5f61, stop:1 #2e3436
+    );
+}
+
+QPushButton:disabled {
+    background: #4a4f51;
+    color: rgb(170, 170, 170);
+    border-color: #3a3a3a;
+}
+
+QPushButton#btnAxis {
+    font: 13pt "BebasKai";
+    min-width: 52px;
+    padding: 4px 10px;
+}
+
+QPushButton#btnAxis:checked {
+    background: qlineargradient(
+        x1:0, y1:1, x2:0, y2:0,
+        stop:0 #3a3f9e, stop:0.5 #5555ee, stop:1 #9a9eff
+    );
+    border-color: #2222aa;
+}
+
+QPushButton#btnPrimary {
+    background: qlineargradient(
+        x1:0, y1:1, x2:0, y2:0,
+        stop:0 #2d6a2d, stop:0.5 #4e9a06, stop:1 #8ae234
+    );
+    border-color: #1a4a1a;
+}
+
+QPushButton#btnDanger {
+    background: qlineargradient(
+        x1:0, y1:1, x2:0, y2:0,
+        stop:0 #6a1a1a, stop:0.5 #a40000, stop:1 #ef2929
+    );
+    border-color: #4a0a0a;
+}
+
+QDoubleSpinBox,
+QSpinBox {
+    color: white;
+    background-color: #4a4f51;
+    border: 1px solid #8a8484;
+    border-radius: 4px;
+    padding: 3px 6px;
+    font: 12pt "BebasKai";
+    min-height: 28px;
+    min-width: 88px;
+}
+
+QDoubleSpinBox:focus,
+QSpinBox:focus {
+    border-color: rgb(85, 85, 238);
+}
+
+QSlider::groove:horizontal {
+    border: 1px solid #6e7375;
+    height: 8px;
+    background: #4a4f51;
+    border-radius: 4px;
+}
+
+QSlider::handle:horizontal {
+    background: qlineargradient(
+        x1:0, y1:1, x2:0, y2:0,
+        stop:0 #3a3f9e, stop:0.5 #5555ee, stop:1 #9a9eff
+    );
+    border: 1px solid black;
+    width: 16px;
+    margin: -5px 0;
+    border-radius: 4px;
+}
+
+QComboBox {
+    color: white;
+    background: qlineargradient(
+        spread:pad, x1:0, y1:1, x2:0, y2:0,
+        stop:0 rgba(46, 52, 54, 255),
+        stop:0.86 rgba(82, 82, 83, 255),
+        stop:1 rgba(213, 218, 216, 255)
+    );
+    border: 2px solid black;
+    border-radius: 5px;
+    padding: 4px 8px;
+    font: 12pt "BebasKai";
+    min-height: 30px;
+    min-width: 180px;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 22px;
+}
+
+QComboBox QAbstractItemView {
+    color: white;
+    background-color: #363b3d;
+    border: 1px solid black;
+    selection-background-color: rgb(85, 85, 238);
+    font: 12pt "BebasKai";
+}
+
+QListWidget {
+    color: white;
+    background-color: #3a4042;
+    border: 1px solid #6e7375;
+    border-radius: 5px;
+    font: 12pt "BebasKai";
+    outline: none;
+}
+
+QListWidget::item {
+    padding: 6px 8px;
+    border-bottom: 1px solid #4a4f51;
+}
+
+QListWidget::item:selected {
+    background-color: rgb(85, 85, 238);
+    color: white;
+}
+
+QLineEdit,
+QTextEdit {
+    color: white;
+    background-color: #4a4f51;
+    border: 1px solid #8a8484;
+    border-radius: 4px;
+    padding: 4px 6px;
+    font: 12pt "BebasKai";
+}
+
+QScrollArea#paramScroll {
+    background: transparent;
+    border: none;
+}
+
+QWidget#paramScrollBody {
+    background: transparent;
+}

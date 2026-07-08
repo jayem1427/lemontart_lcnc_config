@@ -6,16 +6,20 @@
 # blind spot. We advance feedback by vel_cmd * lag_sec so joint.f-error and the
 # logging tab track physical tracking error more closely.
 #
-# lag_sec: set ferr-lag-sec (default 0.002). Increase if plots still lead motion.
-# Disable: set ferr-lag-sec to 0, or comment HALFILE servo_tuning.hal in the ini.
+# Per-axis lag: ferr-lag.0 … ferr-lag.3 (seconds). Default 0.002 each.
+# Disable one axis: halcmd setp ferr-lag.N.value 0
+# Disable all: remove HALFILE servo_tuning.hal from the ini.
 
-loadrt constant names=ferr-lag-sec
+loadrt constant names=ferr-lag.0,ferr-lag.1,ferr-lag.2,ferr-lag.3
 loadrt mult2 names=tune-ghost-mult.0,tune-ghost-mult.1,tune-ghost-mult.2,tune-ghost-mult.3
 loadrt sum2 names=tune-fb-sum.0,tune-fb-sum.1,tune-fb-sum.2,tune-fb-sum.3
 loadrt sum2 names=tune-ferr-raw-sum.0,tune-ferr-raw-sum.1,tune-ferr-raw-sum.2,tune-ferr-raw-sum.3
 loadrt scale names=tune-neg-raw.0,tune-neg-raw.1,tune-neg-raw.2,tune-neg-raw.3
 
-setp ferr-lag-sec.value 0.002
+setp ferr-lag.0.value 0.002
+setp ferr-lag.1.value 0.002
+setp ferr-lag.2.value 0.002
+setp ferr-lag.3.value 0.002
 
 addf tune-ghost-mult.0 servo-thread
 addf tune-ghost-mult.1 servo-thread
@@ -40,7 +44,7 @@ setp tune-neg-raw.2.gain -1.0
 setp tune-neg-raw.3.gain -1.0
 
 # --- X (joint 0) ---
-net ferr-lag-sec ferr-lag-sec.out => tune-ghost-mult.0.in1
+net ferr-lag-x ferr-lag.0.out => tune-ghost-mult.0.in1
 net x-vel-cmd joint.0.vel-cmd => tune-ghost-mult.0.in0
 net x-ghost-lag tune-ghost-mult.0.out
 net x-ghost-lag => tune-fb-sum.0.in0
@@ -52,7 +56,7 @@ net x-pos-cmd joint.0.motor-pos-cmd => tune-ferr-raw-sum.0.in1
 net x-ferr-raw tune-ferr-raw-sum.0.out
 
 # --- Y (joint 1) ---
-net ferr-lag-sec => tune-ghost-mult.1.in1
+net ferr-lag-y ferr-lag.1.out => tune-ghost-mult.1.in1
 net y-vel-cmd joint.1.vel-cmd => tune-ghost-mult.1.in0
 net y-ghost-lag tune-ghost-mult.1.out
 net y-ghost-lag => tune-fb-sum.1.in0
@@ -64,7 +68,7 @@ net y-pos-cmd joint.1.motor-pos-cmd => tune-ferr-raw-sum.1.in1
 net y-ferr-raw tune-ferr-raw-sum.1.out
 
 # --- Z (joint 2) ---
-net ferr-lag-sec => tune-ghost-mult.2.in1
+net ferr-lag-z ferr-lag.2.out => tune-ghost-mult.2.in1
 net z-vel-cmd joint.2.vel-cmd => tune-ghost-mult.2.in0
 net z-ghost-lag tune-ghost-mult.2.out
 net z-ghost-lag => tune-fb-sum.2.in0
@@ -76,7 +80,7 @@ net z-pos-cmd joint.2.motor-pos-cmd => tune-ferr-raw-sum.2.in1
 net z-ferr-raw tune-ferr-raw-sum.2.out
 
 # --- A (joint 3) ---
-net ferr-lag-sec => tune-ghost-mult.3.in1
+net ferr-lag-a ferr-lag.3.out => tune-ghost-mult.3.in1
 net a-vel-cmd joint.3.vel-cmd => tune-ghost-mult.3.in0
 net a-ghost-lag tune-ghost-mult.3.out
 net a-ghost-lag => tune-fb-sum.3.in0

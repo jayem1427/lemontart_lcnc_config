@@ -35,7 +35,7 @@ Existing CiA limits from signal logging (unchanged):
 At 1 kHz servo with ~2 ms EtherCAT feedback latency, raw encoder position lags commanded motion. LinuxCNC following error (`cmd − fb`) then includes that blind spot.
 
 ```
-ghost_lag = joint.N.vel-cmd × ferr-lag-sec     (default 0.002 s)
+ghost_lag = joint.N.vel-cmd × ferr-lag.N     (default 0.002 s per axis)
 motor-pos-fb = raw_fb + ghost_lag
 ```
 
@@ -47,9 +47,38 @@ motor-pos-fb = raw_fb + ghost_lag
 |-----|---------|
 | `x-ferr-raw` … `a-ferr-raw` | Following error vs **uncompensated** feedback (lag-inflated) |
 | `x-ghost-lag` … `a-ghost-lag` | Compensation term (mm or deg) |
-| `ferr-lag-sec` | Delay constant — `halcmd setp ferr-lag-sec.value 0.002` |
+| `ferr-lag.0` … `ferr-lag.3` | Per-axis delay constant (seconds) — joint 0=X … 3=A |
 
-Disable compensation: `halcmd setp ferr-lag-sec.value 0` or remove `servo_tuning.hal` from `ethercat_mill.ini`.
+Disable compensation on one axis: `halcmd setp ferr-lag.N.value 0`. Disable all: remove `servo_tuning.hal` from `ethercat_mill.ini`.
+
+---
+
+## Servo Tuning tab (Probe Basic GUI)
+
+Open **Servo Tuning** in Probe Basic (loaded from `probe_basic/user_tabs/servo_tuner/`).
+
+| Control | Action |
+|---------|--------|
+| **AXIS** | Select X / Y / Z / A (each EtherCAT slave) |
+| Sliders + spinboxes | Edit C00/C01 gains, adaptive notch, ferr-lag, 6065 limit |
+| **READ FROM DRIVE** | Upload current SDOs + HAL ferr-lag into the form |
+| **APPLY TO DRIVE** | Download SDOs + set `ferr-lag.N` (RAM only until drive store) |
+| **AXIS PRESETS** | Save / load / delete JSON presets per axis |
+
+Presets live under `config/tuning/presets/<axis>/*.json`. Shipped examples:
+
+- `default` — matches `ethercat-conf.xml` startup values
+- `soft` — C01.01 at 17.6 Hz for less ringing
+
+**Typical workflow**
+
+1. Select axis → **READ FROM DRIVE** (optional baseline).
+2. Adjust **Speed loop gain (C01.01)** first if you hear whine or see ringing.
+3. **APPLY TO DRIVE** → switch to **Signal Logging** → run `nc_files/x_tuning.ngc`.
+4. When happy, **SAVE** preset (e.g. `x_after_softening`) for that axis only.
+5. Repeat per axis; Z and A can differ from X/Y.
+
+Backend module: `probe_basic/python/a6_servo_tune.py` (also used by the tab).
 
 ---
 
@@ -101,7 +130,10 @@ sudo ethercat upload -p 0 0x2000 0x07   # inertia ratio
 | Path | Role |
 |------|------|
 | `ethercat-conf.xml` | SDO tuning + PDO telemetry + 6065/6066 |
-| `servo_tuning.hal` | Pipeline-delay compensation |
+| `servo_tuning.hal` | Per-axis pipeline-delay compensation |
+| `probe_basic/user_tabs/servo_tuner/` | Servo Tuning GUI tab |
+| `probe_basic/python/a6_servo_tune.py` | SDO / HAL / preset backend |
+| `config/tuning/presets/` | Per-axis JSON tuning presets |
 | `config/logging/signals.json` | FERR raw + ghost lag channels |
 | `SIGNAL_LOGGING.md` | Logging tab + HAL telemetry |
 | `nc_files/x_tuning.ngc` | Bench excitation program |

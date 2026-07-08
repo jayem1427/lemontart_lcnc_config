@@ -83,7 +83,7 @@ lcec.0.N.vel-fb (606C, drive units)
 Following error is read from LinuxCNC after pipeline compensation in `servo_tuning.hal`:
 
 ```
-joint.N.vel-cmd × ferr-lag-sec  →  ghost lag (default 2 ms)
+joint.N.vel-cmd × ferr-lag.N  →  ghost lag (default 2 ms per axis)
 raw_fb + ghost_lag              →  joint.N.motor-pos-fb
 joint.N.f-error                 →  cmd − compensated_fb (physical estimate)
 
