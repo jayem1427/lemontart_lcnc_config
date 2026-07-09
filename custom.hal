@@ -71,9 +71,10 @@ net spindle-vfd-overcurrent near.1.out => or2.1.in0
 net spindle-vfd-overtemperature near.2.out => or2.1.in1
 net spindle-vfd-critical-fault or2.1.out => halui.estop.activate
 
-# 7. Drive telemetry for logging / tuning (CiA 6077 torque, 606C velocity)
+# 7. Drive telemetry for logging / tuning (CiA 6077 torque, 606C velocity, 60F4 ferror)
 # conv_s32_float and mult2 are already loaded with count= in ethercat_mill.hal;
 # extend with additional count= loads (cannot mix count= and names= on same module).
+# Plot tune-drive-ferr.* as DRIVE on the Logging tab — do NOT feed into joint.f-error.
 loadrt conv_s32_float count=4
 loadrt conv_s32_float count=4
 loadrt conv_s32_float count=4

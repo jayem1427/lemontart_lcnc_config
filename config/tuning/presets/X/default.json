@@ -2,7 +2,7 @@
   "name": "default",
   "axis": "X",
   "created": "2026-07-08T00:00:00Z",
-  "notes": "Matches ethercat-conf.xml startup SDOs and 2 ms ferr-lag.",
+  "notes": "Matches ethercat-conf.xml startup SDOs.",
   "params": {
     "inertia_ratio_pct": 100.0,
     "pos_gain_rad_s": 30.0,
@@ -10,7 +10,6 @@
     "integral_ms": 31.84,
     "adaptive_notch": 1,
     "manual_mode": true,
-    "ferr_lag_ms": 2.0,
-    "following_error": 0.1
+    "following_error": 1.0
   }
 }

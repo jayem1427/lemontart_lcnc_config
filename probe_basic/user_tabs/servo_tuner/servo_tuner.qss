@@ -52,6 +52,12 @@ QLabel#lblMessage {
     padding: 2px 2px;
 }
 
+QLabel#lblLiveValues {
+    color: #8ae234;
+    font: 11pt "BebasKai";
+    letter-spacing: 0.5px;
+}
+
 QLabel#lblParamName {
     color: rgb(238, 238, 236);
     font: 12pt "BebasKai";

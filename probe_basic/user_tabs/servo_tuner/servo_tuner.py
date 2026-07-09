@@ -10,7 +10,6 @@ from qtpy.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFrame,
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -45,7 +44,9 @@ from a6_servo_tune import (  # noqa: E402
     NOTCH_LABELS,
     AxisTuneParams,
     apply_axis_params,
+    default_axis_params,
     delete_preset,
+    format_params_summary,
     list_presets,
     load_preset,
     machine_is_on,
@@ -71,10 +72,15 @@ class UserTab(QWidget):
         self._axis = "X"
         self._syncing = False
         self._param_widgets = {}
+        # Per-axis snapshot of last successful READ / APPLY — used by REVERT.
+        self._baseline: dict = {}
+        self._live: dict = {}
+        self._did_initial_read = False
 
         self._build_ui()
-        self._set_params_to_ui(AxisTuneParams())
+        self._set_params_to_ui(default_axis_params())
         self._refresh_preset_list()
+        self._update_value_readouts()
 
     def _ensure_font(self):
         if os.path.exists(PB_FONT_PATH):
@@ -153,6 +159,9 @@ class UserTab(QWidget):
         action_row = QHBoxLayout()
         self.read_button = QPushButton("READ FROM DRIVE", self)
         self.read_button.setFocusPolicy(Qt.NoFocus)
+        self.read_button.setToolTip(
+            "Upload live SDOs into the form and store them as the revert baseline."
+        )
         self.read_button.clicked.connect(self._read_from_drive)
         action_row.addWidget(self.read_button)
 
@@ -166,12 +175,26 @@ class UserTab(QWidget):
         self.apply_button.clicked.connect(self._apply_to_drive)
         action_row.addWidget(self.apply_button)
 
-        self.defaults_button = QPushButton("RESET FORM", self)
+        self.revert_button = QPushButton("REVERT", self)
+        self.revert_button.setFocusPolicy(Qt.NoFocus)
+        self.revert_button.setToolTip(
+            "Re-apply the last READ / APPLY baseline for this axis "
+            "(undoes edits since then)."
+        )
+        self.revert_button.clicked.connect(self._revert_to_baseline)
+        action_row.addWidget(self.revert_button)
+
+        self.defaults_button = QPushButton("LOAD DEFAULT", self)
         self.defaults_button.setFocusPolicy(Qt.NoFocus)
-        self.defaults_button.clicked.connect(self._reset_form_defaults)
+        self.defaults_button.setToolTip(
+            "Load built-in / XML startup defaults into the form (not applied until APPLY)."
+        )
+        self.defaults_button.clicked.connect(self._load_form_defaults)
         action_row.addWidget(self.defaults_button)
         action_row.addStretch()
         col.addLayout(action_row)
+
+        col.addWidget(self._build_live_group())
 
         scroll = QScrollArea(self)
         scroll.setObjectName("paramScroll")
@@ -185,7 +208,6 @@ class UserTab(QWidget):
         scroll_layout.setContentsMargins(0, 0, 4, 0)
 
         scroll_layout.addWidget(self._build_drive_group(scroll_body))
-        scroll_layout.addWidget(self._build_hal_group(scroll_body))
         scroll_layout.addWidget(self._build_limits_group(scroll_body))
         scroll_layout.addStretch()
 
@@ -193,8 +215,8 @@ class UserTab(QWidget):
         col.addWidget(scroll, stretch=1)
 
         self.message_label = QLabel(
-            "APPLY CHANGES disables motors, writes params, then re-enables. "
-            "Log with Signal Logging + *_tuning.ngc (oscillating moves).",
+            "READ stores a baseline. Edit → APPLY. REVERT writes the baseline back. "
+            "Plot drive 60F4 as DRIVE on Signal Logging (LinuxCNC FERROR untouched).",
             self,
         )
         self.message_label.setObjectName("lblMessage")
@@ -202,8 +224,25 @@ class UserTab(QWidget):
         col.addWidget(self.message_label)
         return col
 
+    def _build_live_group(self) -> QGroupBox:
+        group = QGroupBox("CURRENT ON DRIVE", self)
+        group.setObjectName("grpLive")
+        layout = QVBoxLayout(group)
+        layout.setSpacing(4)
+
+        self.live_label = QLabel("Not read yet — press READ FROM DRIVE.", group)
+        self.live_label.setObjectName("lblLiveValues")
+        self.live_label.setWordWrap(True)
+        layout.addWidget(self.live_label)
+
+        self.baseline_label = QLabel("Baseline: none", group)
+        self.baseline_label.setObjectName("lblParamHint")
+        self.baseline_label.setWordWrap(True)
+        layout.addWidget(self.baseline_label)
+        return group
+
     def _build_drive_group(self, parent: QWidget) -> QGroupBox:
-        group = QGroupBox("DRIVE LOOP (C00 / C01)", parent)
+        group = QGroupBox("EDIT (then APPLY)", parent)
         layout = QVBoxLayout(group)
         layout.setSpacing(8)
 
@@ -268,24 +307,17 @@ class UserTab(QWidget):
         self._param_widgets["adaptive_notch"] = self.notch_combo
         return group
 
-    def _build_hal_group(self, parent: QWidget) -> QGroupBox:
-        group = QGroupBox("FEEDBACK COMPENSATION (HAL)", parent)
-        layout = QVBoxLayout(group)
-        self._add_slider_param(
-            layout,
-            "ferr_lag_ms",
-            "Pipeline delay (ferr-lag.N)",
-            0.0,
-            10.0,
-            0.1,
-            "ms",
-            "Advance feedback by vel_cmd × lag. Set 0 to disable.",
-        )
-        return group
-
     def _build_limits_group(self, parent: QWidget) -> QGroupBox:
-        group = QGroupBox("FOLLOWING ERROR LIMIT (6065)", parent)
+        group = QGroupBox("DRIVE FOLLOWING ERROR LIMIT (6065)", parent)
         layout = QVBoxLayout(group)
+        hint = QLabel(
+            "Drive Er47.0 threshold only — not LinuxCNC INI FERROR / joint.f-error.",
+            group,
+        )
+        hint.setObjectName("lblParamHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
         self.fe_spin = QDoubleSpinBox(group)
         self.fe_spin.setDecimals(3)
         self.fe_spin.setRange(0.001, 5.0)
@@ -312,7 +344,8 @@ class UserTab(QWidget):
         layout.setSpacing(8)
 
         hint = QLabel(
-            "Saved under config/tuning/presets/<axis>/*.json",
+            "Saved under config/tuning/presets/<axis>/*.json — "
+            "LOAD fills the form; LOAD + APPLY writes the drive.",
             group,
         )
         hint.setObjectName("lblParamHint")
@@ -447,12 +480,35 @@ class UserTab(QWidget):
         for widget in (
             self.read_button,
             self.apply_button,
+            self.revert_button,
             self.defaults_button,
             *self.axis_buttons.values(),
         ):
             widget.setEnabled(not busy)
         if busy:
             self._set_status("BUSY", "busy")
+
+    def _update_value_readouts(self) -> None:
+        live = self._live.get(self._axis)
+        if live is None:
+            self.live_label.setText("Not read yet — press READ FROM DRIVE.")
+        else:
+            self.live_label.setText(format_params_summary(live, self._axis))
+
+        baseline = self._baseline.get(self._axis)
+        if baseline is None:
+            self.baseline_label.setText("Baseline: none (READ or APPLY to set)")
+            self.revert_button.setEnabled(False)
+        else:
+            self.baseline_label.setText(
+                "Baseline (REVERT target): " + format_params_summary(baseline, self._axis)
+            )
+            self.revert_button.setEnabled(True)
+
+    def _store_baseline(self, params: AxisTuneParams) -> None:
+        self._baseline[self._axis] = params.copy()
+        self._live[self._axis] = params.copy()
+        self._update_value_readouts()
 
     def _on_axis_selected(self, axis: str, checked: bool) -> None:
         if self._syncing or not checked:
@@ -461,6 +517,10 @@ class UserTab(QWidget):
         linear = AXES[axis]["linear"]
         self.fe_unit_label.setText("mm" if linear else "deg")
         self._refresh_preset_list()
+        # Prefer showing last known live values for this axis in the form.
+        if axis in self._live:
+            self._set_params_to_ui(self._live[axis])
+        self._update_value_readouts()
         self._set_status(f"AXIS {axis}", "ok")
 
     def _on_manual_toggled(self, _checked: bool) -> None:
@@ -481,7 +541,6 @@ class UserTab(QWidget):
             speed_gain_hz=self._param_widgets["speed_gain_hz"].value(),
             integral_ms=self._param_widgets["integral_ms"].value(),
             adaptive_notch=int(notch_combo.currentData()),
-            ferr_lag_ms=self._param_widgets["ferr_lag_ms"].value(),
             following_error=self.fe_spin.value(),
         )
 
@@ -497,23 +556,26 @@ class UserTab(QWidget):
         if notch_idx >= 0:
             self.notch_combo.setCurrentIndex(notch_idx)
 
-        self._param_widgets["ferr_lag_ms"].setValue(params.ferr_lag_ms)
         self.fe_spin.setValue(params.following_error)
         self._syncing = False
 
-    def _reset_form_defaults(self) -> None:
-        self._set_params_to_ui(AxisTuneParams())
-        self.message_label.setText("Form reset to built-in defaults (not applied).")
+    def _load_form_defaults(self) -> None:
+        self._set_params_to_ui(default_axis_params())
+        self.message_label.setText(
+            "Form loaded with built-in / XML defaults (not applied). "
+            "Press APPLY to write, or REVERT to restore the last baseline."
+        )
 
     def _read_from_drive(self) -> None:
         self._set_busy(True)
         try:
             params = read_axis_params(self._axis)
             self._set_params_to_ui(params)
+            self._store_baseline(params)
             self._set_status(f"READ {self._axis}", "ok")
             self.message_label.setText(
-                f"Read live values from slave {AXES[self._axis]['slave']} "
-                f"and ferr-lag.{AXES[self._axis]['joint']}."
+                f"Live values from slave {AXES[self._axis]['slave']} "
+                f"loaded into the form and saved as REVERT baseline."
             )
         except Exception as exc:
             LOG.exception("read_axis_params failed")
@@ -522,11 +584,13 @@ class UserTab(QWidget):
             QMessageBox.warning(self, "Read failed", str(exc))
         finally:
             self._set_busy(False)
+            self._update_value_readouts()
             if self.status_label.text() == "BUSY":
                 self._set_status(f"AXIS {self._axis}", "ok")
 
-    def _apply_to_drive(self) -> None:
-        params = self._params_from_ui()
+    def _apply_to_drive(self, params: AxisTuneParams = None) -> None:
+        if params is None:
+            params = self._params_from_ui()
         was_on = machine_is_on()
         cycle_note = (
             "Motors are ON — they will be disabled, parameters written, "
@@ -558,17 +622,19 @@ class UserTab(QWidget):
         )
         try:
             result = apply_axis_params(self._axis, params, cycle_enable=True)
+            self._set_params_to_ui(params)
+            self._store_baseline(params)
             self._set_status(f"APPLIED {self._axis}", "ok")
             if result.get("cycled_enable"):
                 self.message_label.setText(
                     f"Applied to slave {result['slave']}: "
                     "motors disabled → SDOs written → motors re-enabled. "
-                    "Log with *_tuning.ngc on the Signal Logging tab."
+                    "Baseline updated. Plot DRIVE (60F4) on Signal Logging."
                 )
             else:
                 self.message_label.setText(
                     f"Applied to slave {result['slave']} (motors stayed off). "
-                    "Enable the machine when ready to test."
+                    "Baseline updated. Enable the machine when ready to test."
                 )
         except Exception as exc:
             LOG.exception("apply_axis_params failed")
@@ -577,8 +643,25 @@ class UserTab(QWidget):
             QMessageBox.warning(self, "Apply failed", str(exc))
         finally:
             self._set_busy(False)
+            self._update_value_readouts()
             if self.status_label.text() == "BUSY":
                 self._set_status(f"AXIS {self._axis}", "ok")
+
+    def _revert_to_baseline(self) -> None:
+        baseline = self._baseline.get(self._axis)
+        if baseline is None:
+            QMessageBox.information(
+                self,
+                "Revert",
+                "No baseline yet. Press READ FROM DRIVE first "
+                "(or APPLY once to set a baseline).",
+            )
+            return
+        self._set_params_to_ui(baseline)
+        self.message_label.setText(
+            "Form restored to baseline — confirm APPLY to write it back to the drive."
+        )
+        self._apply_to_drive(baseline)
 
     def _refresh_preset_list(self) -> None:
         self.preset_list.clear()
@@ -621,7 +704,7 @@ class UserTab(QWidget):
             self.preset_notes_edit.setPlainText(preset.notes)
             self.message_label.setText(f"Loaded preset {preset.name!r} for axis {self._axis}.")
             if apply:
-                self._apply_to_drive()
+                self._apply_to_drive(preset.params)
         except Exception as exc:
             LOG.exception("load_preset failed")
             QMessageBox.warning(self, "Load failed", str(exc))
@@ -652,3 +735,20 @@ class UserTab(QWidget):
             self._syncing = True
             self.axis_buttons["X"].setChecked(True)
             self._syncing = False
+        if not self._did_initial_read:
+            self._did_initial_read = True
+            # Best-effort auto-read so CURRENT ON DRIVE is populated.
+            try:
+                params = read_axis_params(self._axis)
+                self._set_params_to_ui(params)
+                self._store_baseline(params)
+                self.message_label.setText(
+                    f"Auto-read slave {AXES[self._axis]['slave']} on tab open. "
+                    "Edit → APPLY, or REVERT to undo."
+                )
+            except Exception as exc:
+                LOG.info("servo_tuner: initial read skipped: %s", exc)
+                self.message_label.setText(
+                    "Could not auto-read drive (EtherCAT / sudo?). "
+                    "Press READ FROM DRIVE when ready."
+                )

@@ -1,4 +1,8 @@
-"""A6-EC servo tuning: SDO read/write, HAL ferr-lag, per-axis JSON presets."""
+"""A6-EC servo tuning: SDO read/write and per-axis JSON presets.
+
+LinuxCNC joint.f-error / FERROR limits are left alone. Plot drive-native
+following error (CiA 60F4 → tune-drive-ferr.N.out) on the Logging tab as DRIVE.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +13,7 @@ import subprocess
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 try:
     import linuxcnc
@@ -42,6 +46,17 @@ NOTCH_LABELS = {
     4: "Resonance test only",
 }
 
+# Built-in defaults matching ethercat-conf.xml startup SDOs.
+DEFAULT_PARAMS = {
+    "inertia_ratio_pct": 100.0,
+    "pos_gain_rad_s": 30.0,
+    "speed_gain_hz": 20.0,
+    "integral_ms": 31.84,
+    "adaptive_notch": 1,
+    "manual_mode": True,
+    "following_error": 1.0,
+}
+
 
 def repo_root() -> str:
     return os.path.abspath(
@@ -58,30 +73,6 @@ def _sanitize_name(value: str) -> str:
     return cleaned.strip("_") or "preset"
 
 
-def hal_getp(pin: str) -> float:
-    try:
-        out = subprocess.check_output(
-            ["halcmd", "getp", pin],
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
-        return float(out.strip())
-    except (subprocess.CalledProcessError, ValueError):
-        return float("nan")
-
-
-def hal_setp(pin: str, value: float) -> None:
-    subprocess.check_call(
-        ["halcmd", "setp", pin, str(value)],
-        stderr=subprocess.DEVNULL,
-    )
-
-
-def ferr_lag_halpin(axis: str) -> str:
-    joint = AXES[axis]["joint"]
-    return f"ferr-lag.{joint}.value"
-
-
 @dataclass
 class AxisTuneParams:
     """Human-friendly tuning values for one axis."""
@@ -92,8 +83,7 @@ class AxisTuneParams:
     integral_ms: float = 31.84
     adaptive_notch: int = 1
     manual_mode: bool = True
-    ferr_lag_ms: float = 2.0
-    following_error: float = 0.1  # mm for XYZ, deg for A
+    following_error: float = 1.0  # mm for XYZ, deg for A
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -101,15 +91,27 @@ class AxisTuneParams:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "AxisTuneParams":
         return cls(
-            inertia_ratio_pct=float(data.get("inertia_ratio_pct", 100.0)),
-            pos_gain_rad_s=float(data.get("pos_gain_rad_s", 30.0)),
-            speed_gain_hz=float(data.get("speed_gain_hz", 20.0)),
-            integral_ms=float(data.get("integral_ms", 31.84)),
-            adaptive_notch=int(data.get("adaptive_notch", 1)),
-            manual_mode=bool(data.get("manual_mode", True)),
-            ferr_lag_ms=float(data.get("ferr_lag_ms", 2.0)),
-            following_error=float(data.get("following_error", 0.1)),
+            inertia_ratio_pct=float(
+                data.get("inertia_ratio_pct", DEFAULT_PARAMS["inertia_ratio_pct"])
+            ),
+            pos_gain_rad_s=float(
+                data.get("pos_gain_rad_s", DEFAULT_PARAMS["pos_gain_rad_s"])
+            ),
+            speed_gain_hz=float(
+                data.get("speed_gain_hz", DEFAULT_PARAMS["speed_gain_hz"])
+            ),
+            integral_ms=float(data.get("integral_ms", DEFAULT_PARAMS["integral_ms"])),
+            adaptive_notch=int(
+                data.get("adaptive_notch", DEFAULT_PARAMS["adaptive_notch"])
+            ),
+            manual_mode=bool(data.get("manual_mode", DEFAULT_PARAMS["manual_mode"])),
+            following_error=float(
+                data.get("following_error", DEFAULT_PARAMS["following_error"])
+            ),
         )
+
+    def copy(self) -> "AxisTuneParams":
+        return AxisTuneParams.from_dict(self.to_dict())
 
     def pos_gain_raw(self) -> int:
         return max(1, min(30000, int(round(self.pos_gain_rad_s * 10.0))))
@@ -126,9 +128,6 @@ class AxisTuneParams:
     def following_error_counts(self, axis: str) -> int:
         scale = float(AXES[axis]["scale"])
         return max(1, int(round(self.following_error * scale)))
-
-    def ferr_lag_sec(self) -> float:
-        return max(0.0, self.ferr_lag_ms / 1000.0)
 
 
 @dataclass
@@ -181,11 +180,14 @@ def _run_ethercat(args: List[str]) -> str:
 
 
 def ethercat_upload_u16(slave: int, index: int, subindex: int) -> int:
+    # A6 vendor objects often lack SDO dictionary info — --type is mandatory.
     out = _run_ethercat(
         [
             "upload",
             "-p",
             str(slave),
+            "-t",
+            "uint16",
             f"0x{index:04X}",
             str(subindex),
         ]
@@ -199,6 +201,8 @@ def ethercat_upload_u32(slave: int, index: int, subindex: int) -> int:
             "upload",
             "-p",
             str(slave),
+            "-t",
+            "uint32",
             f"0x{index:04X}",
             str(subindex),
         ]
@@ -214,6 +218,8 @@ def ethercat_download_u16(
             "download",
             "-p",
             str(slave),
+            "-t",
+            "uint16",
             f"0x{index:04X}",
             str(subindex),
             str(int(value) & 0xFFFF),
@@ -229,6 +235,8 @@ def ethercat_download_u32(
             "download",
             "-p",
             str(slave),
+            "-t",
+            "uint32",
             f"0x{index:04X}",
             str(subindex),
             str(int(value) & 0xFFFFFFFF),
@@ -246,7 +254,6 @@ def read_axis_params(axis: str) -> AxisTuneParams:
     int_raw = ethercat_upload_u16(slave, *SDO_INTEGRAL)
     notch = ethercat_upload_u16(slave, *SDO_ADAPTIVE_NOTCH)
     fe_counts = ethercat_upload_u32(slave, *SDO_FOLLOWING_ERROR)
-    lag_ms = hal_getp(ferr_lag_halpin(axis)) * 1000.0
     return AxisTuneParams(
         manual_mode=(manual == 0),
         inertia_ratio_pct=float(inertia),
@@ -254,9 +261,12 @@ def read_axis_params(axis: str) -> AxisTuneParams:
         speed_gain_hz=spd_raw / 10.0,
         integral_ms=int_raw / 100.0,
         adaptive_notch=int(notch),
-        ferr_lag_ms=lag_ms if lag_ms == lag_ms else 2.0,
         following_error=fe_counts / scale,
     )
+
+
+def default_axis_params() -> AxisTuneParams:
+    return AxisTuneParams.from_dict(DEFAULT_PARAMS)
 
 
 def _lcnc_stat_cmd():
@@ -307,7 +317,7 @@ def set_machine_enabled(enable: bool) -> None:
 
 
 def write_axis_sdos(axis: str, params: AxisTuneParams) -> None:
-    """Write drive SDOs + HAL ferr-lag. Call with motors disabled for C00/C01."""
+    """Write drive SDOs. Call with motors disabled for C00/C01."""
     slave = AXES[axis]["slave"]
     manual = 0 if params.manual_mode else 1
     ethercat_download_u16(slave, *SDO_MANUAL_MODE, manual)
@@ -321,13 +331,6 @@ def write_axis_sdos(axis: str, params: AxisTuneParams) -> None:
         *SDO_FOLLOWING_ERROR,
         params.following_error_counts(axis),
     )
-    # HAL ferr-lag can be set anytime; keep it in the same apply path.
-    try:
-        hal_setp(ferr_lag_halpin(axis), params.ferr_lag_sec())
-    except subprocess.CalledProcessError as exc:
-        raise RuntimeError(
-            f"failed to set {ferr_lag_halpin(axis)}={params.ferr_lag_sec()}"
-        ) from exc
 
 
 def apply_axis_params(
@@ -343,7 +346,7 @@ def apply_axis_params(
     cycle_enable is True (default), this:
       1. notes whether the machine was ON
       2. turns machine OFF (disables amps) if needed
-      3. writes SDOs + ferr-lag
+      3. writes SDOs
       4. restores machine ON if it was ON before
 
     Returns a small status dict for the UI.
@@ -377,6 +380,22 @@ def apply_axis_params(
             except Exception:
                 pass
         raise
+
+
+def format_params_summary(params: AxisTuneParams, axis: str) -> str:
+    """One-line human summary of live / baseline values."""
+    unit = "mm" if AXES[axis]["linear"] else "deg"
+    notch = NOTCH_LABELS.get(params.adaptive_notch, str(params.adaptive_notch))
+    mode = "manual" if params.manual_mode else "auto"
+    return (
+        f"C00.06={params.inertia_ratio_pct:.0f}%  "
+        f"C01.00={params.pos_gain_rad_s:.1f} rad/s  "
+        f"C01.01={params.speed_gain_hz:.1f} Hz  "
+        f"C01.02={params.integral_ms:.2f} ms  "
+        f"notch={notch}  "
+        f"6065={params.following_error:.3f} {unit}  "
+        f"({mode})"
+    )
 
 
 def preset_dir(axis: str) -> str:

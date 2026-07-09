@@ -4,10 +4,10 @@
     <slave idx="0" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <!-- 6065: position deviation limit (encoder counts). 1311 = 0.1 mm @ 13107.2 counts/mm -->
-      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="1F 05 00 00"/></sdoConfig>
-      <!-- 6066: ms deviation must persist before Er47.0 -->
-      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
+      <!-- 6065: position deviation limit (encoder counts). 13107 = 1.0 mm @ 13107.2 counts/mm (was 0.1 mm — too tight, Er47.0) -->
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="33 33 00 00"/></sdoConfig>
+      <!-- 6066: ms deviation must persist before Er47.0 (250 ms) -->
+      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="FA 00"/></sdoConfig>
       <!-- A6 loop tuning (EtherCAT 0x2000/0x2001 = C00/C01). See A6_TUNING.md -->
       <sdoConfig idx="2000" subIdx="05"><sdoDataRaw data="00 00"/></sdoConfig> <!-- C00.04 manual gain mode -->
       <sdoConfig idx="2000" subIdx="07"><sdoDataRaw data="64 00"/></sdoConfig> <!-- C00.06 inertia ratio 100% -->
@@ -48,10 +48,10 @@
     <slave idx="1" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <!-- 6065: position deviation limit (encoder counts). 1311 = 0.1 mm @ 13107.2 counts/mm -->
-      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="1F 05 00 00"/></sdoConfig>
-      <!-- 6066: ms deviation must persist before Er47.0 -->
-      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
+      <!-- 6065: position deviation limit (encoder counts). 13107 = 1.0 mm @ 13107.2 counts/mm (was 0.1 mm — too tight, Er47.0) -->
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="33 33 00 00"/></sdoConfig>
+      <!-- 6066: ms deviation must persist before Er47.0 (250 ms) -->
+      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="FA 00"/></sdoConfig>
       <!-- A6 loop tuning (EtherCAT 0x2000/0x2001 = C00/C01). See A6_TUNING.md -->
       <sdoConfig idx="2000" subIdx="05"><sdoDataRaw data="00 00"/></sdoConfig> <!-- C00.04 manual gain mode -->
       <sdoConfig idx="2000" subIdx="07"><sdoDataRaw data="64 00"/></sdoConfig> <!-- C00.06 inertia ratio 100% -->
@@ -92,10 +92,10 @@
     <slave idx="2" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <!-- 6065: position deviation limit (encoder counts). 1311 = 0.1 mm @ 13107.2 counts/mm -->
-      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="1F 05 00 00"/></sdoConfig>
-      <!-- 6066: ms deviation must persist before Er47.0 -->
-      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
+      <!-- 6065: position deviation limit (encoder counts). 13107 = 1.0 mm @ 13107.2 counts/mm (was 0.1 mm — too tight, Er47.0) -->
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="33 33 00 00"/></sdoConfig>
+      <!-- 6066: ms deviation must persist before Er47.0 (250 ms) -->
+      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="FA 00"/></sdoConfig>
       <!-- A6 loop tuning (EtherCAT 0x2000/0x2001 = C00/C01). See A6_TUNING.md -->
       <sdoConfig idx="2000" subIdx="05"><sdoDataRaw data="00 00"/></sdoConfig> <!-- C00.04 manual gain mode -->
       <sdoConfig idx="2000" subIdx="07"><sdoDataRaw data="64 00"/></sdoConfig> <!-- C00.06 inertia ratio 100% -->
@@ -136,10 +136,10 @@
     <slave idx="3" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <!-- 6065: position deviation limit (encoder counts). 36 = 0.1 deg @ 364.09 counts/deg -->
-      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="24 00 00 00"/></sdoConfig>
-      <!-- 6066: ms deviation must persist before Er47.0 -->
-      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
+      <!-- 6065: position deviation limit (encoder counts). 364 = 1.0 deg @ 364.09 counts/deg (was 0.1 deg — too tight, Er47.0) -->
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="6C 01 00 00"/></sdoConfig>
+      <!-- 6066: ms deviation must persist before Er47.0 (250 ms) -->
+      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="FA 00"/></sdoConfig>
       <!-- A6 loop tuning (EtherCAT 0x2000/0x2001 = C00/C01). See A6_TUNING.md -->
       <sdoConfig idx="2000" subIdx="05"><sdoDataRaw data="00 00"/></sdoConfig> <!-- C00.04 manual gain mode -->
       <sdoConfig idx="2000" subIdx="07"><sdoDataRaw data="64 00"/></sdoConfig> <!-- C00.06 inertia ratio 100% -->

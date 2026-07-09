@@ -83,19 +83,15 @@ lcec.0.N.ferr-fb (60F4, encoder counts)
   → conv-s32-float → div2 (÷ joint SCALE) → tune-drive-ferr.N.out  (mm or deg)
 ```
 
-Drive **60F4** is the primary metric for loop tuning: computed inside the A6 at its servo rate (internal demand vs encoder), not inflated by host cmd−fb lag.
+Drive **60F4** is the primary metric for loop tuning: computed inside the A6 at its servo rate (internal demand vs encoder), not inflated by host cmd−fb lag. Plot it as **DRIVE** on the Logging tab.
 
-LinuxCNC following error (after pipeline compensation in `servo_tuning.hal`):
+LinuxCNC following error is left alone (no HAL rewiring of `motor-pos-fb`):
 
 ```
-joint.N.vel-cmd × ferr-lag.N  →  ghost lag (default 2 ms per axis)
-raw_fb + ghost_lag              →  joint.N.motor-pos-fb
-joint.N.f-error                 →  cmd − compensated_fb (physical estimate)
-
-x-ferr-raw … a-ferr-raw         →  cmd − raw_fb (lag-inflated; for A/B compare)
+joint.N.f-error  →  cmd − fb   (INI FERROR / soft limits only)
 ```
 
-See **[A6_TUNING.md](A6_TUNING.md)** for SDO gain defaults and tuning workflow.
+See **[A6_TUNING.md](A6_TUNING.md)** for SDO gain defaults, Servo Tuning GUI, and revert workflow.
 
 ### `custom.hal` loadrt note
 
@@ -119,7 +115,7 @@ halcmd getp joint.0.f-error
 If LinuxCNC fails to reach OP with the new PDO mapping, verify the A6 exposes **60F4** on your firmware:
 
 ```bash
-sudo ethercat upload -p 0 0x60F4 0
+sudo ethercat upload -p 0 -t int32 0x60F4 0
 sudo ethercat pdos -p 0
 ```
 
@@ -131,12 +127,12 @@ Configured in `ethercat-conf.xml` per slave via EtherCAT SDO at startup (no Step
 
 | SDO | Meaning | XYZ value | A value |
 |-----|---------|-----------|---------|
-| **6065h** | Max position deviation (encoder counts) | `0x051F` = 1311 counts ≈ **0.1 mm** @ 13107.2 counts/mm | `0x24` = 36 counts ≈ **0.1°** @ 364.09 counts/deg |
-| **6066h** | Fault delay (ms deviation must persist) | `0x0064` = **100 ms** | same |
+| **6065h** | Max position deviation (encoder counts) | `0x3333` = 13107 counts ≈ **1.0 mm** @ 13107.2 counts/mm | `0x016C` = 364 counts ≈ **1.0°** @ 364.09 counts/deg |
+| **6066h** | Fault delay (ms deviation must persist) | `0x00FA` = **250 ms** | same |
 
 Drive fault **Er47.0** compares internal position demand vs feedback (CiA 6062 vs 6064). This is **separate** from LinuxCNC `joint.N.f-error` and the INI `FERROR` limit (2.0 mm on this machine).
 
-> **Note:** 0.1 mm is a tight drive limit. Fast accelerations may trip Er47.0 before LinuxCNC reports a following error. Loosen 6065h or increase 6066h if you see nuisance drive faults during tuning.
+> **Note:** Startup defaults are intentionally loose for tuning (1.0 mm / 1.0°). Tighten 6065h later once loops are stable if you want earlier Er47.0 protection.
 
 ---
 
@@ -162,10 +158,8 @@ Default channels (100 Hz):
 
 | Group | Pins | Units |
 |-------|------|-------|
-| Following error (comp.) | `joint.0..3.f-error` | mm / deg |
+| Following error (LinuxCNC) | `joint.0..3.f-error` | mm / deg |
 | Following error (drive 60F4) | `tune-drive-ferr.0..3.out` | mm / deg |
-| Following error (raw) | `x-ferr-raw` … `a-ferr-raw` | mm / deg |
-| Ghost lag term | `x-ghost-lag` … `a-ghost-lag` | mm / deg |
 | Torque | `tune-torque.0..3.out` | % rated |
 | Velocity | `tune-velocity.0..3.out` | mm/s / deg/s |
 
@@ -182,8 +176,7 @@ Context columns in each CSV row: `line`, `feed`, `enabled`.
 | `probe_basic/user_tabs/signal_monitor/` | Logging tab (`.py`, `.ui`, `.qss`) |
 | `config/logging/signals.json` | Channel definitions |
 | `custom.hal` | Torque/velocity/drive-ferr conversion → `tune-*` pins |
-| `servo_tuning.hal` | Feedback lag compensation → `joint.*.motor-pos-fb` |
-| `A6_TUNING.md` | A6 SDO gain defaults + tuning procedure |
+| `A6_TUNING.md` | A6 SDO gain defaults + Servo Tuning GUI / revert |
 | `ethercat-conf.xml` | PDO 606C/6077/60F4 + SDO 6065/6066 + loop gains |
 | `nc_files/x_tuning.ngc` | Example axis tuning program |
 | `scripts/run_signal_logger.py` | Headless CLI logger (optional) |
