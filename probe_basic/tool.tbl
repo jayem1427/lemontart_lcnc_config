@@ -1,6 +1,6 @@
-T3   P1   D+6.350000 Z+35.633327 ; 1/4" 3FL Endmill
-T9   P2   D+6.000000 Z+40.504467 ; 6mm chamfer tool
-T10  P3   D+3.175000 ; 1/8" 3FL Endmill
+T3   P1   D+6.350000 Z+26.772167 ; 1/4" 3FL Endmill
+T9   P2   D+6.000000 Z+26.777202 ; 6mm chamfer tool
+T10  P3   D+3.175000 Z+26.777050 ; 1/8" 3FL Endmill
 T12  P4   D+9.525000 Z+40.250484 ; 3/8" 3FL Endmill
 T99  P5   D+2.000000 ; touch probe
 T14  P0   Z+29.186718 ; 2.5mm drill bit
