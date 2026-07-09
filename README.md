@@ -51,10 +51,67 @@ Note: **`PROGRAM_PREFIX`** points at `nc_files/` (next to the INI). Put your G-c
 | `custom.hal` | Modbus spindle mux, extras |
 | `h100.mb2hal` | Modbus register map for VFD |
 | `xhc-whb04b-6.hal` | Pendant |
-| `probe_basic/` | Probe Basic YAML, postgui HAL, DROs, macros, `tool.tbl` |
+| `probe_basic/` | Probe Basic YAML, postgui HAL, DROs, macros, `tool.tbl`, user tabs |
 | `nc_files/` | Default program search path |
 
 Many of these files are connected to eachother. Using a tool like Cursor or Claude Code will absolutely make your life easier since you can expand the context window to multiple files, but please always verify any changes that AI makes. Add testable features one-at-a-time, and verify they work before proceeding forward.
+
+## Switching feature branches (user tabs)
+
+Probe Basic loads **every subdirectory** under `probe_basic/user_tabs/` and expects a matching `{folder}/{folder}.py` in each one. Feature branches add their own tab folder:
+
+| Branch | User tab folders |
+|--------|------------------|
+| `cursor/laser-setter-1afc` | `laser_setter/` |
+| `cursor/signal-logging-framework-0633` | `signal_monitor/` |
+| `cursor/a6-tuning-ferror-comp-70f6` | `signal_monitor/`, `servo_tuner/` |
+
+When you `git checkout` between these branches, git swaps the tracked tab files but **untracked leftovers can remain** — usually an empty folder or `__pycache__` from the other branch. Probe Basic still tries to load that folder and crashes on startup:
+
+```
+FileNotFoundError: .../probe_basic/user_tabs/signal_monitor/signal_monitor.py
+```
+
+(or the same error for `laser_setter/laser_setter.py` when switching the other way).
+
+### After switching branches
+
+From the config root (`ethercat_mill/`):
+
+```bash
+# Laser setter tab (this branch)
+git checkout cursor/laser-setter-1afc
+rm -rf probe_basic/user_tabs/signal_monitor probe_basic/user_tabs/servo_tuner
+
+# Signal logging tab
+git checkout cursor/signal-logging-framework-0633
+rm -rf probe_basic/user_tabs/laser_setter probe_basic/user_tabs/servo_tuner
+
+# A6 ferror tuning + Servo Tuning GUI (extends signal logging)
+git checkout cursor/a6-tuning-ferror-comp-70f6
+rm -rf probe_basic/user_tabs/laser_setter
+```
+
+Then restart LinuxCNC / Probe Basic.
+
+### If checkout is blocked
+
+`linuxcnc.var` is machine state and often has local edits. Stash it before switching:
+
+```bash
+git stash push -m "linuxcnc.var" -- linuxcnc.var
+git checkout <branch>
+```
+
+Restore later with `git stash pop` if you need those values back.
+
+### Quick check
+
+```bash
+ls probe_basic/user_tabs/
+```
+
+Each folder listed should contain its matching `.py` file (plus `.ui`, etc.). Delete any folder that is missing `{name}.py`.
 
 ## Toolsetter (semi-auto tool length)
 
@@ -185,7 +242,7 @@ Either fault sets `spindle-vfd-critical-fault`, which triggers
 
 ## Laser tool setter (in progress)
 
-Dedicated Probe Basic tab for an upcoming laser tool setter (tool length + diameter + runout + broken-tool detect). Branch: `cursor/laser-setter-1afc`.
+Dedicated Probe Basic tab for an upcoming laser tool setter (tool length + diameter + runout + broken-tool detect). Branch: `cursor/laser-setter-1afc`. After checkout, remove any stale `signal_monitor/` folder — see **[Switching feature branches (user tabs)](#switching-feature-branches-user-tabs)**.
 
 **Current state:** UI and setup-parameter plumbing are in place; measure buttons still call skeleton NGC macros (DEBUG + exit). No HAL pins or real probing yet.
 
@@ -224,8 +281,10 @@ Removed from earlier skeleton: **MEASURE FULL TOOL**, **UPDATE TOOL TABLE**, foo
 
 - Probe Basic dark palette (`#2e3436` / `#363b3d`), BebasKai font (loaded from `/usr/share/fonts/truetype/BebasKai.ttf`)
 - Three-column layout: Measure | Results + tool-setter diagram | Calibration
-- `kexin_tool_setter.png` — use the **raw green-screen photo**; the tab auto-applies a green-dominance chroma key at load (preserves the silver plate; does not white-key)
-- Image scales with tab resize (`IMAGE_DISPLAY_SCALE = 0.624`)
+- **Tool setter diagram** (`kexin_tool_setter.png`):
+  - **Pre-keyed RGBA PNG** (committed here): green background and watermarks removed offline; displays as-is.
+  - **Green-screen source photos**: replace the PNG with a raw green-screen shot; `laser_setter.py` auto-applies a green-dominance chroma key at load (preserves the silver plate; does not white-key). Crop AI watermarks from the source before committing.
+  - Scales with tab resize (`IMAGE_DISPLAY_SCALE = 0.624`)
 - Units combo converts START X/Y and all linear readouts between mm and inch
 
 ### Roadmap (staged PRs)
