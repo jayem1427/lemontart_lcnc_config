@@ -1,0 +1,19 @@
+( M600 tool change test )
+( Loads T3, jogs left on X, then T9, then T10. )
+( Homed machine, toolsetter taught, cutters in the changer. Run in AUTO. )
+( Each M600 stops at G30 for the M6 OK dialog, then probes on the setter. )
+( Z soft MAX_LIMIT is 3.048 mm - use G53 Z0, not work Z25. )
+
+G21 G90 G17 G40 G49
+M5
+
+T3 M600
+
+G53 G0 Z0
+G91 G0 X-40
+G90
+
+T9 M600
+T10 M600
+
+M2

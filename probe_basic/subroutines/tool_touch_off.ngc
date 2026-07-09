@@ -65,6 +65,12 @@ o<400> if [#<_task> EQ 1]
 #<tool_diameter_offset_mode> = #3012     (not in use, activates the tool diameter offset position for probe subroutine section)
 #<tool_setter_offset_direction> = #3013  (sets tool setter offset direction to move tool)
 
+; Machine-max traverse for tool change / setter positioning (mm/min).
+; Overrides Probe Basic #3006 so XY is not stuck at the UI traverse value.
+#<traverse_xy_fr> = 30000
+#<traverse_z_fr> = 10000
+#<traverse_fr> = #<traverse_xy_fr>
+
 ; Fallback when Probe Basic params not yet saved to linuxcnc.var (#3004-#3010)
 o<param_defaults> if [#<traverse_fr> LE 0]
   #<fast_probe_fr> = 400
@@ -78,10 +84,15 @@ o<param_defaults2> if [#<spindle_zero_height> LE 0]
   (ABORT, Spindle zero not configured. Run PROBE SPINDLE NOSE ZERO in Probe Basic.)
 o<param_defaults2> endif
 
-; Probe Basic taught setter position (G53) — single source of truth, not hardcoded in this file
+; Probe Basic taught setter position (G53) — SET TOOL TOUCH OFF POS / #5181-#5183
 #<tool_touch_x_coords> = #5181
 #<tool_touch_y_coords> = #5182
 #<tool_touch_z_coords> = #5183
+
+; Manual collet / tool-load position (G53) — separate from setter so M600 pauses here, then moves to setter to probe
+#<tool_load_x_coords> = 270.0
+#<tool_load_y_coords> = 100.0
+#<tool_load_z_coords> = 0.0
 
 ; Harden: refuse unset setter coords (either axis near zero means not taught)
 o<validate_setter_x> if [ABS[#<tool_touch_x_coords>] LT 0.001]
@@ -197,7 +208,7 @@ o<validate_tool> endif
 ;The case only serves to ensure that a measurement is not accidentally started with tool 0.
 o<100> if [#<tool_selected> EQ 0]
   G90
-  G53 G1 F#<traverse_fr> Z0
+  G53 G1 F#<traverse_z_fr> Z0
   M50 P1
   M6 T#<tool_selected>
   G49
@@ -221,13 +232,13 @@ o<200> do
   ;-70- Retract Z, stop spindle, traverse to setter (or G30 for M600 tool change)
   G49
   G90             (set absolute coordinates)
-  G53 G1 F#<traverse_fr> Z0       (1. retract to machine Z home)
+  G53 G1 F#<traverse_z_fr> Z0       (1. retract to machine Z home)
   M#<spindle_stop_m>
 
   o<106> if [#<disable_pre_pos> EQ 0 AND [#<mode> EQ 1] AND [[#<fastprobefailed> NE 2] OR [#<fastprobefailed> EQ 1]]]
-    ; M600 automatic only: collet change position (G30 / #5181-#5183)
-    G53 G1 F#<traverse_fr> X#5181 Y#5182
-    G53 G1 F#<traverse_fr> Z#5183
+    ; M600 automatic only: collet change at tool-load XY, then move to taught setter to probe
+    G53 G1 F#<traverse_xy_fr> X#<tool_load_x_coords> Y#<tool_load_y_coords>
+    G53 G1 F#<traverse_z_fr> Z#<tool_load_z_coords>
     o<106a> if [#<brake_after_M600> EQ 1 AND #<fastprobefailed> EQ 0]
       M50 P1
       M6 T#<tool_selected>  ; Probe Basic OK dialog: shows tool number + remark, waits for OK
@@ -235,14 +246,14 @@ o<200> do
     o<106a> elseif [#<brake_after_M600> EQ 2 AND #<fastprobefailed> EQ 0]
       M01
     o<106a> endif
-    G53 G1 F#<traverse_fr> Z0
-    G53 G1 F#<traverse_fr> X#<tool_touch_x_coords> Y#<tool_touch_y_coords>
+    G53 G1 F#<traverse_z_fr> Z0
+    G53 G1 F#<traverse_xy_fr> X#<tool_touch_x_coords> Y#<tool_touch_y_coords>
   o<106> elseif [#<fastprobefailed> EQ 0 AND [#<finder_number> GT 0] AND [#<tool_selected> EQ #<finder_number>]]
     ;Edge-finder position
-    G53 G1 F#<traverse_fr> X#<finder_touch_x_coords> Y#<finder_touch_y_coords>
+    G53 G1 F#<traverse_xy_fr> X#<finder_touch_x_coords> Y#<finder_touch_y_coords>
   o<106> elseif [#<fastprobefailed> EQ 0]
     ; 2. traverse to taught setter XY at probe traverse feed (manual touch-off and M600)
-    G53 G1 F#<traverse_fr> X#<tool_touch_x_coords> Y#<tool_touch_y_coords>
+    G53 G1 F#<traverse_xy_fr> X#<tool_touch_x_coords> Y#<tool_touch_y_coords>
     o<106m> if [#<mode> EQ 0]
       #<manual_at_setter> = 1
     o<106m> endif
@@ -285,10 +296,10 @@ o<200> do
   o<160> if [#<manual_at_setter> EQ 1]
     #<manual_at_setter> = 0
   o<160> else
-    G53 G1 F#<traverse_fr> Z0
+    G53 G1 F#<traverse_z_fr> Z0
     o<161> if [#<finder_number> GT 0 AND [#<tool_selected> EQ #<finder_number>]]
       ;Edge-finder position
-      G53 G1 F#<traverse_fr> X#<finder_touch_x_coords> Y#<finder_touch_y_coords>
+      G53 G1 F#<traverse_xy_fr> X#<finder_touch_x_coords> Y#<finder_touch_y_coords>
     o<161> else
       o<107> if [#<offset_diameter> GT 0 AND #<offset_diameter> LE #5410]
         ;Tool diameter correction
@@ -296,20 +307,20 @@ o<200> do
         (LOG, Offset_dis: #<offset_distance>)
         o<108> if [#<tool_setter_offset_direction> EQ 0]
           ;Offset X-
-          G53 G1 F#<traverse_fr> X[#<tool_touch_x_coords>-#<offset_distance>] Y#<tool_touch_y_coords>
+          G53 G1 F#<traverse_xy_fr> X[#<tool_touch_x_coords>-#<offset_distance>] Y#<tool_touch_y_coords>
         o<108> elseif [#<tool_setter_offset_direction> EQ 1]
           ;Offset X+
-          G53 G1 F#<traverse_fr> X[#<tool_touch_x_coords>+#<offset_distance>] Y#<tool_touch_y_coords>
+          G53 G1 F#<traverse_xy_fr> X[#<tool_touch_x_coords>+#<offset_distance>] Y#<tool_touch_y_coords>
         o<108> elseif [#<tool_setter_offset_direction> EQ 2]
           ;Offset Y-
-          G53 G1 F#<traverse_fr> X#<tool_touch_x_coords> Y[#<tool_touch_y_coords>-#<offset_distance>]
+          G53 G1 F#<traverse_xy_fr> X#<tool_touch_x_coords> Y[#<tool_touch_y_coords>-#<offset_distance>]
         o<108> elseif [#<tool_setter_offset_direction> EQ 3]
           ;Offset Y+
-          G53 G1 F#<traverse_fr> X#<tool_touch_x_coords> Y[#<tool_touch_y_coords>+#<offset_distance>]
+          G53 G1 F#<traverse_xy_fr> X#<tool_touch_x_coords> Y[#<tool_touch_y_coords>+#<offset_distance>]
         o<108> endif
       o<107> else
         ;Tool touch position
-        G53 G1 F#<traverse_fr> X#<tool_touch_x_coords> Y#<tool_touch_y_coords>
+        G53 G1 F#<traverse_xy_fr> X#<tool_touch_x_coords> Y#<tool_touch_y_coords>
       o<107> endif
     o<161> endif
   o<160> endif
@@ -337,9 +348,9 @@ o<200> do
   o<113> if [#<use_tool_table> EQ 1 AND #<tool_length_old> GT 0 AND [#<probe_start_pos_z> GT [#<_ini[AXIS_Z]MAX_LIMIT> - 0.5]]]
     #<probe_start_pos_z> = 0
     #<z_max_travel> = [#<spindle_zero_height> + #<tool_length_old>]
-    o<3007> if [#3007 GT #<z_max_travel>]
+    o<3008> if [#3007 GT #<z_max_travel>]
       #<z_max_travel> = #3007
-    o<3007> endif
+    o<3008> endif
     (LOG, Old tool clamped to Z home start)
   o<113> endif
   o<111> if [#<tool_selected> EQ #<finder_number>]
@@ -352,7 +363,7 @@ o<200> do
 
   ;-120- Move to Z start position for length measurement
   M50 P0
-  G53 G1 F#<traverse_fr> Z#<probe_start_pos_z>
+  G53 G1 F#<traverse_z_fr> Z#<probe_start_pos_z>
   #<offset_z> = #5422              (work Z at probe start — required for length math)
 
   
@@ -362,7 +373,7 @@ o<200> do
     F #<fast_probe_fr>
   o<190> endif
   G38.3 Z-[#<z_max_travel>]    (fast tool probe)
-  G1 F#<traverse_fr> Z[#<retract_distance>]    (retract tool retract distance amount)
+  G1 F#<traverse_z_fr> Z[#<retract_distance>]    (retract tool retract distance amount)
   G90
   #<addreps> = [#<addreps> - 1]
   (LOG, Fast probe: #5063)
@@ -402,7 +413,7 @@ o<120> if [#<slow_probe_fr> GT 0]
   o<125> endif
   G38.2 Z-[#<retract_distance> * 2]    (slow tool probe)
   ;#<z_slow_probe> = #5063
-  G1 F#<traverse_fr> Z[#<retract_distance>]
+  G1 F#<traverse_z_fr> Z[#<retract_distance>]
   G90
   (LOG, Slow probe: #5063)
 
@@ -441,14 +452,14 @@ T #5400 G43  H #5400    (enable tool length offset)
 
 ;-200- Drive the tool free
 G90    (set absolute coordinates)
-G53 G1 F#<traverse_fr> Z0 (Send spindle to home zero position)
+G53 G1 F#<traverse_z_fr> Z0 (Send spindle to home zero position)
 
 
 ;-210- Return to hold position (optional)
 M50 P1
 o<140> if [#<mode> EQ 1 AND #<go_back_to_start_pos> EQ 1]
-  G1 F#<traverse_fr> X[#<stop_position_x>] Y[#<stop_position_y>]
-  G1 F#<traverse_fr> Z[#<stop_position_z>]
+  G1 F#<traverse_xy_fr> X[#<stop_position_x>] Y[#<stop_position_y>]
+  G1 F#<traverse_z_fr> Z[#<stop_position_z>]
 o<140> endif
 
 (LOG, END)

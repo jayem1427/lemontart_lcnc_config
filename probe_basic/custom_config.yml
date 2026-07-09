@@ -4,6 +4,13 @@ windows:
     kwargs:
       confirm_exit: false
 
+# Override stock Manual Tool Change dialog (ABORT CYCLE on the prompt)
+dialogs:
+  toolchange:
+    provider: toolchange_dialog:ToolChangeDialog
+    kwargs:
+      ui_file: {{ file.dir }}/toolchange_dialog_pb.ui
+
 data_plugins:
   tooltable:
     provider: qtpyvcp.plugins.tool_table:ToolTable

@@ -4,6 +4,10 @@
     <slave idx="0" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <!-- 6065: position deviation limit (encoder counts). 3932 = 0.3 mm @ 13107.2 counts/mm -->
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
+      <!-- 6066: ms deviation must persist before Er47.0 (100 ms) -->
+      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="01"><sdoDataRaw data="00 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="05"><sdoDataRaw data="00 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="09"><sdoDataRaw data="00 00"/></sdoConfig>
@@ -34,6 +38,10 @@
     <slave idx="1" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <!-- 6065: position deviation limit (encoder counts). 3932 = 0.3 mm @ 13107.2 counts/mm -->
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
+      <!-- 6066: ms deviation must persist before Er47.0 (100 ms) -->
+      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="01"><sdoDataRaw data="00 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="05"><sdoDataRaw data="00 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="09"><sdoDataRaw data="00 00"/></sdoConfig>
@@ -64,6 +72,10 @@
     <slave idx="2" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <!-- 6065: position deviation limit (encoder counts). 3932 = 0.3 mm @ 13107.2 counts/mm -->
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
+      <!-- 6066: ms deviation must persist before Er47.0 (100 ms) -->
+      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="01"><sdoDataRaw data="00 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="05"><sdoDataRaw data="00 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="09"><sdoDataRaw data="00 00"/></sdoConfig>
@@ -94,6 +106,10 @@
     <slave idx="3" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <!-- 6065: position deviation limit (encoder counts). 109 = 0.3 deg @ 364.09 counts/deg -->
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="6D 00 00 00"/></sdoConfig>
+      <!-- 6066: ms deviation must persist before Er47.0 (100 ms) -->
+      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
       <syncManager idx="2" dir="out">
         <pdo idx="1600">
           <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word" halType="u32"/>

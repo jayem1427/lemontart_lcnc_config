@@ -1,10 +1,16 @@
 o<on_abort> sub
 
+; No motion here — e-stop / abort leaves the machine disabled, so G0/G1
+; would error: "need to be enabled, in coord mode for linear move".
+; XY/Z park is only from the Manual Tool Change ABORT button
+; (o<abort_tool_change>) after a normal program.abort while still enabled.
+
 M5 (Spindle Stop)
 M9 (Coolant Off)
 M50 P1
 G90 (Absolute Positioning)
 G40 (Cancel Cutter Radius Compensation)
+G49
 
 o<on_abort> endsub
 M2 (end program)
