@@ -219,6 +219,8 @@ class UserTab(QWidget):
         self._syncing = False
         self._baseline: Dict[str, AxisTuneParams] = {}
         self._live: Dict[str, AxisTuneParams] = {}
+        self._ok_keys: Dict[str, List[str]] = {}
+        self._failed_keys: Dict[str, List[str]] = {}
         self._did_initial_read = False
         self._ferr_unit_mode = "unit"  # "unit" (mm/deg) or "pulses"
         self._ferr_peak_pulses = 0.0
@@ -226,6 +228,8 @@ class UserTab(QWidget):
         self._pending_edits: Dict[str, QDoubleSpinBox] = {}
         self._current_labels: Dict[str, QLabel] = {}
         self._row_keys: List[str] = []
+        # If True, next APPLY may write catalog defaults (LOAD DEFAULT path).
+        self._allow_default_write = False
 
         self._build_ui()
         self._ferr_timer = QTimer(self)
@@ -354,10 +358,9 @@ class UserTab(QWidget):
         col.addWidget(self._build_param_table_group(), stretch=1)
 
         self.message_label = QLabel(
-            "Drive FERR (60F4) plots live below. Edit Pending → APPLY. "
-            "Inertia (C00.06) is a manual % box — not auto-tune. "
-            "FF source 0 = off; set non-zero to enable feed-forward. "
-            "REVERT restores the last READ/APPLY baseline. "
+            "Drive FERR (60F4) plots live below. READ first, then edit Pending → APPLY. "
+            "APPLY only writes SDOs that were successfully read (never invents defaults). "
+            "Inertia (C00.06) is a manual % box. FF source 0 = off. "
             "LinuxCNC joint.f-error / INI FERROR are untouched.",
             self,
         )
@@ -684,6 +687,24 @@ class UserTab(QWidget):
         self._live[self._axis] = params.copy()
         self._update_value_readouts()
 
+    def _ingest_read(
+        self,
+        params: AxisTuneParams,
+        ok_keys: List[str],
+        failed_keys: List[str],
+    ) -> None:
+        self._ok_keys[self._axis] = list(ok_keys)
+        self._failed_keys[self._axis] = list(failed_keys)
+        self._allow_default_write = False
+        self._set_params_to_ui(params)
+        self._store_baseline(params)
+
+    def _writable_keys(self) -> List[str]:
+        """Keys APPLY is allowed to write for the current axis."""
+        if self._allow_default_write:
+            return [p["key"] for p in PARAM_DEFS]
+        return list(self._ok_keys.get(self._axis, []))
+
     def _on_axis_selected(self, axis: str, checked: bool) -> None:
         if self._syncing or not checked:
             return
@@ -794,17 +815,38 @@ class UserTab(QWidget):
         return f"{value:.{decimals}f}"
 
     def _params_from_ui(self) -> AxisTuneParams:
-        values = {}
-        for key, spin in self._pending_edits.items():
+        # Only include keys we are allowed to write — never pad with catalog defaults.
+        values: Dict[str, float] = {}
+        for key in self._writable_keys():
+            spin = self._pending_edits.get(key)
+            if spin is None:
+                continue
             values[key] = float(spin.value())
-        return AxisTuneParams(values=values)
+        params = AxisTuneParams.__new__(AxisTuneParams)
+        params.values = values
+        return params
 
     def _set_params_to_ui(self, params: AxisTuneParams) -> None:
         self._syncing = True
+        failed = set(self._failed_keys.get(self._axis, []))
+        ok = set(self._ok_keys.get(self._axis, []))
         for key, spin in self._pending_edits.items():
-            spin.setValue(params.get(key))
+            if key in params.values:
+                spin.setValue(params.get(key))
+                spin.setEnabled(True)
+            elif self._allow_default_write and key in PARAM_BY_KEY:
+                spin.setValue(float(PARAM_BY_KEY[key]["default"]))
+                spin.setEnabled(True)
+            else:
+                # Keep pending editable only after a successful read of that key.
+                spin.setEnabled(key in ok or self._allow_default_write)
         for key, label in self._current_labels.items():
-            label.setText(self._format_current(key, params.get(key)))
+            if key in failed:
+                label.setText("READ FAIL")
+            elif key in params.values:
+                label.setText(self._format_current(key, params.get(key)))
+            else:
+                label.setText("—")
         self._syncing = False
 
     def _copy_current_to_pending(self) -> None:
@@ -818,27 +860,47 @@ class UserTab(QWidget):
         self.message_label.setText("Pending copied from Current.")
 
     def _load_form_defaults(self) -> None:
+        reply = QMessageBox.question(
+            self,
+            "Load defaults",
+            "Fill Pending with built-in catalog defaults?\n\n"
+            "APPLY after this will overwrite ALL 28 tuning SDOs on the drive "
+            "with those defaults (RAM only — not EEPROM).\n\n"
+            "Prefer READ FROM DRIVE unless you really want a factory-ish reset.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        self._allow_default_write = True
+        self._failed_keys[self._axis] = []
+        self._ok_keys[self._axis] = [p["key"] for p in PARAM_DEFS]
         defaults = default_axis_params()
-        self._syncing = True
-        for key, spin in self._pending_edits.items():
-            spin.setValue(defaults.get(key))
-        self._syncing = False
+        self._set_params_to_ui(defaults)
         self.message_label.setText(
-            "Pending loaded with built-in defaults (not applied). "
-            "Press APPLY to write, or REVERT to restore the last baseline."
+            "Pending loaded with built-in defaults. APPLY will write all 28 SDOs. "
+            "REVERT still uses the last successful READ baseline if present."
         )
 
     def _read_from_drive(self) -> None:
         self._set_busy(True)
         try:
-            params = read_axis_params(self._axis)
-            self._set_params_to_ui(params)
-            self._store_baseline(params)
+            params, ok_keys, failed_keys = read_axis_params(self._axis)
+            self._ingest_read(params, ok_keys, failed_keys)
             self._set_status(f"READ {self._axis}", "ok")
-            self.message_label.setText(
-                f"Live values from slave {AXES[self._axis]['slave']} "
-                f"loaded into Current/Pending and saved as REVERT baseline."
-            )
+            if failed_keys:
+                self.message_label.setText(
+                    f"Read slave {AXES[self._axis]['slave']}: "
+                    f"{len(ok_keys)}/{len(PARAM_DEFS)} ok. "
+                    f"APPLY will only write the {len(ok_keys)} successful keys "
+                    f"(skipped: {', '.join(failed_keys[:6])}"
+                    f"{'…' if len(failed_keys) > 6 else ''})."
+                )
+            else:
+                self.message_label.setText(
+                    f"Live values from slave {AXES[self._axis]['slave']} "
+                    f"loaded ({len(ok_keys)} SDOs). APPLY writes only these."
+                )
         except Exception as exc:
             LOG.exception("read_axis_params failed")
             self._set_status("ERROR", "error")
@@ -851,8 +913,27 @@ class UserTab(QWidget):
                 self._set_status(f"AXIS {self._axis}", "ok")
 
     def _apply_to_drive(self, params: AxisTuneParams = None) -> None:
+        keys = self._writable_keys()
+        if not keys:
+            QMessageBox.warning(
+                self,
+                "Apply blocked",
+                "No successfully-read parameters for this axis yet.\n\n"
+                "Press READ FROM DRIVE first so APPLY cannot write invented defaults.",
+            )
+            return
         if params is None:
             params = self._params_from_ui()
+        # Never write keys we don't have values for.
+        keys = [k for k in keys if k in params.values]
+        if not keys:
+            QMessageBox.warning(
+                self,
+                "Apply blocked",
+                "Nothing to write — Pending has no values for writable keys.",
+            )
+            return
+
         was_on = machine_is_on()
         cycle_note = (
             "Motors are ON — they will be disabled, parameters written, "
@@ -860,15 +941,22 @@ class UserTab(QWidget):
             if was_on
             else "Motors are already OFF — parameters will be written as-is."
         )
+        default_note = ""
+        if self._allow_default_write:
+            default_note = (
+                "\n\nWARNING: Pending came from LOAD DEFAULT — "
+                "this will push catalog defaults to the drive for all listed SDOs."
+            )
         reply = QMessageBox.question(
             self,
             "Apply changes",
             f"Apply tuning to axis {self._axis} "
             f"(slave {AXES[self._axis]['slave']})?\n\n"
+            f"Will write {len(keys)} SDO(s) only — unread keys are left alone.\n"
             f"{cycle_note}\n\n"
-            "C00/C01 SDOs often reject writes while the servo is enabled.\n"
-            "SDO changes are RAM-only until stored in the drive.\n"
-            "Ensure the machine is idle (no running program).",
+            "SDO changes are RAM-only until stored in the drive EEPROM.\n"
+            "Does not modify INI / HAL / ethercat-conf.xml on disk."
+            f"{default_note}",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -878,26 +966,27 @@ class UserTab(QWidget):
         self._set_busy(True)
         self._set_status("APPLYING", "busy")
         self.message_label.setText(
-            "Disabling motors / writing SDOs…"
-            if was_on
-            else "Writing SDOs…"
+            f"Writing {len(keys)} SDO(s)…"
+            + (" (motors cycling)" if was_on else "")
         )
         try:
-            result = apply_axis_params(self._axis, params, cycle_enable=True)
-            self._set_params_to_ui(params)
-            self._store_baseline(params)
+            result = apply_axis_params(
+                self._axis, params, cycle_enable=True, keys=keys
+            )
+            written = result.get("written_keys", keys)
+            # Refresh from drive so Current matches reality.
+            fresh, ok_keys, failed_keys = read_axis_params(self._axis)
+            self._ingest_read(fresh, ok_keys, failed_keys)
             self._set_status(f"APPLIED {self._axis}", "ok")
-            if result.get("cycled_enable"):
-                self.message_label.setText(
-                    f"Applied to slave {result['slave']}: "
-                    "motors disabled → SDOs written → motors re-enabled. "
-                    "Baseline updated."
+            self.message_label.setText(
+                f"Wrote {len(written)} SDO(s) to slave {result['slave']}"
+                + (
+                    "; motors cycled OFF→ON."
+                    if result.get("cycled_enable")
+                    else " (motors stayed off)."
                 )
-            else:
-                self.message_label.setText(
-                    f"Applied to slave {result['slave']} (motors stayed off). "
-                    "Baseline updated. Enable the machine when ready to test."
-                )
+                + " Re-read complete."
+            )
         except Exception as exc:
             LOG.exception("apply_axis_params failed")
             self._set_status("ERROR", "error")
@@ -911,7 +1000,7 @@ class UserTab(QWidget):
 
     def _revert_to_baseline(self) -> None:
         baseline = self._baseline.get(self._axis)
-        if baseline is None:
+        if baseline is None or not self._ok_keys.get(self._axis):
             QMessageBox.information(
                 self,
                 "Revert",
@@ -919,6 +1008,7 @@ class UserTab(QWidget):
                 "(or APPLY once to set a baseline).",
             )
             return
+        self._allow_default_write = False
         self._set_params_to_ui(baseline)
         self.message_label.setText(
             "Form restored to baseline — confirm APPLY to write it back to the drive."
@@ -959,16 +1049,38 @@ class UserTab(QWidget):
         if not name:
             QMessageBox.information(self, "Load preset", "Select a preset from the list.")
             return
+        if not self._ok_keys.get(self._axis):
+            QMessageBox.information(
+                self,
+                "Load preset",
+                "READ FROM DRIVE first so missing preset keys keep live drive values "
+                "instead of catalog defaults.",
+            )
+            return
         try:
             preset = load_preset(self._axis, name)
-            self._set_params_to_ui(preset.params)
+            # Overlay preset keys onto last live read — never invent the rest.
+            merged = self._live[self._axis].copy()
+            for key, value in preset.params.values.items():
+                if key in self._ok_keys[self._axis]:
+                    merged.set(key, value)
+            self._allow_default_write = False
+            self._set_params_to_ui(merged)
             self.preset_name_edit.setText(preset.name)
             self.preset_notes_edit.setPlainText(preset.notes)
-            self.message_label.setText(
-                f"Loaded preset {preset.name!r} for axis {self._axis}."
+            skipped = [
+                k for k in preset.params.values.keys()
+                if k not in self._ok_keys[self._axis]
+            ]
+            msg = (
+                f"Loaded preset {preset.name!r} for axis {self._axis} "
+                f"({len(preset.params.values)} keys overlaid on last READ)."
             )
+            if skipped:
+                msg += f" Skipped unread keys: {', '.join(skipped)}."
+            self.message_label.setText(msg)
             if apply:
-                self._apply_to_drive(preset.params)
+                self._apply_to_drive(merged)
         except Exception as exc:
             LOG.exception("load_preset failed")
             QMessageBox.warning(self, "Load failed", str(exc))
@@ -1003,16 +1115,23 @@ class UserTab(QWidget):
         if not self._did_initial_read:
             self._did_initial_read = True
             try:
-                params = read_axis_params(self._axis)
-                self._set_params_to_ui(params)
-                self._store_baseline(params)
-                self.message_label.setText(
-                    f"Auto-read slave {AXES[self._axis]['slave']} on tab open. "
-                    "Edit Pending → APPLY, or REVERT to undo."
-                )
+                params, ok_keys, failed_keys = read_axis_params(self._axis)
+                self._ingest_read(params, ok_keys, failed_keys)
+                if failed_keys:
+                    self.message_label.setText(
+                        f"Auto-read slave {AXES[self._axis]['slave']}: "
+                        f"{len(ok_keys)}/{len(PARAM_DEFS)} ok. "
+                        "APPLY only writes successful keys."
+                    )
+                else:
+                    self.message_label.setText(
+                        f"Auto-read slave {AXES[self._axis]['slave']} on tab open "
+                        f"({len(ok_keys)} SDOs). Edit Pending → APPLY."
+                    )
             except Exception as exc:
                 LOG.info("servo_tuner: initial read skipped: %s", exc)
                 self.message_label.setText(
                     "Could not auto-read drive (EtherCAT / sudo?). "
-                    "Press READ FROM DRIVE when ready. FERR plot still polls HAL."
+                    "Press READ FROM DRIVE when ready. FERR plot still polls HAL. "
+                    "APPLY is blocked until a successful READ."
                 )

@@ -584,16 +584,38 @@ class AxisTuneParams:
         out: Dict[str, Any] = {k: float(v) for k, v in self.values.items()}
         # Keep numeric C00.04 (0/1/2). Older presets may still store a bool;
         # from_dict / _coerce_values accept both.
-        out["manual_mode"] = float(self.values.get("manual_mode", 0.0))
-        out["manual_mode_bool"] = self.manual_mode
+        if "manual_mode" in self.values:
+            out["manual_mode"] = float(self.values.get("manual_mode", 0.0))
+            out["manual_mode_bool"] = self.manual_mode
         return out
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AxisTuneParams":
-        return cls(values=cls._coerce_values(data))
+    def from_dict(
+        cls, data: Dict[str, Any], *, fill_defaults: bool = True
+    ) -> "AxisTuneParams":
+        if fill_defaults:
+            return cls(values=cls._coerce_values(data))
+        values: Dict[str, float] = {}
+        for key, val in data.items():
+            if key in PARAM_BY_KEY:
+                if key == "manual_mode" and isinstance(val, bool):
+                    values[key] = 0.0 if val else 1.0
+                else:
+                    try:
+                        values[key] = float(val)
+                    except (TypeError, ValueError):
+                        continue
+        if "manual_mode" not in values and "manual_mode_bool" in data:
+            values["manual_mode"] = 0.0 if data["manual_mode_bool"] else 1.0
+        params = cls.__new__(cls)
+        params.values = values
+        return params
 
     def copy(self) -> "AxisTuneParams":
-        return AxisTuneParams(values=dict(self.values))
+        # Shallow copy without re-filling catalog defaults (preserves partial reads).
+        clone = AxisTuneParams.__new__(AxisTuneParams)
+        clone.values = dict(self.values)
+        return clone
 
     def following_error_counts(self, axis: str) -> int:
         return max(1, unit_to_counts(axis, self.following_error))
@@ -754,11 +776,17 @@ def read_drive_ferr(axis: str) -> Tuple[float, float]:
     return counts, scaled
 
 
-def read_axis_params(axis: str) -> AxisTuneParams:
-    """Upload catalog SDOs; soft-fail individual entries to defaults."""
+def read_axis_params(axis: str) -> Tuple["AxisTuneParams", List[str], List[str]]:
+    """Upload catalog SDOs.
+
+    Returns (params, ok_keys, failed_keys). Failed keys are omitted from
+    params.values so APPLY cannot accidentally write catalog defaults over
+    unread drive values.
+    """
     slave = AXES[axis]["slave"]
-    values = default_param_values()
-    errors: List[str] = []
+    values: Dict[str, float] = {}
+    ok_keys: List[str] = []
+    failed_keys: List[str] = []
     for defn in PARAM_DEFS:
         key = defn["key"]
         try:
@@ -768,17 +796,22 @@ def read_axis_params(axis: str) -> AxisTuneParams:
             else:
                 raw = ethercat_upload_u16(slave, index, sub)
             values[key] = _raw_to_display(defn, raw, axis)
+            ok_keys.append(key)
         except Exception as exc:
-            errors.append(f"{key}: {exc}")
-            values[key] = float(defn["default"])
-    if errors:
+            failed_keys.append(key)
+            LOG.warning("SDO read failed axis=%s key=%s: %s", axis, key, exc)
+    if failed_keys:
         LOG.warning(
-            "partial SDO read on axis %s (%d errors): %s",
+            "partial SDO read on axis %s (%d/%d ok): failed %s",
             axis,
-            len(errors),
-            "; ".join(errors[:5]),
+            len(ok_keys),
+            len(PARAM_DEFS),
+            ", ".join(failed_keys[:8]),
         )
-    return AxisTuneParams(values=values)
+    # Build without filling missing keys from catalog defaults.
+    params = AxisTuneParams.__new__(AxisTuneParams)
+    params.values = {k: float(v) for k, v in values.items()}
+    return params, ok_keys, failed_keys
 
 
 def _lcnc_stat_cmd():
@@ -828,11 +861,27 @@ def set_machine_enabled(enable: bool) -> None:
         raise RuntimeError(f"timed out waiting for machine {state}")
 
 
-def write_axis_sdos(axis: str, params: AxisTuneParams) -> None:
-    """Write drive SDOs from the param catalog. Call with motors disabled for C00/C01."""
+def write_axis_sdos(
+    axis: str,
+    params: AxisTuneParams,
+    keys: Optional[List[str]] = None,
+) -> List[str]:
+    """Write drive SDOs. Call with motors disabled for C00/C01.
+
+    If keys is set, only those catalog entries are written. Returns the keys
+    actually written. Never invents values — missing keys are skipped.
+    """
     slave = AXES[axis]["slave"]
-    for defn in PARAM_DEFS:
-        key = defn["key"]
+    if keys is None:
+        keys = [p["key"] for p in PARAM_DEFS]
+    written: List[str] = []
+    for key in keys:
+        defn = PARAM_BY_KEY.get(key)
+        if defn is None:
+            continue
+        if key not in params.values:
+            LOG.warning("skip write %s: no value in params", key)
+            continue
         value = params.get(key)
         raw = _display_to_raw(defn, value, axis)
         index, sub = defn["sdo"]
@@ -846,6 +895,8 @@ def write_axis_sdos(axis: str, params: AxisTuneParams) -> None:
                 hi = int(round(float(defn["max"]) / scale_f))
                 raw = max(lo, min(hi, raw))
             ethercat_download_u16(slave, index, sub, raw)
+        written.append(key)
+    return written
 
 
 def apply_axis_params(
@@ -853,6 +904,7 @@ def apply_axis_params(
     params: AxisTuneParams,
     *,
     cycle_enable: bool = True,
+    keys: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Apply tuning parameters to one axis.
@@ -861,7 +913,7 @@ def apply_axis_params(
     cycle_enable is True (default), this:
       1. notes whether the machine was ON
       2. turns machine OFF (disables amps) if needed
-      3. writes SDOs
+      3. writes SDOs (only ``keys`` if provided; skips keys missing from params)
       4. restores machine ON if it was ON before
 
     Returns a small status dict for the UI.
@@ -875,7 +927,7 @@ def apply_axis_params(
             # Brief settle so drives leave Operation Enabled before SDO writes.
             time.sleep(0.25)
 
-        write_axis_sdos(axis, params)
+        written = write_axis_sdos(axis, params, keys=keys)
 
         if cycle_enable and was_on:
             set_machine_enabled(True)
@@ -886,6 +938,7 @@ def apply_axis_params(
             "slave": AXES[axis]["slave"],
             "cycled_enable": bool(cycle_enable and was_on),
             "machine_on": machine_is_on() if cycle_enable else was_on,
+            "written_keys": written,
         }
     except Exception:
         # Best-effort restore if we disabled the machine for this apply.
@@ -900,21 +953,33 @@ def apply_axis_params(
 def format_params_summary(params: AxisTuneParams, axis: str = "X") -> str:
     """Short human summary of live / baseline values for the UI."""
     unit = axis_unit(axis)
-    notch = NOTCH_LABELS.get(params.adaptive_notch, str(params.adaptive_notch))
-    mode_raw = int(params.get("manual_mode"))
-    mode = {0: "manual", 1: "standard", 2: "positioning"}.get(
-        mode_raw, f"mode{mode_raw}"
-    )
-    return (
-        f"C00.05={int(params.get('stiffness_level'))}  "
-        f"C00.06={params.inertia_ratio_pct:.0f}%  "
-        f"C01.00={params.pos_gain_rad_s:.1f} rad/s  "
-        f"C01.01={params.speed_gain_hz:.1f} Hz  "
-        f"C01.02={params.integral_ms:.2f} ms  "
-        f"notch={notch}  "
-        f"6065={params.following_error:.3f} {unit}  "
-        f"({mode})"
-    )
+    if "adaptive_notch" in params.values:
+        notch = NOTCH_LABELS.get(params.adaptive_notch, str(params.adaptive_notch))
+    else:
+        notch = "?"
+    if "manual_mode" in params.values:
+        mode_raw = int(params.get("manual_mode"))
+        mode = {0: "manual", 1: "standard", 2: "positioning"}.get(
+            mode_raw, f"mode{mode_raw}"
+        )
+    else:
+        mode = "?"
+    bits = []
+    if "stiffness_level" in params.values:
+        bits.append(f"C00.05={int(params.get('stiffness_level'))}")
+    if "inertia_ratio_pct" in params.values:
+        bits.append(f"C00.06={params.inertia_ratio_pct:.0f}%")
+    if "pos_gain_rad_s" in params.values:
+        bits.append(f"C01.00={params.pos_gain_rad_s:.1f} rad/s")
+    if "speed_gain_hz" in params.values:
+        bits.append(f"C01.01={params.speed_gain_hz:.1f} Hz")
+    if "integral_ms" in params.values:
+        bits.append(f"C01.02={params.integral_ms:.2f} ms")
+    bits.append(f"notch={notch}")
+    if "following_error" in params.values:
+        bits.append(f"6065={params.following_error:.3f} {unit}")
+    bits.append(f"({mode})")
+    return "  ".join(bits)
 
 
 def preset_dir(axis: str) -> str:
@@ -951,7 +1016,17 @@ def save_preset(axis: str, name: str, params: AxisTuneParams, notes: str = "") -
 def load_preset(axis: str, name: str) -> AxisPreset:
     path = preset_path(axis, name)
     with open(path, "r", encoding="utf-8") as handle:
-        preset = AxisPreset.from_dict(json.load(handle))
+        data = json.load(handle)
+    # Do not fill missing preset keys with catalog defaults — APPLY must not
+    # invent values for keys the preset never stored.
+    params = AxisTuneParams.from_dict(data.get("params", {}), fill_defaults=False)
+    preset = AxisPreset(
+        name=data["name"],
+        axis=data["axis"],
+        created=data.get("created", _utc_now()),
+        notes=data.get("notes", ""),
+        params=params,
+    )
     if preset.axis != axis:
         raise ValueError(f"preset {name!r} is for axis {preset.axis}, not {axis}")
     return preset
