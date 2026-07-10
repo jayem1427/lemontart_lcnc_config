@@ -53,8 +53,8 @@ from a6_servo_tune import (  # noqa: E402
     AXES,
     AXIS_ORDER,
     FF_SOURCE_LABELS,
-    UI_PARAM_DEFS,
-    UI_PARAM_KEYS,
+    NOTCH_LABELS,
+    PARAM_DEFS,
     PARAM_BY_KEY,
     AxisTuneParams,
     apply_axis_params,
@@ -354,8 +354,9 @@ class UserTab(QWidget):
         col.addWidget(self._build_param_table_group(), stretch=1)
 
         self.message_label = QLabel(
-            "Drive FERR (60F4) plots live below. Edit inertia + feed-forward Pending → APPLY. "
-            "FF source 0 = off; set source non-zero to enable. "
+            "Drive FERR (60F4) plots live below. Edit Pending → APPLY. "
+            "Inertia (C00.06) is a manual % box — not auto-tune. "
+            "FF source 0 = off; set non-zero to enable feed-forward. "
             "REVERT restores the last READ/APPLY baseline. "
             "LinuxCNC joint.f-error / INI FERROR are untouched.",
             self,
@@ -440,20 +441,10 @@ class UserTab(QWidget):
         return group
 
     def _build_param_table_group(self) -> QGroupBox:
-        group = QGroupBox("INERTIA + FEED-FORWARD (Pending → APPLY)", self)
+        group = QGroupBox("PARAMETERS (Pending → APPLY)", self)
         group.setObjectName("grpParams")
         layout = QVBoxLayout(group)
         layout.setSpacing(6)
-
-        hint = QLabel(
-            "C00.06 inertia, plus C01.13–18 feed-forward. "
-            "Source is the enable: 0 = off, non-zero enables that FF path. "
-            "APPLY writes only these SDOs (other gains left alone).",
-            group,
-        )
-        hint.setObjectName("lblParamHint")
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
 
         table_actions = QHBoxLayout()
         copy_btn = QPushButton("COPY CURRENT → PENDING", group)
@@ -479,7 +470,7 @@ class UserTab(QWidget):
         header.setSectionResizeMode(COL_PENDING, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(COL_UNIT, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(COL_RANGE, QHeaderView.ResizeToContents)
-        self.param_table.setMinimumHeight(220)
+        self.param_table.setMinimumHeight(280)
 
         self._populate_param_table()
         layout.addWidget(self.param_table, stretch=1)
@@ -492,7 +483,7 @@ class UserTab(QWidget):
         self._row_keys.clear()
 
         last_group = None
-        for defn in UI_PARAM_DEFS:
+        for defn in PARAM_DEFS:
             group_name = defn["group"]
             if group_name != last_group:
                 self._add_group_header_row(group_name)
@@ -547,9 +538,21 @@ class UserTab(QWidget):
         spin.setValue(float(defn["default"]))
         spin.setAlignment(Qt.AlignRight)
         spin.setButtonSymbols(QDoubleSpinBox.UpDownArrows)
-        if key in ("speed_ff_source", "torque_ff_source"):
+        if key == "adaptive_notch":
             spin.setToolTip(
-                "\n".join(f"{k}: {v}" for k, v in sorted(FF_SOURCE_LABELS.items()))
+                "\n".join(f"{k}: {v}" for k, v in sorted(NOTCH_LABELS.items()))
+            )
+        elif key in ("speed_ff_source", "torque_ff_source"):
+            tip = "\n".join(
+                f"{k}: {v}" for k, v in sorted(FF_SOURCE_LABELS.items())
+            )
+            if defn.get("note"):
+                tip = f"{defn['note']}\n{tip}"
+            spin.setToolTip(tip)
+        elif key == "inertia_ratio_pct":
+            spin.setToolTip(
+                "Manual load inertia ratio (%). Enter measured/estimated value — "
+                "this is not the F30 inertia auto-tune."
             )
         self.param_table.setCellWidget(row, COL_PENDING, spin)
         self._pending_edits[key] = spin
@@ -776,6 +779,9 @@ class UserTab(QWidget):
     def _format_current(self, key: str, value: float) -> str:
         defn = PARAM_BY_KEY[key]
         decimals = int(defn.get("decimals", 1))
+        if key == "adaptive_notch":
+            label = NOTCH_LABELS.get(int(value), str(int(value)))
+            return f"{int(value)} ({label})"
         if key in ("speed_ff_source", "torque_ff_source"):
             label = FF_SOURCE_LABELS.get(int(value), str(int(value)))
             return f"{int(value)} ({label})"
@@ -788,13 +794,10 @@ class UserTab(QWidget):
         return f"{value:.{decimals}f}"
 
     def _params_from_ui(self) -> AxisTuneParams:
-        # Start from last live/baseline so non-UI catalog keys stay intact in presets.
-        base = self._live.get(self._axis) or self._baseline.get(self._axis)
-        values = dict(base.values) if base is not None else None
-        params = AxisTuneParams(values=values)
+        values = {}
         for key, spin in self._pending_edits.items():
-            params.set(key, float(spin.value()))
-        return params
+            values[key] = float(spin.value())
+        return AxisTuneParams(values=values)
 
     def _set_params_to_ui(self, params: AxisTuneParams) -> None:
         self._syncing = True
@@ -821,7 +824,7 @@ class UserTab(QWidget):
             spin.setValue(defaults.get(key))
         self._syncing = False
         self.message_label.setText(
-            "Pending loaded with built-in inertia/FF defaults (not applied). "
+            "Pending loaded with built-in defaults (not applied). "
             "Press APPLY to write, or REVERT to restore the last baseline."
         )
 
@@ -880,12 +883,7 @@ class UserTab(QWidget):
             else "Writing SDOs…"
         )
         try:
-            result = apply_axis_params(
-                self._axis,
-                params,
-                cycle_enable=True,
-                keys=UI_PARAM_KEYS,
-            )
+            result = apply_axis_params(self._axis, params, cycle_enable=True)
             self._set_params_to_ui(params)
             self._store_baseline(params)
             self._set_status(f"APPLIED {self._axis}", "ok")
