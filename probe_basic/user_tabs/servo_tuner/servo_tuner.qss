@@ -279,3 +279,55 @@ QScrollArea#paramScroll {
 QWidget#paramScrollBody {
     background: transparent;
 }
+
+QGroupBox#grpFerr {
+    min-height: 240px;
+}
+
+QLabel#lblFerrValue {
+    color: #8ae234;
+    font: 12pt "BebasKai";
+    letter-spacing: 0.5px;
+    padding-right: 16px;
+}
+
+QLabel#lblCurrentValue {
+    color: #8ae234;
+    font: 11pt "BebasKai";
+    padding-right: 6px;
+}
+
+QTableWidget#paramTable {
+    color: rgb(238, 238, 236);
+    background-color: #3a4042;
+    alternate-background-color: #363b3d;
+    border: 1px solid #6e7375;
+    border-radius: 5px;
+    gridline-color: #4a4f51;
+    font: 11pt "BebasKai";
+    outline: none;
+}
+
+QTableWidget#paramTable::item {
+    padding: 4px 6px;
+}
+
+QHeaderView::section {
+    background-color: #4a4f51;
+    color: white;
+    border: 1px solid #6e7375;
+    padding: 5px 6px;
+    font: 12pt "BebasKai";
+}
+
+QDoubleSpinBox#pendingSpin {
+    min-width: 100px;
+    max-width: 140px;
+}
+
+QWidget#ferrPlot {
+    background-color: #1e2122;
+    border: 1px solid #8a8484;
+    border-radius: 4px;
+    min-height: 160px;
+}

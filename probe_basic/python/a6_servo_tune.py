@@ -572,8 +572,10 @@ class AxisTuneParams:
 
     def to_dict(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {k: float(v) for k, v in self.values.items()}
-        # Preserve legacy bool for older preset readers / UI.
-        out["manual_mode"] = self.manual_mode
+        # Keep numeric C00.04 (0/1/2). Older presets may still store a bool;
+        # from_dict / _coerce_values accept both.
+        out["manual_mode"] = float(self.values.get("manual_mode", 0.0))
+        out["manual_mode_bool"] = self.manual_mode
         return out
 
     @classmethod

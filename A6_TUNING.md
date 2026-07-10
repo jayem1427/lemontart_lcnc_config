@@ -31,6 +31,8 @@ Then: **Servo Tuning** → READ → edit → APPLY; **Logging** → **DRIVE** �
 | Drive 60F4 PDO → `tune-drive-ferr.*` | Working — plot as **DRIVE** |
 | Torque / velocity telemetry | Working |
 | Servo Tuning GUI (read / apply / revert / presets) | Working |
+| Live drive FERR plot on Servo Tuning (pulses + mm/deg) | Working |
+| Full C00/C01 param table (rigidity, 1st/2nd gains, FF, advanced) | Working |
 | SDO `--type` on ethercat CLI | Fixed (`-t uint16` / `uint32`) |
 | Startup C00/C01 SDOs in `ethercat-conf.xml` | Present (RAM only) |
 | LinuxCNC `motor-pos-fb` | **Direct** — no lag compensation |
