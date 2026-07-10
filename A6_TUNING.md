@@ -22,7 +22,7 @@ ls probe_basic/user_tabs/   # expect: signal_monitor, servo_tuner, templates
 ./launch.sh
 ```
 
-Then: **Servo Tuning** → READ → edit → APPLY; **Logging** → **DRIVE** → run `nc_files/x_tuning.ngc`.
+Then: **Servo Tuning** → watch live **DRIVE FERR** (toggle **MM/DEG** vs **PULSES**) → READ → edit Pending → APPLY; optionally also **Logging** → **DRIVE** → run `nc_files/x_tuning.ngc`.
 
 ### What is done
 
