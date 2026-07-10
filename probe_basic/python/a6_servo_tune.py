@@ -114,6 +114,7 @@ PARAM_DEFS: List[Dict[str, Any]] = [
         "max": 12000,
         "default": 100,
         "decimals": 0,
+        "ui": True,
     },
     # --- 1st gains ---
     {
@@ -222,6 +223,7 @@ PARAM_DEFS: List[Dict[str, Any]] = [
         "decimals": 0,
     },
     # --- Feed-forward ---
+    # Source is the enable: 0 = off; 1/2/5 select the FF command path.
     {
         "key": "speed_ff_source",
         "label": "C01.13 speed FF source",
@@ -234,6 +236,8 @@ PARAM_DEFS: List[Dict[str, Any]] = [
         "max": 5,
         "default": 0,
         "decimals": 0,
+        "ui": True,
+        "note": "0=off (disabled). Set non-zero to enable speed FF (typical 1).",
     },
     {
         "key": "speed_ff_pct",
@@ -247,6 +251,7 @@ PARAM_DEFS: List[Dict[str, Any]] = [
         "max": 200.0,
         "default": 0.0,
         "decimals": 1,
+        "ui": True,
     },
     {
         "key": "speed_ff_filter_hz",
@@ -260,6 +265,7 @@ PARAM_DEFS: List[Dict[str, Any]] = [
         "max": 16000,
         "default": 318,
         "decimals": 0,
+        "ui": True,
     },
     {
         "key": "torque_ff_source",
@@ -273,6 +279,8 @@ PARAM_DEFS: List[Dict[str, Any]] = [
         "max": 5,
         "default": 0,
         "decimals": 0,
+        "ui": True,
+        "note": "0=off (disabled). Set non-zero to enable torque FF (typical 1).",
     },
     {
         "key": "torque_ff_pct",
@@ -286,6 +294,7 @@ PARAM_DEFS: List[Dict[str, Any]] = [
         "max": 200.0,
         "default": 0.0,
         "decimals": 1,
+        "ui": True,
     },
     {
         "key": "torque_ff_filter_hz",
@@ -299,6 +308,7 @@ PARAM_DEFS: List[Dict[str, Any]] = [
         "max": 16000,
         "default": 318,
         "decimals": 0,
+        "ui": True,
     },
     # --- Advanced ---
     {
@@ -448,6 +458,17 @@ PARAM_DEFS: List[Dict[str, Any]] = [
 ]
 
 PARAM_BY_KEY = {p["key"]: p for p in PARAM_DEFS}
+
+# Servo Tuning tab shows only these (inertia + feed-forward / enable).
+UI_PARAM_DEFS: List[Dict[str, Any]] = [p for p in PARAM_DEFS if p.get("ui")]
+UI_PARAM_KEYS: List[str] = [p["key"] for p in UI_PARAM_DEFS]
+
+FF_SOURCE_LABELS = {
+    0: "Off (disabled)",
+    1: "Internal command",
+    2: "External / reserved",
+    5: "Special / reserved",
+}
 
 
 def repo_root() -> str:
@@ -818,11 +839,21 @@ def set_machine_enabled(enable: bool) -> None:
         raise RuntimeError(f"timed out waiting for machine {state}")
 
 
-def write_axis_sdos(axis: str, params: AxisTuneParams) -> None:
-    """Write drive SDOs from the param catalog. Call with motors disabled for C00/C01."""
+def write_axis_sdos(
+    axis: str,
+    params: AxisTuneParams,
+    keys: Optional[List[str]] = None,
+) -> None:
+    """Write drive SDOs from the param catalog. Call with motors disabled for C00/C01.
+
+    If keys is set, only those catalog entries are written (partial apply).
+    """
     slave = AXES[axis]["slave"]
+    key_set = set(keys) if keys is not None else None
     for defn in PARAM_DEFS:
         key = defn["key"]
+        if key_set is not None and key not in key_set:
+            continue
         value = params.get(key)
         raw = _display_to_raw(defn, value, axis)
         index, sub = defn["sdo"]
@@ -843,6 +874,7 @@ def apply_axis_params(
     params: AxisTuneParams,
     *,
     cycle_enable: bool = True,
+    keys: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Apply tuning parameters to one axis.
@@ -853,6 +885,8 @@ def apply_axis_params(
       2. turns machine OFF (disables amps) if needed
       3. writes SDOs
       4. restores machine ON if it was ON before
+
+    If keys is set, only those parameters are written.
 
     Returns a small status dict for the UI.
     """
@@ -865,7 +899,7 @@ def apply_axis_params(
             # Brief settle so drives leave Operation Enabled before SDO writes.
             time.sleep(0.25)
 
-        write_axis_sdos(axis, params)
+        write_axis_sdos(axis, params, keys=keys)
 
         if cycle_enable and was_on:
             set_machine_enabled(True)
@@ -876,6 +910,7 @@ def apply_axis_params(
             "slave": AXES[axis]["slave"],
             "cycled_enable": bool(cycle_enable and was_on),
             "machine_on": machine_is_on() if cycle_enable else was_on,
+            "keys": list(keys) if keys is not None else [p["key"] for p in PARAM_DEFS],
         }
     except Exception:
         # Best-effort restore if we disabled the machine for this apply.
@@ -889,21 +924,14 @@ def apply_axis_params(
 
 def format_params_summary(params: AxisTuneParams, axis: str = "X") -> str:
     """Short human summary of live / baseline values for the UI."""
-    unit = axis_unit(axis)
-    notch = NOTCH_LABELS.get(params.adaptive_notch, str(params.adaptive_notch))
-    mode_raw = int(params.get("manual_mode"))
-    mode = {0: "manual", 1: "standard", 2: "positioning"}.get(
-        mode_raw, f"mode{mode_raw}"
-    )
+    spd_src = int(params.get("speed_ff_source"))
+    tq_src = int(params.get("torque_ff_source"))
     return (
-        f"C00.05={int(params.get('stiffness_level'))}  "
         f"C00.06={params.inertia_ratio_pct:.0f}%  "
-        f"C01.00={params.pos_gain_rad_s:.1f} rad/s  "
-        f"C01.01={params.speed_gain_hz:.1f} Hz  "
-        f"C01.02={params.integral_ms:.2f} ms  "
-        f"notch={notch}  "
-        f"6065={params.following_error:.3f} {unit}  "
-        f"({mode})"
+        f"spdFF src={spd_src} ({FF_SOURCE_LABELS.get(spd_src, '?')}) "
+        f"{params.get('speed_ff_pct'):.1f}% / {int(params.get('speed_ff_filter_hz'))} Hz  "
+        f"tqFF src={tq_src} ({FF_SOURCE_LABELS.get(tq_src, '?')}) "
+        f"{params.get('torque_ff_pct'):.1f}% / {int(params.get('torque_ff_filter_hz'))} Hz"
     )
 
 
