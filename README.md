@@ -44,7 +44,9 @@ Full staged path (sim → EtherCAT → Probe Basic → CAM): **[GETTING_STARTED.
 
 ## Signal logging (servo tuning)
 
-HAL telemetry, CSV logging, and a **Logging** tab in Probe Basic for following error, torque, and velocity on X/Y/Z/A. See **[SIGNAL_LOGGING.md](SIGNAL_LOGGING.md)** for the tab UI, HAL chain, drive SDO limits, tuning G-code, and test plan. **A6 loop tuning + Servo Tuning GUI (plot drive 60F4 separately):** **[A6_TUNING.md](A6_TUNING.md)** — **parked; see Status section to resume**.
+HAL telemetry, CSV logging, and a **Logging** tab in Probe Basic for following error, torque, and velocity on X/Y/Z/A. See **[SIGNAL_LOGGING.md](SIGNAL_LOGGING.md)** for the tab UI, HAL chain, drive SDO limits, tuning G-code, sample rate / Nyquist notes, and test plan.
+
+**A6 loop tuning + Servo Tuning GUI** (plot drive 60F4 separately): **[A6_TUNING.md](A6_TUNING.md)** — parked; see Status to resume. **Install on another machine:** **[INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md)**.
 
 Branch: `cursor/a6-tuning-ferror-comp-70f6` (extends signal-logging work).
 
@@ -80,7 +82,10 @@ Feed override runs to **250%** (`MAX_FEED_OVERRIDE = 2.5`); pendant WHB knob use
 
 ## Toolsetter (semi-auto tool length)
 
-TooTall18T [`tool_length_probe`](https://github.com/TooTall18T/tool_length_probe) + `M600` integration for manual collet tool changes with probing. See **[TOOLSETTER.md](TOOLSETTER.md)** for INI/HAL/macro details and Probe Basic button map.
+TooTall18T [`tool_length_probe`](https://github.com/TooTall18T/tool_length_probe) + `M600` integration for manual collet tool changes with probing.
+
+- **Install on another machine:** **[INSTALL_TOOL_CHANGE.md](INSTALL_TOOL_CHANGE.md)**
+- **Behavior / button map / Fusion:** **[TOOLSETTER.md](TOOLSETTER.md)**
 
 ### Touch probe vs toolsetter routing
 

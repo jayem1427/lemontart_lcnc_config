@@ -33,7 +33,28 @@ Open the **Logging** tab (`probe_basic/user_tabs/signal_monitor/`). The tab uses
 
 CSV logging always records **all** channels from `config/logging/signals.json`. Axis/signal toggles and Y scale affect the **plot only**.
 
-### Fixed legend
+### Sample rate and Nyquist
+
+This machine’s servo thread is **1 kHz** (`SERVO_PERIOD = 1000000` ns in `ethercat_mill.ini`). HAL pins such as `joint.*.f-error` and `tune-drive-ferr.*.out` only **update once per servo period**.
+
+**You do not need to sample at 2 kHz.**
+
+Nyquist says: to reconstruct a *continuous* signal that may contain energy up to frequency \(F\), sample faster than \(2F\). That applies to an analog front-end before digitization. Here the Logging tab is a **userspace poller** reading HAL pins that are already discrete-time at the servo rate:
+
+| Idea | Reality on this stack |
+|------|------------------------|
+| “2× servo = 2 kHz required” | **False** for HAL logging — pins do not change between servo cycles |
+| Useful log rate | ≤ servo rate (≤ ~1 kHz); duplicates if you poll faster than HAL updates |
+| Default in this repo | **100 Hz** (`config/logging/signals.json`); UI offers up to **500 Hz** |
+| When to raise rate | Fast ringing / short spikes you want more points on; still capped by servo updates and userspace load |
+
+For A6 loop tuning plots (DRIVE FERR, torque), **100–500 Hz** is usually enough to see overshoot and oscillation shape. Pushing toward 1 kHz only helps if the logger keeps up and you care about every servo sample — it does **not** unlock “hidden” content above 500 Hz that never appeared on the HAL pin.
+
+The Servo Tuning tab’s live FERR strip chart polls on its own timer (~20 Hz UI cadence) and is separate from Logging CSV rate.
+
+---
+
+## Workflow
 
 The legend panel on the right of the LOGGING box always shows all four axes for the current signal type:
 
@@ -177,6 +198,7 @@ Context columns in each CSV row: `line`, `feed`, `enabled`.
 | `config/logging/signals.json` | Channel definitions |
 | `custom.hal` | Torque/velocity/drive-ferr conversion → `tune-*` pins |
 | `A6_TUNING.md` | A6 SDO gain defaults + Servo Tuning GUI / revert |
+| `INSTALL_SERVO_TUNING.md` | How to install Servo Tuning + Logging on another machine |
 | `ethercat-conf.xml` | PDO 606C/6077/60F4 + SDO 6065/6066 + loop gains |
 | `nc_files/x_tuning.ngc` | Example axis tuning program |
 | `scripts/run_signal_logger.py` | Headless CLI logger (optional) |
