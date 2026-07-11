@@ -22,7 +22,17 @@ ls probe_basic/user_tabs/   # expect: signal_monitor, servo_tuner, templates
 ./launch.sh
 ```
 
-Then: **Servo Tuning** → **START PLOT** → toggle **MM** / **PULSES** → **READ** → edit Pending → **APPLY TO DRIVE** → run `nc_files/x_tuning.ngc` (or Z). Optional: **Logging** tab for multi-channel CSV.
+Then: **Servo Tuning** → **START PLOT** (or **TUNE TRIAL**) → toggle **MM** / **PULSES** → **READ** → edit Pending → **APPLY TO DRIVE** → run `nc_files/*_tuning.ngc`. Optional: **Logging** tab for multi-channel CSV.
+
+### Semi-auto tune trial (v0)
+
+Servo Tuning → **SEMI-AUTO TUNE TRIAL** strip:
+
+- **TUNE TRIAL** opens the frozen axis NGC, captures drive FERR (~100 Hz during the trial), writes `logs/tuning/<id>/`, copies plot + paste pack to clipboard
+- **LOAD SOFT BASELINE** / **COPY PASTE PACK** / optional **AUTO CYCLE START**
+- Docs: `SEMI_AUTO_TUNING.md`, `SERVO_TUNING_LLM.md`
+
+Does **not** auto-apply LLM suggestions. C01.38 gain switchover remains read-only on APPLY.
 
 ### What is done
 
@@ -56,11 +66,11 @@ These are operational, not “final tuned gains”:
 
 ### Open / next when you return
 
-1. Continue per-axis gain ladder with **START PLOT** + `*_tuning.ngc`; save presets when happy.
+1. Per-axis gain ladder with **TUNE TRIAL** + LLM (`SERVO_TUNING_LLM.md`); save presets when happy.
 2. Store good tunes to drive **EEPROM** (vendor tool / panel) so they survive power loss — LinuxCNC no longer pushes C00/C01 at bus claim.
 3. Optional: inertia ratio (C00.06) after a real load measurement.
 4. Optional: feedforward / carrier / system ID (Tier 2 — not started).
-
+5. If push-buzz persists, set gain switchover on the drive panel (C01.38 is read-only over SDO here).
 ### Related branches
 
 | Branch | Role |

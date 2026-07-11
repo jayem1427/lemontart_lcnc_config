@@ -1,8 +1,10 @@
+; Frozen semi-auto / manual tuning stimulus — do not edit mid-campaign.
+; Used by Servo Tuning → TUNE TRIAL (see SEMI_AUTO_TUNING.md).
 G21          ; Set units to mm
 G90          ; Absolute positioning
 G0 Z0        ; Start at zero
 
-#1 = 1      ; Number of oscillation cycles
+#1 = 10      ; Number of oscillation cycles
 o100 while [#1 gt 0]
   G1 Z15 F10000 ; Move to 15mm
   G4 P0.5       ; Dwell 0.5s

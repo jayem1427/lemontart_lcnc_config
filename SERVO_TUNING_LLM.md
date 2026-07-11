@@ -141,4 +141,6 @@ safe/soft baseline → same back-forth NGC → paste plot → your one change
 → apply → same NGC → paste again → repeat until good enough
 ```
 
+On this machine the operator uses Servo Tuning **TUNE TRIAL** to produce the plot + paste pack (`SEMI_AUTO_TUNING.md`).
+
 Optional human checks between trials: light **push/tap** for buzz; both directions.

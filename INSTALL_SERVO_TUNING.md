@@ -10,10 +10,11 @@ Probe Basic does **not** use pip plugins for UI. Custom tabs are **drop-in folde
 
 | Piece | Role |
 |-------|------|
-| **Servo Tuning** tab | Read/edit A6 C00/C01 (+ 6065/6066) over EtherCAT SDO; live 60F4 FERR plot |
+| **Servo Tuning** tab | Read/edit A6 C00/C01 (+ 6065/6066) over EtherCAT SDO; live 60F4 FERR plot; **Tune Trial** semi-auto |
 | **Logging** tab | CSV + live plots of FERR / DRIVE / TORQUE / VEL |
 | HAL `tune-*` pins | Scale drive PDOs (6077 / 606C / 60F4) for plots |
 | Presets | Per-axis JSON under `config/tuning/presets/` |
+| Semi-auto docs | `SEMI_AUTO_TUNING.md`, `SERVO_TUNING_LLM.md` |
 
 **Not a plugin package.** Copy files into the machine config tree and wire INI/HAL/XML.
 
@@ -36,11 +37,13 @@ From this repo into your machine config (paths relative to the config root, e.g.
 probe_basic/user_tabs/servo_tuner/          # Servo Tuning tab
 probe_basic/user_tabs/signal_monitor/       # Logging tab (optional but recommended)
 probe_basic/python/a6_servo_tune.py
+probe_basic/python/tune_trial.py            # Tune Trial / paste pack helpers
 probe_basic/python/hal_signal_logger.py
 probe_basic/python/signal_plot_widget.py
 config/tuning/presets/                      # or start empty and SAVE from the tab
 config/logging/signals.json
-nc_files/*_tuning.ngc                       # optional oscillation programs
+nc_files/*_tuning.ngc                       # frozen Tune Trial stimuli
+SEMI_AUTO_TUNING.md SERVO_TUNING.md SERVO_TUNING_LLM.md   # optional but recommended
 ```
 
 Remove leftover tab folders you do not want — Probe Basic loads **every** subfolder under `USER_TABS_PATH`:

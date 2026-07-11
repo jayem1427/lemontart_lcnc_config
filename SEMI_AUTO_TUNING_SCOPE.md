@@ -65,30 +65,30 @@ Optional tiny sidecar later: peak/RMS, fault bit — not required to start.
 
 ### WP1 — Trial button + plot → clipboard
 
-- [ ] “Tune Trial” control on Servo Tuning or Logging tab
-- [ ] Select axis → pick/run matching `*_tuning.ngc`
-- [ ] Ensure plotted signal is **DRIVE** ferror (60F4), consistent window
-- [ ] Export PNG (title burn-in: axis, trial #, key gains if easy)
-- [ ] `QClipboard.setImage` + fallback save under `logs/tuning/`
-- [ ] Optional: “Copy gains text” / copy a paste-pack string for the LLM
+- [x] “Tune Trial” control on Servo Tuning tab (`SEMI-AUTO TUNE TRIAL`)
+- [x] Select axis → open matching `*_tuning.ngc` (Cycle Start default; optional AUTO)
+- [x] Plotted signal is **DRIVE** ferror (60F4) on the Servo Tuning strip chart
+- [x] Export PNG (title burn-in: axis, trial id, gains tag, unit)
+- [x] Clipboard image + paste text; always save under `logs/tuning/`
+- [x] **COPY PASTE PACK** for text-only re-copy
 
 ### WP2 — Stimulus hygiene
 
-- [ ] Confirm/freeze per-axis NGC speeds & accels for tuning campaigns
-- [ ] Document “don’t change the move mid-campaign”
-- [ ] Both directions covered by the existing back-forth pattern
+- [x] Per-axis NGC documented + header comment “do not edit mid-campaign”
+- [x] Operator guide: `SEMI_AUTO_TUNING.md`
+- [x] Both directions covered by existing back-forth pattern
 
 ### WP3 — Safe baseline (light automation)
 
-- [ ] Load `soft` or known-safe preset before first LLM trial
-- [ ] Prefer **Fixed to 1st gain set** during early trials
-- [ ] Smoke check: no amp fault / enable stays happy on one move
+- [x] **LOAD SOFT BASELINE** → soft preset into Pending (Fixed 1st / manual only when writable)
+- [x] Soft baseline skips read-only C01.38 on this A6 build
+- [x] Preflight: ESTOP / machine ON / interpreter idle; trial aborts on disable/ESTOP
 - [ ] Inertia / rigidity still mostly manual unless already easy via SDO UI
 
 ### WP4 — LLM workflow polish (still human paste)
 
-- [ ] Short “Copy prompt” blurb that points at `SERVO_TUNING_LLM.md` rules
-- [ ] Operator checklist: paste plot, paste gains, note buzz y/n
+- [x] Paste pack points at `SERVO_TUNING_LLM.md`
+- [x] Operator notes field + checklist in `SEMI_AUTO_TUNING.md`
 - [ ] Keep playbook updated from real sessions (Z ferror, Y push-buzz, ring)
 
 ### WP5 — Later (not v0)
@@ -132,9 +132,14 @@ Optional tiny sidecar later: peak/RMS, fault bit — not required to start.
 
 ---
 
-## Open questions
+## Decisions (v0 shipped)
 
-- Run NGC fully from UI vs prompt Cycle Start for safety?
-- Wayland clipboard reliability vs always saving PNG to disk?
-- Live Servo Tuning plot vs Logging tab plot as the export source?
-- Should trial PNG include torque channel by default, or ferror-only?
+- **Cycle Start default**; optional **AUTO CYCLE START** with second confirm.
+- **Always save PNG/CSV/meta** under `logs/tuning/`; clipboard is best-effort.
+- **Servo Tuning live DRIVE FERR plot** is the export source (not Logging tab).
+- **Ferror-only** PNG for v0 (torque stays on Logging tab if needed).
+- During trial, capture runs at **10 ms** (not the live 1 ms plot rate) so a full NGC fits in the buffer.
+
+## Operator doc
+
+See **`SEMI_AUTO_TUNING.md`**.

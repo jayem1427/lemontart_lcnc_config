@@ -40,7 +40,11 @@ Probe Basic Setup & Tuning.md
 __pycache__/
 *.pyc
 
-# Signal logger output
+# Signal logger + tune-trial output
 logs/**/*.csv
 logs/**/*.summary.txt
+logs/tuning/**/*.png
+logs/tuning/**/*.txt
+logs/tuning/**/*.json
 !logs/**/.gitkeep
+!logs/tuning/.gitkeep

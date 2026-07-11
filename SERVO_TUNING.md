@@ -116,3 +116,10 @@ Only after 1st set is solid.
 ```
 
 **Rule of thumb:** raise tracking gains for ferror, but treat jagged ringing as a hard stop — back off and filter/notch instead of stacking more gain.
+
+---
+
+## Semi-auto (plot → LLM)
+
+On the machine: Servo Tuning → **TUNE TRIAL** (see `SEMI_AUTO_TUNING.md`).  
+Paste the plot into an LLM loaded with `SERVO_TUNING_LLM.md`, then APPLY suggested gains yourself.
