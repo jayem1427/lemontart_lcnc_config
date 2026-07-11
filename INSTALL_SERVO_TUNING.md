@@ -113,17 +113,20 @@ Wrong SCALE makes FERR mm/pulses and 6065 conversion wrong.
 1. Start LinuxCNC — no HAL `loadrt` errors.
 2. Probe Basic shows **SERVO TUNING** and **SIGNAL LOGGING** tabs.
 3. Servo Tuning → **READ FROM DRIVE** → Current column fills (not all `READ FAIL`).
-4. `halcmd getp tune-drive-ferr.0.out` changes when you jog (if PDO/HAL wired).
-5. Logging → **START LIVE** → plot updates; optional CSV under `logs/signals/`.
+4. Servo Tuning → **START PLOT** → jog or run a tuning NGC → FERR trace moves (no CSV from this tab).
+5. `halcmd getp tune-drive-ferr.0.out` changes when you jog (if PDO/HAL wired).
+6. Logging → **START LIVE** → plot updates; optional CSV under `logs/signals/`.
 
 ---
 
 ## Safety notes (APPLY)
 
 - APPLY writes **only SDOs that were successfully READ** (does not invent catalog defaults for failed reads).
-- SDO writes are **RAM** until you store them in the drive EEPROM.
+- Read-only SDOs on this A6 firmware (C01.10 speed FB filter, C01.38 gain switchover) are **skipped** — they no longer abort the whole APPLY batch.
+- SDO writes are **RAM** until you store them in the drive EEPROM (vendor tool).
 - Does **not** modify INI / HAL / XML on disk by itself.
-- Prefer READ → edit Pending → APPLY. Use **LOAD DEFAULT** only when you intentionally want catalog defaults.
+- Prefer READ → edit Pending → **APPLY TO DRIVE**. Use preset **LOAD** for known-good sets, then APPLY.
+- Do **not** put C00/C01 loop gains in `ethercat-conf.xml` `sdoConfig` — lcec re-downloads them on every bus claim and wipes bench tuning. Keep only mode/limits (6060/6065/6066) in XML if needed. See **[A6_TUNING.md](A6_TUNING.md)**.
 
 ---
 
@@ -133,4 +136,4 @@ This mill uses `SERVO_PERIOD = 1000000` ns → **1 kHz** servo thread. HAL pins 
 
 You do **not** need to log at 2 kHz for Nyquist. See **[Sample rate and Nyquist](SIGNAL_LOGGING.md#sample-rate-and-nyquist)** in SIGNAL_LOGGING.md.
 
-Default Logging rate here is **100 Hz** (UI allows up to 500 Hz). That is enough for most FERR / torque tuning plots; raising toward 1 kHz only helps if the userspace logger can keep up and you need every servo update.
+Default Logging rate here is **1000 Hz** (UI allows 25–1000 Hz) via in-process `hal.get_value`. Lower the rate if CSV size or userspace load is an issue.

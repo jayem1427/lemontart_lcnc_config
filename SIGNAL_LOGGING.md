@@ -29,7 +29,7 @@ Open the **Logging** tab (`probe_basic/user_tabs/signal_monitor/`). The tab uses
 | **AXIS** (X Y Z A) | Checkable toggles — multi-select which axes appear on the plot |
 | **SIGNAL** (FERR / DRIVE / TORQUE / VEL) | Exclusive — one signal family at a time on the plot |
 | **Y SCALE** | Auto, Symmetric, Fixed ±0.25 (mm ferr), Fixed ±60 (deg ferr), Fixed ±100% (torque) |
-| **RATE** | Sample rate: 25 / 50 / 100 / 200 / 500 Hz |
+| **RATE** | Sample rate: 25 / 50 / 100 / 200 / 500 / **1000** Hz |
 
 CSV logging always records **all** channels from `config/logging/signals.json`. Axis/signal toggles and Y scale affect the **plot only**.
 
@@ -45,12 +45,12 @@ Nyquist says: to reconstruct a *continuous* signal that may contain energy up to
 |------|------------------------|
 | “2× servo = 2 kHz required” | **False** for HAL logging — pins do not change between servo cycles |
 | Useful log rate | ≤ servo rate (≤ ~1 kHz); duplicates if you poll faster than HAL updates |
-| Default in this repo | **100 Hz** (`config/logging/signals.json`); UI offers up to **500 Hz** |
-| When to raise rate | Fast ringing / short spikes you want more points on; still capped by servo updates and userspace load |
+| Default in this repo | **1000 Hz** (`config/logging/signals.json`); UI offers up to **1000 Hz** |
+| When to lower rate | Reduce userspace load or shrink CSV size; still capped by servo updates |
 
-For A6 loop tuning plots (DRIVE FERR, torque), **100–500 Hz** is usually enough to see overshoot and oscillation shape. Pushing toward 1 kHz only helps if the logger keeps up and you care about every servo sample — it does **not** unlock “hidden” content above 500 Hz that never appeared on the HAL pin.
+For A6 loop tuning plots (DRIVE FERR, torque), **100–1000 Hz** is useful. At **1000 Hz** the logger aims for one sample per servo update via in-process `hal.get_value` (not slow `halcmd`). Polling faster than the servo thread only duplicates values — it does **not** unlock content that never appeared on the HAL pin.
 
-The Servo Tuning tab’s live FERR strip chart polls on its own timer (~20 Hz UI cadence) and is separate from Logging CSV rate.
+The Servo Tuning tab’s live FERR strip chart is separate (START PLOT / STOP PLOT, no CSV) and also targets ~1 kHz via `hal.get_value`.
 
 ---
 
