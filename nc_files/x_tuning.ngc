@@ -2,11 +2,11 @@ G21          ; Set units to mm
 G90          ; Absolute positioning
 G0 X0        ; Start at zero
 
-#1 = 10      ; Number of oscillation cycles
+#1 = 1      ; Number of oscillation cycles
 o100 while [#1 gt 0]
-  G1 X80 F1000 ; Move to 80mm at 1000mm/min
+  G1 X80 F30000 ; Move to 80mm at 1000mm/min
   G4 P0.5      ; Dwell 0.5s
-  G1 X0 F1000  ; Return to 0 at 1000mm/min
+  G1 X0 F30000  ; Return to 0 at 1000mm/min
   G4 P0.5      ; Dwell 0.5s
   #1 = [#1 - 1]
 o100 endwhile

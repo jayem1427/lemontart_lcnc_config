@@ -323,6 +323,9 @@ PARAM_DEFS: List[Dict[str, Any]] = [
         "max": 4,
         "default": 0,
         "decimals": 0,
+        # A6 rejects writes (SDO abort 0x06010002 read-only) — display only.
+        "writable": False,
+        "note": "Read-only on this drive firmware — shown for reference only.",
     },
     {
         "key": "speed_fb_lpf_hz",
@@ -388,6 +391,9 @@ PARAM_DEFS: List[Dict[str, Any]] = [
         "max": 8,
         "default": 0,
         "decimals": 0,
+        # A6 rejects writes (SDO abort 0x06010002 read-only) — display only.
+        "writable": False,
+        "note": "Read-only on this drive firmware — shown for reference only.",
     },
     {
         "key": "gain_sw_time_ms",
@@ -645,7 +651,10 @@ class AxisPreset:
             axis=data["axis"],
             created=data.get("created", _utc_now()),
             notes=data.get("notes", ""),
-            params=AxisTuneParams.from_dict(data.get("params", {})),
+            # Never invent catalog defaults for keys absent from the JSON.
+            params=AxisTuneParams.from_dict(
+                data.get("params", {}), fill_defaults=False
+            ),
         )
 
 
@@ -752,26 +761,88 @@ def ethercat_download_u32(
     )
 
 
+_hal_comp = None
+
+
+def _ensure_hal_component():
+    global _hal_comp
+    if _hal_comp is not None:
+        return _hal_comp if _hal_comp is not False else None
+    try:
+        import hal as linuxcnc_hal
+
+        name = "pb_a6_tune"
+        suffix = 0
+        while linuxcnc_hal.component_exists(f"{name}{suffix}" if suffix else name):
+            suffix += 1
+        comp_name = f"{name}{suffix}" if suffix else name
+        _hal_comp = linuxcnc_hal.component(comp_name)
+        _hal_comp.ready()
+        return _hal_comp
+    except Exception:
+        _hal_comp = False
+        return None
+
+
 def hal_getp(pin: str) -> float:
-    """Read a HAL pin via halcmd getp; NaN on failure."""
+    """Read a HAL pin via in-process API when possible; else halcmd."""
+    try:
+        import hal as linuxcnc_hal
+
+        if _ensure_hal_component() is not None:
+            val = linuxcnc_hal.get_value(pin)
+            if isinstance(val, bool):
+                return 1.0 if val else 0.0
+            return float(val)
+    except Exception:
+        pass
     try:
         output = subprocess.check_output(
             ["halcmd", "getp", pin],
             stderr=subprocess.DEVNULL,
             text=True,
         )
-        return float(output.strip())
+        text = output.strip()
+        if not text:
+            return float("nan")
+        if text in ("TRUE", "TRUE\n"):
+            return 1.0
+        if text in ("FALSE", "FALSE\n"):
+            return 0.0
+        if text.lower().startswith("0x"):
+            val = int(text, 16)
+            if val >= 0x80000000:
+                val -= 0x100000000
+            return float(val)
+        return float(text)
     except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
         return float("nan")
 
 
+def hal_getp_s32(pin: str) -> float:
+    """Read an s32 HAL pin as a signed integer (encoder counts / 60F4)."""
+    raw = hal_getp(pin)
+    if raw != raw:
+        return raw
+    val = int(round(raw))
+    # Guard against unsigned wrap if a tool printed s32 as u32.
+    if val >= 0x80000000:
+        val -= 0x100000000
+    return float(val)
+
+
 def read_drive_ferr(axis: str) -> Tuple[float, float]:
-    """Return (counts, mm_or_deg) for live 60F4 following error."""
-    counts = hal_getp(drive_ferr_counts_halpin(axis))
+    """Return (counts, mm_or_deg) for live 60F4 following error.
+
+    Pulses always come from the raw lcec ``ferr-fb`` s32 pin for that axis
+    slave — never from the scaled float path (which is mm/deg).
+    """
+    counts = hal_getp_s32(drive_ferr_counts_halpin(axis))
     scaled = hal_getp(drive_ferr_halpin(axis))
-    if scaled != scaled and counts == counts:
+    if counts == counts:
+        # Authoritative mm/deg from pulses ÷ joint SCALE.
         scaled = counts_to_unit(axis, counts)
-    if counts != counts and scaled == scaled:
+    elif scaled == scaled:
         counts = float(unit_to_counts(axis, scaled))
     return counts, scaled
 
@@ -861,42 +932,122 @@ def set_machine_enabled(enable: bool) -> None:
         raise RuntimeError(f"timed out waiting for machine {state}")
 
 
+def cia402_enable_pin(axis: str) -> str:
+    return f"cia402.{AXES[axis]['joint']}.enable"
+
+
+def wait_for_axis_disabled(axis: str, timeout_s: float = 5.0) -> bool:
+    """Wait until the axis amp enable is FALSE (safe for C00/C01 SDO writes)."""
+    pin = cia402_enable_pin(axis)
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        val = hal_getp(pin)
+        if val == val and val < 0.5:
+            # Extra settle after enable drops — A6 needs a beat before SDO accept.
+            time.sleep(0.15)
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def _sdo_download(defn: Dict[str, Any], slave: int, raw: int) -> None:
+    index, sub = defn["sdo"]
+    if defn["bits"] == 32:
+        ethercat_download_u32(slave, index, sub, raw)
+    else:
+        ethercat_download_u16(slave, index, sub, raw)
+
+
+def _sdo_upload(defn: Dict[str, Any], slave: int) -> int:
+    index, sub = defn["sdo"]
+    if defn["bits"] == 32:
+        return ethercat_upload_u32(slave, index, sub)
+    return ethercat_upload_u16(slave, index, sub)
+
+
 def write_axis_sdos(
     axis: str,
     params: AxisTuneParams,
     keys: Optional[List[str]] = None,
-) -> List[str]:
-    """Write drive SDOs. Call with motors disabled for C00/C01.
+    *,
+    retries: int = 3,
+) -> Dict[str, Any]:
+    """Write drive SDOs with per-key retry + verify.
 
-    If keys is set, only those catalog entries are written. Returns the keys
-    actually written. Never invents values — missing keys are skipped.
+    Never aborts the whole batch on one failure — RO / flaky keys are reported
+    in ``failed`` so the rest still apply. Skips catalog entries marked
+    ``writable: False``.
     """
     slave = AXES[axis]["slave"]
     if keys is None:
         keys = [p["key"] for p in PARAM_DEFS]
     written: List[str] = []
+    failed: List[Tuple[str, str]] = []
+    skipped: List[str] = []
+
     for key in keys:
         defn = PARAM_BY_KEY.get(key)
         if defn is None:
             continue
+        if defn.get("writable", True) is False:
+            skipped.append(key)
+            continue
         if key not in params.values:
             LOG.warning("skip write %s: no value in params", key)
+            skipped.append(key)
             continue
-        value = params.get(key)
+
+        value = float(params.values[key])
         raw = _display_to_raw(defn, value, axis)
-        index, sub = defn["sdo"]
-        if defn["bits"] == 32:
-            ethercat_download_u32(slave, index, sub, raw)
+        if defn["bits"] != 32 and defn["scale"] != "axis_unit":
+            scale_f = float(defn["scale"])
+            lo = int(round(float(defn["min"]) / scale_f))
+            hi = int(round(float(defn["max"]) / scale_f))
+            raw = max(lo, min(hi, raw))
+
+        last_err = ""
+        ok = False
+        for attempt in range(1, retries + 1):
+            try:
+                _sdo_download(defn, slave, raw)
+                time.sleep(0.02)
+                got = _sdo_upload(defn, slave)
+                if got == raw:
+                    ok = True
+                    break
+                last_err = f"verify mismatch wrote={raw} read={got}"
+                LOG.warning(
+                    "SDO verify fail axis=%s key=%s attempt=%d %s",
+                    axis,
+                    key,
+                    attempt,
+                    last_err,
+                )
+            except Exception as exc:
+                last_err = str(exc).strip() or repr(exc)
+                LOG.warning(
+                    "SDO write fail axis=%s key=%s attempt=%d: %s",
+                    axis,
+                    key,
+                    attempt,
+                    last_err,
+                )
+                # Read-only / not allowed — don't burn retries.
+                low = last_err.lower()
+                if "0x06010002" in low or "read-only" in low:
+                    break
+                time.sleep(0.05 * attempt)
+
+        if ok:
+            written.append(key)
         else:
-            scale = defn["scale"]
-            if scale != "axis_unit":
-                scale_f = float(scale)
-                lo = int(round(float(defn["min"]) / scale_f))
-                hi = int(round(float(defn["max"]) / scale_f))
-                raw = max(lo, min(hi, raw))
-            ethercat_download_u16(slave, index, sub, raw)
-        written.append(key)
-    return written
+            failed.append((key, last_err or "unknown error"))
+
+    return {
+        "written": written,
+        "failed": failed,
+        "skipped": skipped,
+    }
 
 
 def apply_axis_params(
@@ -909,14 +1060,11 @@ def apply_axis_params(
     """
     Apply tuning parameters to one axis.
 
-    Many A6 C00/C01 SDOs reject writes while the servo is enabled. When
-    cycle_enable is True (default), this:
+    Many A6 C00/C01 SDOs prefer the servo disabled. When cycle_enable is True:
       1. notes whether the machine was ON
-      2. turns machine OFF (disables amps) if needed
-      3. writes SDOs (only ``keys`` if provided; skips keys missing from params)
+      2. turns machine OFF if needed and waits for cia402 enable to drop
+      3. writes SDOs with per-key retry/verify (continues after individual fails)
       4. restores machine ON if it was ON before
-
-    Returns a small status dict for the UI.
     """
     was_on = machine_is_on() if cycle_enable else False
     disabled_here = False
@@ -924,10 +1072,15 @@ def apply_axis_params(
         if cycle_enable and was_on:
             set_machine_enabled(False)
             disabled_here = True
-            # Brief settle so drives leave Operation Enabled before SDO writes.
-            time.sleep(0.25)
+            if not wait_for_axis_disabled(axis, timeout_s=5.0):
+                LOG.warning(
+                    "axis %s enable still TRUE after machine OFF — writing anyway",
+                    axis,
+                )
+            else:
+                time.sleep(0.1)
 
-        written = write_axis_sdos(axis, params, keys=keys)
+        result = write_axis_sdos(axis, params, keys=keys)
 
         if cycle_enable and was_on:
             set_machine_enabled(True)
@@ -938,10 +1091,11 @@ def apply_axis_params(
             "slave": AXES[axis]["slave"],
             "cycled_enable": bool(cycle_enable and was_on),
             "machine_on": machine_is_on() if cycle_enable else was_on,
-            "written_keys": written,
+            "written_keys": result["written"],
+            "failed_keys": result["failed"],
+            "skipped_keys": result["skipped"],
         }
     except Exception:
-        # Best-effort restore if we disabled the machine for this apply.
         if disabled_here and was_on:
             try:
                 set_machine_enabled(True)

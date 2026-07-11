@@ -51,7 +51,7 @@ SIGNAL_Y_DEFAULTS = {
 }
 
 AXIS_ORDER = ("X", "Y", "Z", "A")
-RATE_HZ_OPTIONS = (25, 50, 100, 200, 500)
+RATE_HZ_OPTIONS = (25, 50, 100, 200, 500, 1000)
 
 
 class UserTab(QWidget):
@@ -82,7 +82,7 @@ class UserTab(QWidget):
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
-        self.timer.start(50)
+        self.timer.start(10)
 
     def _ensure_font(self):
         if os.path.exists(PB_FONT_PATH):

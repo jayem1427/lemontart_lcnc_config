@@ -154,7 +154,7 @@ so programs in the config `nc_files/` directory are found alongside the system p
 
 Edit `config/logging/signals.json` to add or remove HAL pins.
 
-Default channels (100 Hz):
+Default channels (1000 Hz):
 
 | Group | Pins | Units |
 |-------|------|-------|

@@ -1,7 +1,8 @@
 {
   "name": "signals",
   "description": "HAL telemetry — LinuxCNC f-error, drive 60F4 ferror, torque, velocity",
-  "rate_hz": 100,
+  "rate_hz": 1000,
+  "live_buffer": 5000,
   "log_subdir": "signals",
   "context": ["line", "feed", "enabled"],
   "channels": [

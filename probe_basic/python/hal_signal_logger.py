@@ -136,7 +136,44 @@ def load_preset(path: str) -> LoggerConfig:
     return load_config(path)
 
 
+_hal_comp = None
+
+
+def _ensure_hal_component():
+    """Userspace HAL component required before hal.get_value() works."""
+    global _hal_comp
+    if _hal_comp is not None:
+        return _hal_comp if _hal_comp is not False else None
+    try:
+        import hal as linuxcnc_hal
+
+        name = "pb_signal_logger"
+        # Avoid colliding if the tab is reloaded.
+        suffix = 0
+        while linuxcnc_hal.component_exists(f"{name}{suffix}" if suffix else name):
+            suffix += 1
+        comp_name = f"{name}{suffix}" if suffix else name
+        _hal_comp = linuxcnc_hal.component(comp_name)
+        _hal_comp.ready()
+        return _hal_comp
+    except Exception:
+        _hal_comp = False  # mark unavailable
+        return None
+
+
 def hal_getp(pin: str) -> float:
+    """Read a HAL pin. Prefer in-process hal.get_value (needed for 1 kHz)."""
+    try:
+        import hal as linuxcnc_hal
+
+        if _ensure_hal_component():
+            val = linuxcnc_hal.get_value(pin)
+            if isinstance(val, bool):
+                return 1.0 if val else 0.0
+            return float(val)
+    except Exception:
+        pass
+    # Fallback: slow halcmd (fine for idle UI, not for 1 kHz logging).
     try:
         output = subprocess.check_output(
             ["halcmd", "getp", pin],
@@ -144,7 +181,7 @@ def hal_getp(pin: str) -> float:
             text=True,
         )
         return float(output.strip())
-    except (subprocess.CalledProcessError, ValueError):
+    except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
         return float("nan")
 
 
@@ -249,13 +286,26 @@ class HalSignalLogger:
             return
 
         now = time.time()
-        if now - self._last_sample < (1.0 / self.rate_hz):
-            if self._auto_stop_on_program_end and not self._program_running():
-                self._end_session()
+        interval = 1.0 / max(self.rate_hz, 1.0)
+        if self._last_sample <= 0.0:
+            self._last_sample = now - interval
+
+        # Catch up when the UI timer is slower than rate_hz (needed for 1 kHz).
+        # Cap catch-up so a stall doesn't dump thousands of identical rows.
+        max_catchup = max(1, int(self.rate_hz * 0.05))  # ≤50 ms worth
+        samples = 0
+        while now - self._last_sample >= interval and samples < max_catchup:
+            self._last_sample += interval
+            self._sample(self._last_sample)
+            samples += 1
+
+        if samples == 0 and self._auto_stop_on_program_end and not self._program_running():
+            self._end_session()
             return
 
-        self._sample(now)
-        self._last_sample = now
+        if samples >= max_catchup and now - self._last_sample >= interval:
+            # Drop backlog after a long stall — keep timeline sane.
+            self._last_sample = now
 
         if self._auto_stop_on_program_end and not self._program_running():
             self._end_session()

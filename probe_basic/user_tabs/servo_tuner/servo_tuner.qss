@@ -88,8 +88,68 @@ QGroupBox::title {
     font: 13pt "BebasKai";
 }
 
+QFrame#presetsBar {
+    background-color: #363b3d;
+    border: 1px solid #8a8484;
+    border-radius: 6px;
+}
+
+QFrame#presetsBar QPushButton {
+    min-height: 26px;
+    padding: 2px 8px;
+    font: 11pt "BebasKai";
+}
+
+QFrame#presetsBar QLineEdit,
+QFrame#presetsBar QComboBox {
+    min-height: 26px;
+    font: 11pt "BebasKai";
+}
+
 QGroupBox#grpPresets {
-    min-width: 260px;
+    max-height: 110px;
+    padding-top: 14px;
+}
+
+QGroupBox#grpPresets QPushButton {
+    min-height: 26px;
+    padding: 2px 8px;
+    font: 11pt "BebasKai";
+}
+
+QGroupBox#grpPresets QLineEdit,
+QGroupBox#grpPresets QComboBox {
+    min-height: 26px;
+    font: 11pt "BebasKai";
+}
+
+QGroupBox#grpFerr {
+    min-height: 360px;
+}
+
+QPushButton#btnLog {
+    background: qlineargradient(
+        x1:0, y1:1, x2:0, y2:0,
+        stop:0 #3a3f9e, stop:0.5 #5555ee, stop:1 #9a9eff
+    );
+    border-color: #2222aa;
+    min-width: 100px;
+}
+
+QComboBox#presetCombo {
+    min-width: 120px;
+    max-width: 280px;
+}
+
+QWidget#ferrPlot {
+    background-color: #1e2122;
+    border: 1px solid #8a8484;
+    border-radius: 4px;
+    min-height: 300px;
+}
+
+QGroupBox#grpParams {
+    min-width: 420px;
 }
 
 QCheckBox {
@@ -280,10 +340,6 @@ QWidget#paramScrollBody {
     background: transparent;
 }
 
-QGroupBox#grpFerr {
-    min-height: 240px;
-}
-
 QLabel#lblFerrValue {
     color: #8ae234;
     font: 12pt "BebasKai";
@@ -323,11 +379,4 @@ QHeaderView::section {
 QDoubleSpinBox#pendingSpin {
     min-width: 100px;
     max-width: 140px;
-}
-
-QWidget#ferrPlot {
-    background-color: #1e2122;
-    border: 1px solid #8a8484;
-    border-radius: 4px;
-    min-height: 160px;
 }

@@ -17,6 +17,7 @@ from qtpy.QtGui import QColor, QFont, QFontDatabase, QPainter, QPen, QPalette
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
+    QComboBox,
     QDoubleSpinBox,
     QFrame,
     QGroupBox,
@@ -24,13 +25,11 @@ from qtpy.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QListWidget,
     QMessageBox,
     QPushButton,
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -59,6 +58,7 @@ from a6_servo_tune import (  # noqa: E402
     AxisTuneParams,
     apply_axis_params,
     axis_unit,
+    counts_to_unit,
     default_axis_params,
     delete_preset,
     format_params_summary,
@@ -66,6 +66,7 @@ from a6_servo_tune import (  # noqa: E402
     load_preset,
     machine_is_on,
     read_axis_params,
+    drive_ferr_counts_halpin,
     read_drive_ferr,
     save_preset,
     unit_to_counts,
@@ -76,7 +77,7 @@ try:
 except ImportError:  # pragma: no cover
     pg = None
 
-FERR_SAMPLE_MS = 50
+FERR_SAMPLE_MS = 1
 FERR_WINDOW_S = 5.0
 FERR_BUFFER = int(FERR_WINDOW_S * (1000.0 / FERR_SAMPLE_MS))
 PLOT_BG = "#1e2122"
@@ -97,7 +98,7 @@ class FerrPlotWidget(QWidget):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("ferrPlot")
-        self.setMinimumHeight(180)
+        self.setMinimumHeight(320)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._samples: Deque[float] = collections.deque(maxlen=FERR_BUFFER)
         self._unit_label = "mm"
@@ -111,15 +112,20 @@ class FerrPlotWidget(QWidget):
             self._painter_mode = False
             self.plot = pg.PlotWidget()
             self.plot.setBackground(PLOT_BG)
-            self.plot.showGrid(x=True, y=True, alpha=0.3)
+            self.plot.showGrid(x=True, y=True, alpha=0.35)
             for axis_name in ("left", "bottom"):
                 axis = self.plot.getAxis(axis_name)
                 axis.setPen(PLOT_FG)
                 axis.setTextPen(PLOT_FG)
-            self.plot.setLabel("bottom", "samples", color=PLOT_FG)
-            self.plot.setLabel("left", self._unit_label, color=PLOT_FG)
-            self.curve = self.plot.plot(pen=pg.mkPen(color=PLOT_LINE, width=2))
+                try:
+                    axis.setStyle(tickFont=QFont(PB_FONT, 11))
+                except Exception:
+                    pass
+            self.plot.setLabel("bottom", "time (s)", color=PLOT_FG, **{"font-size": "12pt"})
+            self.plot.setLabel("left", self._unit_label, color=PLOT_FG, **{"font-size": "12pt"})
+            self.curve = self.plot.plot(pen=pg.mkPen(color=PLOT_LINE, width=2.5))
             self.plot.addLine(y=0, pen=pg.mkPen(color=PLOT_ZERO, width=1, style=Qt.DashLine))
+            self.plot.setMinimumHeight(280)
             root.addWidget(self.plot)
         else:
             self._painter_mode = True
@@ -129,7 +135,12 @@ class FerrPlotWidget(QWidget):
     def set_unit_label(self, unit: str) -> None:
         self._unit_label = unit
         if self.plot is not None:
-            self.plot.setLabel("left", unit, color=PLOT_FG)
+            # Explicitly clear SI "units=" so pyqtgraph doesn't keep a stale "mm".
+            self.plot.setLabel("left", text=unit, units="", color=PLOT_FG)
+            axis = self.plot.getAxis("left")
+            axis.enableAutoSIPrefix(False)
+            axis.setLabel(text=unit, units="")
+            self.plot.setYRange(-1, 1, padding=0)  # reset until new samples arrive
 
     def clear(self) -> None:
         self._samples.clear()
@@ -145,12 +156,16 @@ class FerrPlotWidget(QWidget):
         self._waiting = False
         values = list(self._samples)
         if self.curve is not None:
-            self.curve.setData(list(range(len(values))), values)
+            dt = FERR_SAMPLE_MS / 1000.0
+            xs = [i * dt for i in range(len(values))]
+            self.curve.setData(xs, values)
             finite = [v for v in values if v == v]
             if finite:
                 peak = max(abs(min(finite)), abs(max(finite)), 1e-6)
-                pad = peak * 0.15
+                pad = max(peak * 0.15, 1e-4)
                 self.plot.setYRange(-peak - pad, peak + pad, padding=0)
+                if xs:
+                    self.plot.setXRange(xs[0], max(xs[-1], FERR_WINDOW_S * 0.25), padding=0)
         else:
             self.update()
 
@@ -228,8 +243,9 @@ class UserTab(QWidget):
         self._pending_edits: Dict[str, QDoubleSpinBox] = {}
         self._current_labels: Dict[str, QLabel] = {}
         self._row_keys: List[str] = []
-        # If True, next APPLY may write catalog defaults (LOAD DEFAULT path).
+        # If True, next APPLY may write catalog defaults (unused — DEFAULT removed).
         self._allow_default_write = False
+        self._logging_active = False  # live FERR plot only (no CSV / disk writes)
 
         self._build_ui()
         self._ferr_timer = QTimer(self)
@@ -261,31 +277,49 @@ class UserTab(QWidget):
         if root_layout is None:
             root_layout = QVBoxLayout(self)
             self.setLayout(root_layout)
-        root_layout.setSpacing(8)
+        root_layout.setSpacing(6)
 
         root_layout.addWidget(self._build_header(), stretch=0)
+        root_layout.addWidget(self._build_presets_bar(), stretch=0)
+        root_layout.addLayout(self._build_toolbar(), stretch=0)
 
         body = QHBoxLayout()
-        body.setSpacing(12)
-        body.addLayout(self._build_params_column(), stretch=3)
-        body.addWidget(self._build_presets_panel(), stretch=1)
+        body.setSpacing(10)
+        body.addWidget(self._build_ferr_group(), stretch=3)
+        body.addWidget(self._build_param_table_group(), stretch=2)
         root_layout.addLayout(body, stretch=1)
+
+        self.message_label = QLabel(
+            "READ loads drive SDOs into Pending. Edit Pending, then APPLY in the "
+            "parameters box to write the drive. START PLOT runs the live FERR trace "
+            "(nothing is written to disk).",
+            self,
+        )
+        self.message_label.setObjectName("lblMessage")
+        self.message_label.setWordWrap(True)
+        root_layout.addWidget(self.message_label, stretch=0)
 
         self.axis_buttons["X"].setChecked(True)
         self._refresh_preset_list()
         self._update_value_readouts()
+        self._sync_log_button()
 
     def _build_header(self) -> QFrame:
         header = QFrame(self)
         header.setObjectName("headerBar")
         header.setAttribute(Qt.WA_StyledBackground, True)
         layout = QHBoxLayout(header)
-        layout.setContentsMargins(14, 8, 14, 8)
+        layout.setContentsMargins(14, 6, 14, 6)
 
         title = QLabel("SERVO TUNING", header)
         title.setObjectName("lblTitle")
         layout.addWidget(title)
         layout.addStretch()
+
+        self.live_label = QLabel("Not read yet", header)
+        self.live_label.setObjectName("lblLiveValues")
+        self.live_label.setWordWrap(False)
+        layout.addWidget(self.live_label, stretch=1)
 
         self.status_label = QLabel("READY", header)
         self.status_label.setObjectName("lblStatus")
@@ -293,12 +327,50 @@ class UserTab(QWidget):
         layout.addWidget(self.status_label)
         return header
 
-    def _build_params_column(self) -> QVBoxLayout:
-        col = QVBoxLayout()
-        col.setSpacing(8)
+    def _build_presets_bar(self) -> QFrame:
+        """Single-line preset strip: pick file, load into Pending, or save Pending."""
+        bar = QFrame(self)
+        bar.setObjectName("presetsBar")
+        bar.setAttribute(Qt.WA_StyledBackground, True)
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(10, 4, 10, 4)
+        layout.setSpacing(6)
 
-        axis_row = QHBoxLayout()
-        axis_row.addWidget(self._caption("AXIS"))
+        layout.addWidget(self._caption("PRESET"))
+        self.preset_combo = QComboBox(bar)
+        self.preset_combo.setObjectName("presetCombo")
+        self.preset_combo.setMinimumWidth(160)
+        self.preset_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        layout.addWidget(self.preset_combo, stretch=1)
+
+        load_btn = QPushButton("LOAD", bar)
+        load_btn.setFocusPolicy(Qt.NoFocus)
+        load_btn.setToolTip("Load preset into Pending (does not write the drive).")
+        load_btn.clicked.connect(lambda: self._load_selected_preset(apply=False))
+        layout.addWidget(load_btn)
+
+        save_btn = QPushButton("SAVE", bar)
+        save_btn.setObjectName("btnPrimary")
+        save_btn.setFocusPolicy(Qt.NoFocus)
+        save_btn.setToolTip("Save current Pending values under the selected/typed name.")
+        save_btn.clicked.connect(self._save_preset)
+        layout.addWidget(save_btn)
+
+        self.preset_name_edit = QLineEdit(bar)
+        self.preset_name_edit.setPlaceholderText("save as name…")
+        self.preset_name_edit.setMaximumWidth(140)
+        layout.addWidget(self.preset_name_edit)
+
+        # Keep notes field for save/load API compatibility (hidden).
+        self.preset_notes_edit = QLineEdit(bar)
+        self.preset_notes_edit.hide()
+        return bar
+
+    def _build_toolbar(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setSpacing(6)
+
+        row.addWidget(self._caption("AXIS"))
         self.axis_group = QButtonGroup(self)
         self.axis_buttons = {}
         for axis in AXIS_ORDER:
@@ -312,73 +384,48 @@ class UserTab(QWidget):
                 lambda checked, ax=axis: self._on_axis_selected(ax, checked)
             )
             self.axis_buttons[axis] = btn
-            axis_row.addWidget(btn)
-        axis_row.addStretch()
-        col.addLayout(axis_row)
+            row.addWidget(btn)
 
-        action_row = QHBoxLayout()
-        self.read_button = QPushButton("READ FROM DRIVE", self)
+        row.addSpacing(8)
+
+        self.read_button = QPushButton("READ", self)
         self.read_button.setFocusPolicy(Qt.NoFocus)
         self.read_button.setToolTip(
-            "Upload live SDOs into the table and store them as the revert baseline."
+            "Read live SDOs from the selected axis into Current + Pending."
         )
         self.read_button.clicked.connect(self._read_from_drive)
-        action_row.addWidget(self.read_button)
+        row.addWidget(self.read_button)
 
-        self.apply_button = QPushButton("APPLY CHANGES", self)
-        self.apply_button.setObjectName("btnPrimary")
-        self.apply_button.setFocusPolicy(Qt.NoFocus)
-        self.apply_button.setToolTip(
-            "Disables motors, writes SDOs (C00/C01 need enable OFF), "
-            "then re-enables motors if they were on."
+        row.addSpacing(8)
+
+        self.log_button = QPushButton("START PLOT", self)
+        self.log_button.setObjectName("btnLog")
+        self.log_button.setFocusPolicy(Qt.NoFocus)
+        self.log_button.setCheckable(True)
+        self.log_button.setToolTip(
+            "Start/stop the live FERR plot (no CSV — nothing saved to disk)."
         )
-        self.apply_button.clicked.connect(self._apply_to_drive)
-        action_row.addWidget(self.apply_button)
+        self.log_button.clicked.connect(self._toggle_logging)
+        row.addWidget(self.log_button)
 
-        self.revert_button = QPushButton("REVERT", self)
-        self.revert_button.setFocusPolicy(Qt.NoFocus)
-        self.revert_button.setToolTip(
-            "Re-apply the last READ / APPLY baseline for this axis."
-        )
-        self.revert_button.clicked.connect(self._revert_to_baseline)
-        action_row.addWidget(self.revert_button)
+        self.log_status_label = QLabel("PLOT: idle", self)
+        self.log_status_label.setObjectName("lblParamHint")
+        row.addWidget(self.log_status_label)
 
-        self.defaults_button = QPushButton("LOAD DEFAULT", self)
-        self.defaults_button.setFocusPolicy(Qt.NoFocus)
-        self.defaults_button.setToolTip(
-            "Load built-in defaults into Pending (not applied until APPLY)."
-        )
-        self.defaults_button.clicked.connect(self._load_form_defaults)
-        action_row.addWidget(self.defaults_button)
-        action_row.addStretch()
-        col.addLayout(action_row)
-
-        col.addWidget(self._build_ferr_group())
-        col.addWidget(self._build_live_group())
-        col.addWidget(self._build_param_table_group(), stretch=1)
-
-        self.message_label = QLabel(
-            "Drive FERR (60F4) plots live below. READ first, then edit Pending → APPLY. "
-            "APPLY only writes SDOs that were successfully read (never invents defaults). "
-            "Inertia (C00.06) is a manual % box. FF source 0 = off. "
-            "LinuxCNC joint.f-error / INI FERROR are untouched.",
-            self,
-        )
-        self.message_label.setObjectName("lblMessage")
-        self.message_label.setWordWrap(True)
-        col.addWidget(self.message_label)
-        return col
+        row.addStretch()
+        return row
 
     def _build_ferr_group(self) -> QGroupBox:
         group = QGroupBox("DRIVE FERR (CiA 60F4)", self)
         group.setObjectName("grpFerr")
         layout = QVBoxLayout(group)
-        layout.setSpacing(6)
+        layout.setSpacing(4)
+        layout.setContentsMargins(8, 8, 8, 8)
 
         top = QHBoxLayout()
-        top.addWidget(self._caption("PLOT UNIT"))
+        top.addWidget(self._caption("PLOT"))
         self.ferr_unit_group = QButtonGroup(self)
-        self.btn_ferr_unit = QPushButton("MM / DEG", group)
+        self.btn_ferr_unit = QPushButton("MM", group)
         self.btn_ferr_unit.setObjectName("btnAxis")
         self.btn_ferr_unit.setCheckable(True)
         self.btn_ferr_unit.setChecked(True)
@@ -390,14 +437,15 @@ class UserTab(QWidget):
         self.ferr_unit_group.addButton(self.btn_ferr_unit)
         self.ferr_unit_group.addButton(self.btn_ferr_pulses)
         self.btn_ferr_unit.toggled.connect(self._on_ferr_unit_toggled)
+        self.btn_ferr_pulses.toggled.connect(self._on_ferr_unit_toggled)
         top.addWidget(self.btn_ferr_unit)
         top.addWidget(self.btn_ferr_pulses)
-        top.addStretch()
 
-        clear_btn = QPushButton("CLEAR PLOT", group)
+        clear_btn = QPushButton("CLEAR", group)
         clear_btn.setFocusPolicy(Qt.NoFocus)
         clear_btn.clicked.connect(self._clear_ferr_plot)
         top.addWidget(clear_btn)
+        top.addStretch()
         layout.addLayout(top)
 
         readouts = QHBoxLayout()
@@ -405,49 +453,35 @@ class UserTab(QWidget):
         self.ferr_pulses_label.setObjectName("lblFerrValue")
         self.ferr_unit_value_label = QLabel("MM: —", group)
         self.ferr_unit_value_label.setObjectName("lblFerrValue")
-        self.ferr_peak_label = QLabel("PEAK ABS: —", group)
+        self.ferr_peak_label = QLabel("PEAK: —", group)
         self.ferr_peak_label.setObjectName("lblFerrValue")
+        self.ferr_scale_label = QLabel("SCALE: —", group)
+        self.ferr_scale_label.setObjectName("lblParamHint")
         readouts.addWidget(self.ferr_pulses_label)
         readouts.addWidget(self.ferr_unit_value_label)
         readouts.addWidget(self.ferr_peak_label)
+        readouts.addWidget(self.ferr_scale_label)
         readouts.addStretch()
         layout.addLayout(readouts)
 
         self.ferr_plot = FerrPlotWidget(group)
         layout.addWidget(self.ferr_plot, stretch=1)
 
-        hint = QLabel(
-            "Both pulses and mm/deg are always shown. Toggle only changes the plot scale. "
-            "Source: lcec ferr-fb → tune-drive-ferr (not joint.f-error).",
+        self.baseline_label = QLabel(
+            "Plot is paused until START PLOT. Live pulses/mm still update above.",
             group,
         )
-        hint.setObjectName("lblParamHint")
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
-        return group
-
-    def _build_live_group(self) -> QGroupBox:
-        group = QGroupBox("CURRENT ON DRIVE", self)
-        group.setObjectName("grpLive")
-        layout = QVBoxLayout(group)
-        layout.setSpacing(4)
-
-        self.live_label = QLabel("Not read yet — press READ FROM DRIVE.", group)
-        self.live_label.setObjectName("lblLiveValues")
-        self.live_label.setWordWrap(True)
-        layout.addWidget(self.live_label)
-
-        self.baseline_label = QLabel("Baseline: none", group)
         self.baseline_label.setObjectName("lblParamHint")
         self.baseline_label.setWordWrap(True)
         layout.addWidget(self.baseline_label)
         return group
 
     def _build_param_table_group(self) -> QGroupBox:
-        group = QGroupBox("PARAMETERS (Pending → APPLY)", self)
+        group = QGroupBox("TUNING PARAMETERS", self)
         group.setObjectName("grpParams")
         layout = QVBoxLayout(group)
-        layout.setSpacing(6)
+        layout.setSpacing(4)
+        layout.setContentsMargins(8, 8, 8, 8)
 
         table_actions = QHBoxLayout()
         copy_btn = QPushButton("COPY CURRENT → PENDING", group)
@@ -455,6 +489,16 @@ class UserTab(QWidget):
         copy_btn.clicked.connect(self._copy_current_to_pending)
         table_actions.addWidget(copy_btn)
         table_actions.addStretch()
+
+        self.apply_button = QPushButton("APPLY TO DRIVE", group)
+        self.apply_button.setObjectName("btnPrimary")
+        self.apply_button.setFocusPolicy(Qt.NoFocus)
+        self.apply_button.setToolTip(
+            "Write Pending values to the selected axis drive "
+            "(motors cycle OFF→ON if needed). Only keys from the last READ."
+        )
+        self.apply_button.clicked.connect(lambda: self._apply_to_drive())
+        table_actions.addWidget(self.apply_button)
         layout.addLayout(table_actions)
 
         self.param_table = QTableWidget(0, 5, group)
@@ -467,13 +511,15 @@ class UserTab(QWidget):
         self.param_table.setFocusPolicy(Qt.NoFocus)
         self.param_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.param_table.setAlternatingRowColors(True)
+        self.param_table.setWordWrap(False)
         header = self.param_table.horizontalHeader()
         header.setSectionResizeMode(COL_PARAM, QHeaderView.Stretch)
         header.setSectionResizeMode(COL_CURRENT, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(COL_PENDING, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(COL_PENDING, QHeaderView.Fixed)
+        header.resizeSection(COL_PENDING, 110)
         header.setSectionResizeMode(COL_UNIT, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(COL_RANGE, QHeaderView.ResizeToContents)
-        self.param_table.setMinimumHeight(280)
+        self.param_table.verticalHeader().setDefaultSectionSize(28)
 
         self._populate_param_table()
         layout.addWidget(self.param_table, stretch=1)
@@ -559,6 +605,14 @@ class UserTab(QWidget):
             )
         self.param_table.setCellWidget(row, COL_PENDING, spin)
         self._pending_edits[key] = spin
+        if defn.get("writable", True) is False:
+            spin.setEnabled(False)
+            spin.setToolTip(
+                defn.get("note")
+                or "Read-only on this drive — not written by APPLY."
+            )
+        if defn.get("scale") == "axis_unit":
+            spin.setSuffix(f" {axis_unit(self._axis)}")
 
         unit_text = self._unit_text_for_defn(defn)
         unit_item = QTableWidgetItem(unit_text)
@@ -579,68 +633,6 @@ class UserTab(QWidget):
             return axis_unit(self._axis)
         return unit
 
-    def _build_presets_panel(self) -> QGroupBox:
-        group = QGroupBox("AXIS PRESETS", self)
-        group.setObjectName("grpPresets")
-        layout = QVBoxLayout(group)
-        layout.setSpacing(8)
-
-        hint = QLabel(
-            "Saved under config/tuning/presets/<axis>/*.json — "
-            "LOAD fills Pending; LOAD + APPLY writes the drive.",
-            group,
-        )
-        hint.setObjectName("lblParamHint")
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
-
-        self.preset_list = QListWidget(group)
-        self.preset_list.itemDoubleClicked.connect(
-            lambda _item: self._load_selected_preset(apply=False)
-        )
-        layout.addWidget(self.preset_list, stretch=1)
-
-        self.preset_name_edit = QLineEdit(group)
-        self.preset_name_edit.setPlaceholderText("Preset name")
-        layout.addWidget(self.preset_name_edit)
-
-        self.preset_notes_edit = QTextEdit(group)
-        self.preset_notes_edit.setPlaceholderText("Notes (optional)")
-        self.preset_notes_edit.setMaximumHeight(72)
-        layout.addWidget(self.preset_notes_edit)
-
-        btn_row = QHBoxLayout()
-        save_btn = QPushButton("SAVE", group)
-        save_btn.setObjectName("btnPrimary")
-        save_btn.setFocusPolicy(Qt.NoFocus)
-        save_btn.clicked.connect(self._save_preset)
-        btn_row.addWidget(save_btn)
-
-        load_btn = QPushButton("LOAD", group)
-        load_btn.setFocusPolicy(Qt.NoFocus)
-        load_btn.clicked.connect(lambda: self._load_selected_preset(apply=False))
-        btn_row.addWidget(load_btn)
-        layout.addLayout(btn_row)
-
-        btn_row2 = QHBoxLayout()
-        load_apply_btn = QPushButton("LOAD + APPLY", group)
-        load_apply_btn.setFocusPolicy(Qt.NoFocus)
-        load_apply_btn.clicked.connect(lambda: self._load_selected_preset(apply=True))
-        btn_row2.addWidget(load_apply_btn)
-
-        delete_btn = QPushButton("DELETE", group)
-        delete_btn.setObjectName("btnDanger")
-        delete_btn.setFocusPolicy(Qt.NoFocus)
-        delete_btn.clicked.connect(self._delete_preset)
-        btn_row2.addWidget(delete_btn)
-        layout.addLayout(btn_row2)
-
-        refresh_btn = QPushButton("REFRESH LIST", group)
-        refresh_btn.setFocusPolicy(Qt.NoFocus)
-        refresh_btn.clicked.connect(self._refresh_preset_list)
-        layout.addWidget(refresh_btn)
-        return group
-
     def _caption(self, text: str) -> QLabel:
         label = QLabel(text, self)
         label.setObjectName("lblCaption")
@@ -656,8 +648,7 @@ class UserTab(QWidget):
         for widget in (
             self.read_button,
             self.apply_button,
-            self.revert_button,
-            self.defaults_button,
+            self.log_button,
             *self.axis_buttons.values(),
         ):
             widget.setEnabled(not busy)
@@ -667,20 +658,18 @@ class UserTab(QWidget):
     def _update_value_readouts(self) -> None:
         live = self._live.get(self._axis)
         if live is None:
-            self.live_label.setText("Not read yet — press READ FROM DRIVE.")
+            self.live_label.setText("Not read yet — press READ")
         else:
             self.live_label.setText(format_params_summary(live, self._axis))
 
-        baseline = self._baseline.get(self._axis)
-        if baseline is None:
-            self.baseline_label.setText("Baseline: none (READ or APPLY to set)")
-            self.revert_button.setEnabled(False)
+        if self._logging_active:
+            self.baseline_label.setText(
+                "Plot ON — live FERR trace. Press STOP PLOT to freeze."
+            )
         else:
             self.baseline_label.setText(
-                "Baseline (REVERT target): "
-                + format_params_summary(baseline, self._axis)
+                "Plot paused until START PLOT. Live pulses/mm still update above."
             )
-            self.revert_button.setEnabled(True)
 
     def _store_baseline(self, params: AxisTuneParams) -> None:
         self._baseline[self._axis] = params.copy()
@@ -702,8 +691,15 @@ class UserTab(QWidget):
     def _writable_keys(self) -> List[str]:
         """Keys APPLY is allowed to write for the current axis."""
         if self._allow_default_write:
-            return [p["key"] for p in PARAM_DEFS]
-        return list(self._ok_keys.get(self._axis, []))
+            keys = [p["key"] for p in PARAM_DEFS]
+        else:
+            keys = list(self._ok_keys.get(self._axis, []))
+        # Never attempt drive-rejected read-only SDOs (they abort mid-batch).
+        return [
+            k
+            for k in keys
+            if PARAM_BY_KEY.get(k, {}).get("writable", True) is not False
+        ]
 
     def _on_axis_selected(self, axis: str, checked: bool) -> None:
         if self._syncing or not checked:
@@ -719,12 +715,14 @@ class UserTab(QWidget):
         self._set_status(f"AXIS {axis}", "ok")
 
     def _on_ferr_unit_toggled(self, checked: bool) -> None:
+        # QButtonGroup fires toggled(False) on the button that was deselected
+        # first — only handle the newly checked button.
         if not checked:
             return
-        if self.btn_ferr_unit.isChecked():
-            self._ferr_unit_mode = "unit"
-        else:
+        if self.btn_ferr_pulses.isChecked():
             self._ferr_unit_mode = "pulses"
+        else:
+            self._ferr_unit_mode = "unit"
         self._clear_ferr_plot()
         self._update_ferr_plot_label()
 
@@ -743,50 +741,105 @@ class UserTab(QWidget):
         self._ferr_peak_pulses = 0.0
         self._ferr_peak_unit = 0.0
         self.ferr_plot.clear()
-        self.ferr_peak_label.setText("PEAK ABS: —")
+        self.ferr_peak_label.setText("PEAK: —")
+
+    def _scaled_ferr_from_counts(self, counts: float) -> float:
+        """Always convert raw 60F4 counts → mm/deg via joint SCALE."""
+        if counts != counts:
+            return float("nan")
+        return counts_to_unit(self._axis, counts)
 
     def _poll_ferr(self) -> None:
         if not self.isVisible():
             return
         try:
-            counts, scaled = read_drive_ferr(self._axis)
+            counts, scaled_hal = read_drive_ferr(self._axis)
         except Exception:
             return
 
         unit = axis_unit(self._axis)
+        scale = float(AXES[self._axis]["scale"])
+        pin = drive_ferr_counts_halpin(self._axis)
+        # Prefer counts→unit so plot/readouts match joint SCALE even if HAL
+        # scaled pin is missing or misconfigured.
         if counts == counts:
-            self.ferr_pulses_label.setText(f"PULSES: {counts:.0f}")
-            self._ferr_peak_pulses = max(self._ferr_peak_pulses, abs(counts))
+            scaled = self._scaled_ferr_from_counts(counts)
+        else:
+            scaled = scaled_hal
+
+        self.ferr_scale_label.setText(
+            f"{pin}  SCALE={scale:g}/{unit}"
+        )
+
+        if counts == counts:
+            # Integer encoder counts — never show float leftovers.
+            self.ferr_pulses_label.setText(f"PULSES: {int(round(counts))}")
+            if self._logging_active:
+                self._ferr_peak_pulses = max(self._ferr_peak_pulses, abs(counts))
         else:
             self.ferr_pulses_label.setText("PULSES: —")
 
         if scaled == scaled:
             self.ferr_unit_value_label.setText(f"{unit.upper()}: {scaled:.4f}")
-            self._ferr_peak_unit = max(self._ferr_peak_unit, abs(scaled))
+            if self._logging_active:
+                self._ferr_peak_unit = max(self._ferr_peak_unit, abs(scaled))
         else:
             self.ferr_unit_value_label.setText(f"{unit.upper()}: —")
 
         if self._ferr_unit_mode == "pulses":
             plot_val = counts
             peak_txt = (
-                f"PEAK ABS: {self._ferr_peak_pulses:.0f} p / "
+                f"PEAK: {self._ferr_peak_pulses:.0f} p / "
                 f"{self._ferr_peak_unit:.4f} {unit}"
                 if self._ferr_peak_pulses or self._ferr_peak_unit
-                else "PEAK ABS: —"
+                else "PEAK: —"
             )
         else:
             plot_val = scaled
             peak_txt = (
-                f"PEAK ABS: {self._ferr_peak_unit:.4f} {unit} / "
+                f"PEAK: {self._ferr_peak_unit:.4f} {unit} / "
                 f"{self._ferr_peak_pulses:.0f} p"
                 if self._ferr_peak_pulses or self._ferr_peak_unit
-                else "PEAK ABS: —"
+                else "PEAK: —"
             )
         self.ferr_peak_label.setText(peak_txt)
-        if plot_val == plot_val:
+        # Plot only while START PLOT is active — nothing written to disk.
+        if self._logging_active and plot_val == plot_val:
             self.ferr_plot.push(plot_val)
 
+    def _toggle_logging(self) -> None:
+        """Start/stop live FERR plot only — no CSV, nothing written to disk."""
+        want_on = self.log_button.isChecked()
+        if want_on:
+            self._clear_ferr_plot()
+            self._logging_active = True
+            self.message_label.setText("Plot ON — live FERR trace (not saved).")
+        else:
+            self._logging_active = False
+            self.message_label.setText("Plot stopped / frozen.")
+        self._update_value_readouts()
+        self._sync_log_button()
+
+    def _sync_log_button(self) -> None:
+        if not hasattr(self, "log_button"):
+            return
+        active = bool(self._logging_active)
+        self.log_button.blockSignals(True)
+        self.log_button.setChecked(active)
+        self.log_button.blockSignals(False)
+        if active:
+            self.log_button.setText("STOP PLOT")
+            self.log_button.setObjectName("btnDanger")
+            self.log_status_label.setText("PLOT: live")
+        else:
+            self.log_button.setText("START PLOT")
+            self.log_button.setObjectName("btnLog")
+            self.log_status_label.setText("PLOT: idle")
+        self.log_button.style().unpolish(self.log_button)
+        self.log_button.style().polish(self.log_button)
+
     def _refresh_unit_columns(self) -> None:
+        unit = axis_unit(self._axis)
         for row, key in enumerate(self._row_keys):
             if not key:
                 continue
@@ -796,10 +849,20 @@ class UserTab(QWidget):
             item = self.param_table.item(row, COL_UNIT)
             if item is not None:
                 item.setText(self._unit_text_for_defn(defn))
+            spin = self._pending_edits.get(key)
+            if spin is not None and defn.get("scale") == "axis_unit":
+                spin.setSuffix(f" {unit}")
+                spin.setToolTip(
+                    f"Drive 6065 window in {unit} "
+                    f"(written as encoder counts via SCALE={AXES[self._axis]['scale']:g})."
+                )
+            elif spin is not None:
+                spin.setSuffix("")
 
     def _format_current(self, key: str, value: float) -> str:
         defn = PARAM_BY_KEY[key]
         decimals = int(defn.get("decimals", 1))
+        unit = self._unit_text_for_defn(defn)
         if key == "adaptive_notch":
             label = NOTCH_LABELS.get(int(value), str(int(value)))
             return f"{int(value)} ({label})"
@@ -807,12 +870,13 @@ class UserTab(QWidget):
             label = FF_SOURCE_LABELS.get(int(value), str(int(value)))
             return f"{int(value)} ({label})"
         if key == "following_error":
-            unit = axis_unit(self._axis)
             counts = unit_to_counts(self._axis, value)
-            return f"{value:.{decimals}f} {unit} / {counts} p"
+            return f"{value:.{decimals}f} {unit} ({counts} p)"
         if decimals == 0:
-            return f"{int(round(value))}"
-        return f"{value:.{decimals}f}"
+            text = f"{int(round(value))}"
+        else:
+            text = f"{value:.{decimals}f}"
+        return f"{text} {unit}".rstrip() if unit else text
 
     def _params_from_ui(self) -> AxisTuneParams:
         # Only include keys we are allowed to write — never pad with catalog defaults.
@@ -831,15 +895,22 @@ class UserTab(QWidget):
         failed = set(self._failed_keys.get(self._axis, []))
         ok = set(self._ok_keys.get(self._axis, []))
         for key, spin in self._pending_edits.items():
+            defn = PARAM_BY_KEY.get(key, {})
+            readonly = defn.get("writable", True) is False
             if key in params.values:
                 spin.setValue(params.get(key))
-                spin.setEnabled(True)
+                spin.setEnabled(not readonly)
             elif self._allow_default_write and key in PARAM_BY_KEY:
                 spin.setValue(float(PARAM_BY_KEY[key]["default"]))
-                spin.setEnabled(True)
+                spin.setEnabled(not readonly)
             else:
                 # Keep pending editable only after a successful read of that key.
-                spin.setEnabled(key in ok or self._allow_default_write)
+                spin.setEnabled(
+                    (not readonly)
+                    and (key in ok or self._allow_default_write)
+                )
+            if readonly:
+                spin.setEnabled(False)
         for key, label in self._current_labels.items():
             if key in failed:
                 label.setText("READ FAIL")
@@ -913,6 +984,9 @@ class UserTab(QWidget):
                 self._set_status(f"AXIS {self._axis}", "ok")
 
     def _apply_to_drive(self, params: AxisTuneParams = None) -> None:
+        # Qt clicked(bool) must never bind to this arg — guard anyway.
+        if not isinstance(params, AxisTuneParams):
+            params = None
         keys = self._writable_keys()
         if not keys:
             QMessageBox.warning(
@@ -941,6 +1015,19 @@ class UserTab(QWidget):
             if was_on
             else "Motors are already OFF — parameters will be written as-is."
         )
+        # Show exactly what will be written so catalog defaults can't sneak in unseen.
+        preview_lines = []
+        for key in keys[:12]:
+            defn = PARAM_BY_KEY[key]
+            val = float(params.values[key])
+            unit = defn.get("unit", "")
+            if unit == "mm|deg":
+                unit = axis_unit(self._axis)
+            preview_lines.append(f"  {defn['label']}: {val:g} {unit}".rstrip())
+        if len(keys) > 12:
+            preview_lines.append(f"  … and {len(keys) - 12} more")
+        preview = "\n".join(preview_lines)
+
         default_note = ""
         if self._allow_default_write:
             default_note = (
@@ -952,10 +1039,11 @@ class UserTab(QWidget):
             "Apply changes",
             f"Apply tuning to axis {self._axis} "
             f"(slave {AXES[self._axis]['slave']})?\n\n"
-            f"Will write {len(keys)} SDO(s) only — unread keys are left alone.\n"
+            f"Will write {len(keys)} SDO(s) ONLY (unread keys untouched):\n"
+            f"{preview}\n\n"
             f"{cycle_note}\n\n"
-            "SDO changes are RAM-only until stored in the drive EEPROM.\n"
-            "Does not modify INI / HAL / ethercat-conf.xml on disk."
+            "RAM only until you store EEPROM on the drive.\n"
+            "ethercat-conf.xml no longer overwrites C00/C01 on startup."
             f"{default_note}",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
@@ -974,19 +1062,61 @@ class UserTab(QWidget):
                 self._axis, params, cycle_enable=True, keys=keys
             )
             written = result.get("written_keys", keys)
+            failed = result.get("failed_keys") or []
+            skipped = result.get("skipped_keys") or []
             # Refresh from drive so Current matches reality.
             fresh, ok_keys, failed_keys = read_axis_params(self._axis)
             self._ingest_read(fresh, ok_keys, failed_keys)
-            self._set_status(f"APPLIED {self._axis}", "ok")
-            self.message_label.setText(
-                f"Wrote {len(written)} SDO(s) to slave {result['slave']}"
-                + (
-                    "; motors cycled OFF→ON."
-                    if result.get("cycled_enable")
-                    else " (motors stayed off)."
+            if failed:
+                self._set_status(f"PARTIAL {self._axis}", "error")
+                fail_txt = ", ".join(
+                    f"{k}" for k, _err in failed[:8]
                 )
-                + " Re-read complete."
-            )
+                self.message_label.setText(
+                    f"Wrote {len(written)} SDO(s); FAILED {len(failed)}: {fail_txt}"
+                    + ("…" if len(failed) > 8 else "")
+                    + (
+                        f"; skipped read-only {len(skipped)}."
+                        if skipped
+                        else "."
+                    )
+                    + " Re-read complete — check Current vs Pending."
+                )
+                QMessageBox.warning(
+                    self,
+                    "Partial apply",
+                    "Some parameters did not stick on the drive:\n\n"
+                    + "\n".join(
+                        f"• {PARAM_BY_KEY.get(k, {}).get('label', k)}: {err[:120]}"
+                        for k, err in failed[:12]
+                    )
+                    + (
+                        "\n\nRead-only params are skipped automatically now "
+                        "(C01.10 / C01.38)."
+                        if any(
+                            k in ("speed_fb_filter", "gain_sw_mode")
+                            for k, _ in failed
+                        )
+                        or skipped
+                        else ""
+                    ),
+                )
+            else:
+                self._set_status(f"APPLIED {self._axis}", "ok")
+                self.message_label.setText(
+                    f"Wrote {len(written)} SDO(s) to slave {result['slave']}"
+                    + (
+                        "; motors cycled OFF→ON."
+                        if result.get("cycled_enable")
+                        else " (motors stayed off)."
+                    )
+                    + (
+                        f" Skipped {len(skipped)} read-only."
+                        if skipped
+                        else ""
+                    )
+                    + " Re-read + verify complete."
+                )
         except Exception as exc:
             LOG.exception("apply_axis_params failed")
             self._set_status("ERROR", "error")
@@ -1016,29 +1146,33 @@ class UserTab(QWidget):
         self._apply_to_drive(baseline)
 
     def _refresh_preset_list(self) -> None:
-        self.preset_list.clear()
-        for name in list_presets(self._axis):
-            self.preset_list.addItem(name)
-        if self.preset_list.count() and self.preset_list.currentRow() < 0:
-            self.preset_list.setCurrentRow(0)
+        current = self.preset_combo.currentText()
+        self.preset_combo.blockSignals(True)
+        self.preset_combo.clear()
+        names = list_presets(self._axis)
+        self.preset_combo.addItems(names)
+        if current and current in names:
+            self.preset_combo.setCurrentText(current)
+        elif names:
+            self.preset_combo.setCurrentIndex(0)
+        self.preset_combo.blockSignals(False)
 
     def _selected_preset_name(self) -> str:
-        item = self.preset_list.currentItem()
-        return item.text() if item is not None else ""
+        return self.preset_combo.currentText().strip()
 
     def _save_preset(self) -> None:
         name = self.preset_name_edit.text().strip() or self._selected_preset_name()
         if not name:
             QMessageBox.information(self, "Save preset", "Enter a preset name.")
             return
-        notes = self.preset_notes_edit.toPlainText().strip()
+        notes = self.preset_notes_edit.text().strip()
         try:
             path = save_preset(self._axis, name, self._params_from_ui(), notes=notes)
             self.preset_name_edit.setText(name)
             self._refresh_preset_list()
-            items = self.preset_list.findItems(name, Qt.MatchExactly)
-            if items:
-                self.preset_list.setCurrentItem(items[0])
+            idx = self.preset_combo.findText(name)
+            if idx >= 0:
+                self.preset_combo.setCurrentIndex(idx)
             self.message_label.setText(f"Saved preset: {path}")
         except Exception as exc:
             LOG.exception("save_preset failed")
@@ -1053,7 +1187,7 @@ class UserTab(QWidget):
             QMessageBox.information(
                 self,
                 "Load preset",
-                "READ FROM DRIVE first so missing preset keys keep live drive values "
+                "READ first so missing preset keys keep live drive values "
                 "instead of catalog defaults.",
             )
             return
@@ -1067,7 +1201,7 @@ class UserTab(QWidget):
             self._allow_default_write = False
             self._set_params_to_ui(merged)
             self.preset_name_edit.setText(preset.name)
-            self.preset_notes_edit.setPlainText(preset.notes)
+            self.preset_notes_edit.setText(preset.notes)
             skipped = [
                 k for k in preset.params.values.keys()
                 if k not in self._ok_keys[self._axis]
