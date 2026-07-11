@@ -9,14 +9,16 @@ from __future__ import annotations
 import collections
 import os
 import sys
+import time
 from typing import Deque, Dict, List, Optional
 
 from qtpy import uic
 from qtpy.QtCore import Qt, QTimer
-from qtpy.QtGui import QColor, QFont, QFontDatabase, QPainter, QPen, QPalette
+from qtpy.QtGui import QColor, QFont, QFontDatabase, QImage, QPainter, QPen, QPalette
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFrame,
@@ -71,6 +73,26 @@ from a6_servo_tune import (  # noqa: E402
     save_preset,
     unit_to_counts,
 )
+from tune_trial import (  # noqa: E402
+    DEFAULT_PLOT_WINDOW_S,
+    SOFT_PRESET_NAME,
+    TRIAL_PLOT_WINDOW_S,
+    build_paste_pack,
+    copy_text_to_clipboard,
+    copy_trial_to_clipboard,
+    machine_still_safe,
+    make_trial_id,
+    open_tuning_program,
+    preflight_machine,
+    program_is_running,
+    resolve_tuning_ngc,
+    save_trial_artifacts,
+    short_gains_tag,
+    start_auto_run,
+    trial_dir,
+)
+
+TRIAL_SAMPLE_MS = 10
 
 try:
     import pyqtgraph as pg
@@ -100,6 +122,9 @@ class FerrPlotWidget(QWidget):
         self.setObjectName("ferrPlot")
         self.setMinimumHeight(320)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._sample_ms = float(FERR_SAMPLE_MS)
+        self._window_s = float(FERR_WINDOW_S)
+        self._title = ""
         self._samples: Deque[float] = collections.deque(maxlen=FERR_BUFFER)
         self._unit_label = "mm"
         self._waiting = True
@@ -132,6 +157,109 @@ class FerrPlotWidget(QWidget):
             self.plot = None
             self.curve = None
 
+    def set_window_seconds(
+        self, window_s: float, sample_ms: Optional[float] = None
+    ) -> None:
+        self._window_s = float(window_s)
+        if sample_ms is not None:
+            self._sample_ms = float(sample_ms)
+        buf = max(
+            1,
+            int(self._window_s * (1000.0 / max(self._sample_ms, 1.0))),
+        )
+        old = list(self._samples)
+        self._samples = collections.deque(old[-buf:], maxlen=buf)
+
+    def set_title(self, title: str) -> None:
+        self._title = str(title or "")
+        if self.plot is not None:
+            try:
+                self.plot.setTitle(
+                    self._title, color=PLOT_FG, **{"font-size": "12pt"}
+                )
+            except Exception:
+                pass
+
+    def get_samples(self) -> List[float]:
+        return list(self._samples)
+
+    def export_png(self, path: str, title: Optional[str] = None) -> None:
+        """Write the current strip chart to PNG (ImageExporter or QImage fallback)."""
+        burn = self._title if title is None else str(title)
+        os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
+
+        if self.plot is not None and pg is not None:
+            prev_title = self._title
+            if burn:
+                self.set_title(burn)
+            try:
+                from pyqtgraph.exporters import ImageExporter
+
+                exporter = ImageExporter(self.plot.plotItem)
+                exporter.export(path)
+                if os.path.isfile(path):
+                    return
+            except Exception as exc:
+                LOG.warning("ImageExporter failed (%s) — QImage fallback", exc)
+            finally:
+                if burn != prev_title:
+                    self.set_title(prev_title)
+
+        # QPainter fallback (painter mode or exporter failure).
+        values = list(self._samples)
+        width, height = 960, 360
+        image = QImage(width, height, QImage.Format_RGB32)
+        image.fill(QColor(PLOT_BG))
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.Antialiasing)
+        margin_l, margin_r, margin_t, margin_b = 48, 16, 36, 28
+        plot_rect = image.rect().adjusted(margin_l, margin_t, -margin_r, -margin_b)
+        painter.setPen(QPen(QColor("#8a8484"), 1))
+        painter.drawRect(plot_rect)
+        painter.setPen(QColor(PLOT_FG))
+        painter.setFont(QFont(PB_FONT, 12))
+        if burn:
+            painter.drawText(
+                image.rect().adjusted(8, 4, -8, 0),
+                Qt.AlignTop | Qt.AlignLeft,
+                burn,
+            )
+        mid_y = plot_rect.center().y()
+        painter.setPen(QPen(QColor(PLOT_ZERO), 1, Qt.DashLine))
+        painter.drawLine(plot_rect.left() + 2, mid_y, plot_rect.right() - 2, mid_y)
+        if values:
+            peak = max(abs(min(values)), abs(max(values)), 1e-6)
+            pad = peak * 0.15
+            y_max = peak + pad
+            n = len(values)
+            w = max(1, plot_rect.width() - 4)
+            h = max(1, plot_rect.height() - 4)
+            painter.setPen(QPen(QColor(PLOT_LINE), 2))
+            if n == 1:
+                x = plot_rect.left() + 2
+                y = mid_y - (values[0] / y_max) * (h / 2.0)
+                painter.drawPoint(int(x), int(y))
+            else:
+                for i in range(1, n):
+                    x0 = plot_rect.left() + 2 + ((i - 1) / (n - 1)) * w
+                    x1 = plot_rect.left() + 2 + (i / (n - 1)) * w
+                    y0 = mid_y - (values[i - 1] / y_max) * (h / 2.0)
+                    y1 = mid_y - (values[i] / y_max) * (h / 2.0)
+                    painter.drawLine(int(x0), int(y0), int(x1), int(y1))
+        else:
+            painter.setPen(QColor(PLOT_FG))
+            painter.drawText(plot_rect, Qt.AlignCenter, "no samples")
+        painter.setPen(QColor(PLOT_FG))
+        painter.setFont(QFont(PB_FONT, 10))
+        painter.drawText(
+            image.rect().adjusted(8, 0, -8, -4),
+            Qt.AlignBottom | Qt.AlignLeft,
+            f"{self._unit_label}  ·  {self._window_s:g}s window",
+        )
+        painter.end()
+        if not image.save(path):
+            raise RuntimeError(f"failed to write PNG: {path}")
+
     def set_unit_label(self, unit: str) -> None:
         self._unit_label = unit
         if self.plot is not None:
@@ -156,7 +284,7 @@ class FerrPlotWidget(QWidget):
         self._waiting = False
         values = list(self._samples)
         if self.curve is not None:
-            dt = FERR_SAMPLE_MS / 1000.0
+            dt = self._sample_ms / 1000.0
             xs = [i * dt for i in range(len(values))]
             self.curve.setData(xs, values)
             finite = [v for v in values if v == v]
@@ -165,7 +293,9 @@ class FerrPlotWidget(QWidget):
                 pad = max(peak * 0.15, 1e-4)
                 self.plot.setYRange(-peak - pad, peak + pad, padding=0)
                 if xs:
-                    self.plot.setXRange(xs[0], max(xs[-1], FERR_WINDOW_S * 0.25), padding=0)
+                    self.plot.setXRange(
+                        xs[0], max(xs[-1], self._window_s * 0.25), padding=0
+                    )
         else:
             self.update()
 
@@ -246,12 +376,27 @@ class UserTab(QWidget):
         # If True, next APPLY may write catalog defaults (unused — DEFAULT removed).
         self._allow_default_write = False
         self._logging_active = False  # live FERR plot only (no CSV / disk writes)
+        self._logging_before_trial = False
+
+        # Semi-auto tune trial state
+        self._trial_active = False
+        self._trial_id: Optional[str] = None
+        self._trial_ngc: Optional[str] = None
+        self._trial_params: Optional[AxisTuneParams] = None
+        self._trial_seen_running = False
+        self._trial_auto_run = False
+        self._trial_wait_start_ms = 0
+        self._last_paste_text = ""
 
         self._build_ui()
         self._ferr_timer = QTimer(self)
         self._ferr_timer.setInterval(FERR_SAMPLE_MS)
         self._ferr_timer.timeout.connect(self._poll_ferr)
         self._ferr_timer.start()
+
+        self._trial_poll = QTimer(self)
+        self._trial_poll.setInterval(200)
+        self._trial_poll.timeout.connect(self._poll_trial)
 
     def _ensure_font(self):
         if PB_FONT in QFontDatabase().families():
@@ -282,6 +427,7 @@ class UserTab(QWidget):
         root_layout.addWidget(self._build_header(), stretch=0)
         root_layout.addWidget(self._build_presets_bar(), stretch=0)
         root_layout.addLayout(self._build_toolbar(), stretch=0)
+        root_layout.addWidget(self._build_semiauto_group(), stretch=0)
 
         body = QHBoxLayout()
         body.setSpacing(10)
@@ -292,7 +438,8 @@ class UserTab(QWidget):
         self.message_label = QLabel(
             "READ loads drive SDOs into Pending. Edit Pending, then APPLY in the "
             "parameters box to write the drive. START PLOT runs the live FERR trace "
-            "(nothing is written to disk).",
+            "(nothing is written to disk). Tune Trial opens the axis NGC, captures "
+            "drive FERR, and saves a paste pack under logs/tuning/.",
             self,
         )
         self.message_label.setObjectName("lblMessage")
@@ -303,6 +450,7 @@ class UserTab(QWidget):
         self._refresh_preset_list()
         self._update_value_readouts()
         self._sync_log_button()
+        self._sync_trial_controls()
 
     def _build_header(self) -> QFrame:
         header = QFrame(self)
@@ -414,6 +562,69 @@ class UserTab(QWidget):
 
         row.addStretch()
         return row
+
+    def _build_semiauto_group(self) -> QGroupBox:
+        """Compact semi-auto Tune Trial strip (keeps remote toolbar/presets intact)."""
+        group = QGroupBox("SEMI-AUTO TUNE TRIAL", self)
+        group.setObjectName("grpSemiAuto")
+        layout = QHBoxLayout(group)
+        layout.setContentsMargins(10, 6, 10, 6)
+        layout.setSpacing(6)
+
+        self.tune_trial_button = QPushButton("TUNE TRIAL", group)
+        self.tune_trial_button.setObjectName("btnPrimary")
+        self.tune_trial_button.setFocusPolicy(Qt.NoFocus)
+        self.tune_trial_button.setToolTip(
+            "Open axis tuning NGC, capture drive FERR, export PNG + paste pack."
+        )
+        self.tune_trial_button.clicked.connect(self._start_tune_trial)
+        layout.addWidget(self.tune_trial_button)
+
+        self.cancel_trial_button = QPushButton("CANCEL TRIAL", group)
+        self.cancel_trial_button.setObjectName("btnDanger")
+        self.cancel_trial_button.setFocusPolicy(Qt.NoFocus)
+        self.cancel_trial_button.setEnabled(False)
+        self.cancel_trial_button.setToolTip(
+            "Stop waiting/export only — does not abort machine motion."
+        )
+        self.cancel_trial_button.clicked.connect(self._cancel_tune_trial)
+        layout.addWidget(self.cancel_trial_button)
+
+        self.copy_paste_button = QPushButton("COPY PASTE PACK", group)
+        self.copy_paste_button.setFocusPolicy(Qt.NoFocus)
+        self.copy_paste_button.setToolTip(
+            "Re-copy the last trial paste-pack text to the clipboard."
+        )
+        self.copy_paste_button.clicked.connect(self._copy_paste_pack)
+        layout.addWidget(self.copy_paste_button)
+
+        self.load_soft_button = QPushButton("LOAD SOFT BASELINE", group)
+        self.load_soft_button.setFocusPolicy(Qt.NoFocus)
+        self.load_soft_button.setToolTip(
+            "Load soft preset into Pending (+ Fixed 1st / manual when writable). "
+            "Does not write the drive until APPLY."
+        )
+        self.load_soft_button.clicked.connect(self._load_soft_baseline)
+        layout.addWidget(self.load_soft_button)
+
+        self.auto_cycle_check = QCheckBox("AUTO CYCLE START", group)
+        self.auto_cycle_check.setFocusPolicy(Qt.NoFocus)
+        self.auto_cycle_check.setToolTip(
+            "If checked, issues Cycle Start after a second confirm. "
+            "Default is wait for manual Cycle Start."
+        )
+        layout.addWidget(self.auto_cycle_check)
+
+        self.trial_notes_edit = QLineEdit(group)
+        self.trial_notes_edit.setPlaceholderText("notes (buzz y/n, …)")
+        self.trial_notes_edit.setMinimumWidth(140)
+        self.trial_notes_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        layout.addWidget(self.trial_notes_edit, stretch=1)
+
+        self.trial_status_label = QLabel("Trial: idle", group)
+        self.trial_status_label.setObjectName("lblParamHint")
+        layout.addWidget(self.trial_status_label)
+        return group
 
     def _build_ferr_group(self) -> QGroupBox:
         group = QGroupBox("DRIVE FERR (CiA 60F4)", self)
@@ -645,15 +856,29 @@ class UserTab(QWidget):
         self.status_label.style().polish(self.status_label)
 
     def _set_busy(self, busy: bool) -> None:
+        trial = bool(self._trial_active)
         for widget in (
             self.read_button,
             self.apply_button,
             self.log_button,
             *self.axis_buttons.values(),
         ):
-            widget.setEnabled(not busy)
+            widget.setEnabled(not busy and not trial)
+        self._sync_trial_controls(busy=busy)
         if busy:
             self._set_status("BUSY", "busy")
+
+    def _sync_trial_controls(self, busy: bool = False) -> None:
+        if not hasattr(self, "tune_trial_button"):
+            return
+        trial = bool(self._trial_active)
+        self.tune_trial_button.setEnabled(not busy and not trial)
+        # CANCEL stays enabled while a trial is active (even if other UI is busy).
+        self.cancel_trial_button.setEnabled(trial)
+        self.copy_paste_button.setEnabled(not busy and not trial)
+        self.load_soft_button.setEnabled(not busy and not trial)
+        self.auto_cycle_check.setEnabled(not busy and not trial)
+        self.trial_notes_edit.setEnabled(not busy and not trial)
 
     def _update_value_readouts(self) -> None:
         live = self._live.get(self._axis)
@@ -837,6 +1062,323 @@ class UserTab(QWidget):
             self.log_status_label.setText("PLOT: idle")
         self.log_button.style().unpolish(self.log_button)
         self.log_button.style().polish(self.log_button)
+
+    def _trial_unit_label(self) -> str:
+        if self._ferr_unit_mode == "pulses":
+            return "pulses"
+        return axis_unit(self._axis)
+
+    def _start_tune_trial(self) -> None:
+        if self._trial_active:
+            return
+
+        auto_run = bool(self.auto_cycle_check.isChecked())
+        ngc_name = f"{self._axis.lower()}_tuning.ngc"
+        reply = QMessageBox.question(
+            self,
+            "Tune Trial",
+            f"Start a tune trial on axis {self._axis}?\n\n"
+            f"Will open {ngc_name} in AUTO and capture drive FERR (CiA 60F4).\n"
+            "Machine must be clear — the axis will move through the NGC envelope.\n\n"
+            + (
+                "AUTO CYCLE START is ON — motion will start after a second confirm."
+                if auto_run
+                else "Default: press Cycle Start yourself after the program opens."
+            ),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        if auto_run:
+            reply2 = QMessageBox.question(
+                self,
+                "AUTO CYCLE START",
+                "Issue Cycle Start automatically after the NGC opens?\n\n"
+                "Only Yes if the machine is clear and you intend motion now.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply2 != QMessageBox.Yes:
+                return
+
+        try:
+            preflight_machine(self._axis)
+            ngc_path = resolve_tuning_ngc(self._axis)
+        except Exception as exc:
+            QMessageBox.warning(self, "Tune Trial blocked", str(exc))
+            self.trial_status_label.setText(f"Trial: blocked — {exc}")
+            return
+
+        live = self._live.get(self._axis)
+        if live is None or not self._ok_keys.get(self._axis):
+            QMessageBox.information(
+                self,
+                "Tune Trial",
+                "READ FROM DRIVE first so the paste pack has live gains.",
+            )
+            return
+
+        trial_id = make_trial_id(self._axis)
+        params = live.copy()
+        gains_tag = short_gains_tag(params)
+        unit_label = self._trial_unit_label()
+        title = f"{self._axis} · {trial_id} · {gains_tag} · {unit_label}"
+
+        self._logging_before_trial = bool(self._logging_active)
+        self._trial_active = True
+        self._trial_id = trial_id
+        self._trial_ngc = ngc_path
+        self._trial_params = params
+        self._trial_seen_running = False
+        self._trial_auto_run = auto_run
+        self._trial_wait_start_ms = int(time.time() * 1000)
+
+        # Capture at 10 ms into a 180 s window — avoid 1 kHz × 180 s UI death.
+        self._ferr_timer.setInterval(TRIAL_SAMPLE_MS)
+        self.ferr_plot.set_window_seconds(TRIAL_PLOT_WINDOW_S, sample_ms=TRIAL_SAMPLE_MS)
+        self._clear_ferr_plot()
+        self.ferr_plot.set_title(title)
+        self._logging_active = True
+        self._sync_log_button()
+        self._set_busy(False)  # refreshes enables with trial=True
+        self._sync_trial_controls()
+
+        try:
+            open_tuning_program(self._axis)
+        except Exception as exc:
+            LOG.exception("open_tuning_program failed")
+            self._abort_trial_setup(f"open failed: {exc}")
+            QMessageBox.warning(self, "Tune Trial failed", str(exc))
+            return
+
+        if auto_run:
+            try:
+                start_auto_run()
+                self.trial_status_label.setText("Trial: AUTO_RUN issued — capturing…")
+                self.message_label.setText(
+                    f"Tune Trial {trial_id}: AUTO_RUN — capturing drive FERR."
+                )
+            except Exception as exc:
+                LOG.exception("start_auto_run failed")
+                self._abort_trial_setup(f"AUTO_RUN failed: {exc}")
+                QMessageBox.warning(self, "AUTO_RUN failed", str(exc))
+                return
+        else:
+            self.trial_status_label.setText("Trial: waiting for Cycle Start…")
+            self.message_label.setText(
+                f"Tune Trial {trial_id}: program open — press Cycle Start when ready. "
+                "CANCEL TRIAL stops capture only (does not abort motion)."
+            )
+
+        self._set_status("TRIAL", "busy")
+        self._trial_poll.start()
+
+    def _abort_trial_setup(self, reason: str) -> None:
+        """Roll back trial arming when NGC open / AUTO_RUN fails before capture."""
+        self._trial_poll.stop()
+        self._trial_active = False
+        self._trial_id = None
+        self._trial_ngc = None
+        self._trial_params = None
+        self._trial_seen_running = False
+        self._restore_plot_after_trial()
+        self._logging_active = bool(self._logging_before_trial)
+        self._sync_log_button()
+        self._sync_trial_controls()
+        self.trial_status_label.setText(f"Trial: aborted — {reason}")
+        self._set_status(f"AXIS {self._axis}", "ok")
+
+    def _cancel_tune_trial(self) -> None:
+        if not self._trial_active:
+            return
+        # Does NOT abort LinuxCNC motion — only stops waiting/export.
+        self._finish_trial(aborted=True, reason="cancelled (motion not aborted)")
+
+    def _poll_trial(self) -> None:
+        if not self._trial_active:
+            return
+
+        ok, reason = machine_still_safe()
+        if not ok:
+            self._finish_trial(aborted=True, reason=reason)
+            return
+
+        running = program_is_running()
+        if not self._trial_seen_running:
+            if running:
+                self._trial_seen_running = True
+                self.trial_status_label.setText("Trial: capturing…")
+                self.message_label.setText(
+                    f"Tune Trial {self._trial_id}: program running — capturing FERR."
+                )
+            return
+
+        if not running:
+            self._finish_trial(aborted=False, reason="")
+
+    def _finish_trial(self, aborted: bool = False, reason: str = "") -> None:
+        if not self._trial_active:
+            return
+
+        self._trial_poll.stop()
+        trial_id = self._trial_id or make_trial_id(self._axis)
+        ngc_path = self._trial_ngc or ""
+        params = self._trial_params or self._live.get(self._axis) or self._params_from_ui()
+        notes = self.trial_notes_edit.text().strip()
+        unit_label = self._trial_unit_label()
+        samples = self.ferr_plot.get_samples()
+        waited = not self._trial_auto_run
+        auto_run = bool(self._trial_auto_run)
+        gains_tag = short_gains_tag(params)
+        title = f"{self._axis} · {trial_id} · {gains_tag} · {unit_label}"
+
+        directory = trial_dir(trial_id)
+        png_path = os.path.join(directory, "drive_ferr.png")
+        clip_note = ""
+        try:
+            self.ferr_plot.export_png(png_path, title=title)
+            artifact = save_trial_artifacts(
+                axis=self._axis,
+                trial_id=trial_id,
+                params=params,
+                samples=samples,
+                sample_ms=float(TRIAL_SAMPLE_MS),
+                unit_label=unit_label,
+                unit_mode=self._ferr_unit_mode,
+                ngc_path=ngc_path,
+                png_path=png_path,
+                operator_notes=notes,
+                auto_run=auto_run,
+                waited_for_cycle_start=waited,
+            )
+            self._last_paste_text = artifact.paste_text
+            try:
+                clip_note = copy_trial_to_clipboard(png_path, artifact.paste_text)
+            except Exception as clip_exc:
+                LOG.warning("clipboard copy failed: %s", clip_exc)
+                clip_note = f"clipboard failed ({clip_exc}) — files saved"
+            if aborted:
+                self.trial_status_label.setText(
+                    f"Trial: aborted — {reason or 'stopped'} · saved {trial_id}"
+                )
+                self.message_label.setText(
+                    f"Tune Trial aborted ({reason or 'stopped'}). "
+                    f"Artifacts under {directory}. {clip_note}"
+                )
+                self._set_status("TRIAL ABORT", "error")
+            else:
+                self.trial_status_label.setText(
+                    f"Trial: done · peak {artifact.peak_abs:g} {unit_label}"
+                )
+                self.message_label.setText(
+                    f"Tune Trial {trial_id} complete — peak "
+                    f"{artifact.peak_abs:g} {unit_label}, "
+                    f"{artifact.sample_count} samples. "
+                    f"Saved {directory}. {clip_note}"
+                )
+                self._set_status("TRIAL OK", "ok")
+        except Exception as exc:
+            LOG.exception("finish_trial save failed")
+            self.trial_status_label.setText(f"Trial: save failed — {exc}")
+            self.message_label.setText(f"Tune Trial save failed: {exc}")
+            self._set_status("ERROR", "error")
+            QMessageBox.warning(self, "Trial save failed", str(exc))
+
+        self._trial_active = False
+        self._trial_id = None
+        self._trial_ngc = None
+        self._trial_params = None
+        self._trial_seen_running = False
+        self._trial_auto_run = False
+
+        self._restore_plot_after_trial()
+        # Leave plot ON so the operator can inspect the captured waveform.
+        self._logging_active = True
+        self._sync_log_button()
+        self._sync_trial_controls()
+        self._update_value_readouts()
+
+    def _restore_plot_after_trial(self) -> None:
+        self._ferr_timer.setInterval(FERR_SAMPLE_MS)
+        self.ferr_plot.set_window_seconds(
+            DEFAULT_PLOT_WINDOW_S, sample_ms=FERR_SAMPLE_MS
+        )
+
+    def _copy_paste_pack(self) -> None:
+        text = self._last_paste_text
+        if not text:
+            # Build a fresh pack from current Pending/live if no prior trial.
+            live = self._live.get(self._axis) or self._params_from_ui()
+            try:
+                ngc = resolve_tuning_ngc(self._axis)
+            except Exception:
+                ngc = f"{self._axis.lower()}_tuning.ngc"
+            text = build_paste_pack(
+                axis=self._axis,
+                trial_id="(no trial yet)",
+                params=live,
+                ngc_name=os.path.basename(ngc),
+                peak_abs=max(
+                    self._ferr_peak_unit if self._ferr_unit_mode != "pulses"
+                    else self._ferr_peak_pulses,
+                    0.0,
+                ),
+                unit_label=self._trial_unit_label(),
+                png_name="(none)",
+                operator_notes=self.trial_notes_edit.text().strip(),
+            )
+        try:
+            copy_text_to_clipboard(text)
+            self._last_paste_text = text
+            self.message_label.setText("Paste pack text copied to clipboard.")
+            self.trial_status_label.setText("Trial: paste pack copied")
+        except Exception as exc:
+            QMessageBox.warning(self, "Clipboard", str(exc))
+
+    def _load_soft_baseline(self) -> None:
+        if not self._ok_keys.get(self._axis):
+            QMessageBox.information(
+                self,
+                "Soft baseline",
+                "READ FROM DRIVE first so missing preset keys keep live values.",
+            )
+            return
+        try:
+            preset = load_preset(self._axis, SOFT_PRESET_NAME)
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Soft baseline",
+                f"Could not load preset {SOFT_PRESET_NAME!r}: {exc}",
+            )
+            return
+
+        ok = set(self._ok_keys[self._axis])
+        merged = self._live[self._axis].copy()
+        for key, value in preset.params.values.items():
+            if key in ok:
+                merged.set(key, value)
+
+        # Force Fixed 1st + manual only when key was readable and is writable.
+        for key, value in (("gain_sw_mode", 0.0), ("manual_mode", 0.0)):
+            if key not in ok:
+                continue
+            defn = PARAM_BY_KEY.get(key, {})
+            if defn.get("writable", True) is False:
+                continue
+            merged.set(key, value)
+
+        self._allow_default_write = False
+        self._set_params_to_ui(merged)
+        self.preset_name_edit.setText(SOFT_PRESET_NAME)
+        self.message_label.setText(
+            f"Soft baseline loaded into Pending for {self._axis} "
+            f"(preset {SOFT_PRESET_NAME!r} + Fixed 1st/manual when writable). "
+            "Nothing written until APPLY."
+        )
+        self.trial_status_label.setText("Trial: soft baseline in Pending")
 
     def _refresh_unit_columns(self) -> None:
         unit = axis_unit(self._axis)
