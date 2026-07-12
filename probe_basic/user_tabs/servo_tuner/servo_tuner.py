@@ -9,11 +9,12 @@ from __future__ import annotations
 import collections
 import os
 import sys
+import threading
 import time
 from typing import Deque, Dict, List, Optional
 
 from qtpy import uic
-from qtpy.QtCore import Qt, QTimer
+from qtpy.QtCore import Qt, QTimer, Signal
 from qtpy.QtGui import QColor, QFont, QFontDatabase, QImage, QPainter, QPen, QPalette
 from qtpy.QtWidgets import (
     QAbstractItemView,
@@ -81,6 +82,14 @@ from tune_trial import (  # noqa: E402
 from resonance_analysis import (  # noqa: E402
     analyze_ferr_resonance,
     format_resonance_text,
+)
+from a6_auto_tune import (  # noqa: E402
+    HardwareTuneIO,
+    OneClickConfig,
+    OneClickTuner,
+    PROFILES,
+    default_journal_root,
+    estimate_campaign_seconds,
 )
 
 try:
@@ -507,6 +516,10 @@ class FerrPlotWidget(QWidget):
 
 
 class UserTab(QWidget):
+    # One-click tuner worker -> GUI thread marshalling (Qt queues these).
+    ocProgress = Signal(str, str)
+    ocFinished = Signal(object)
+
     def __init__(self, parent=None):
         super(UserTab, self).__init__(parent)
         ui_file = os.path.splitext(os.path.basename(__file__))[0] + ".ui"
@@ -536,6 +549,9 @@ class UserTab(QWidget):
         self._allow_default_write = False
         self._logging_active = False  # live FERR plot only (no CSV / disk writes)
         self._resonance_report = None
+        self._oc_tuner: Optional[OneClickTuner] = None  # running one-click job
+        self.ocProgress.connect(self._on_one_click_progress)
+        self.ocFinished.connect(self._on_one_click_finished)
 
         self._build_ui()
         self._ferr_timer = QTimer(self)
@@ -573,6 +589,7 @@ class UserTab(QWidget):
         root_layout.addWidget(self._build_presets_bar(), stretch=0)
         root_layout.addLayout(self._build_toolbar(), stretch=0)
         root_layout.addWidget(self._build_clipboard_bar(), stretch=0)
+        root_layout.addWidget(self._build_one_click_bar(), stretch=0)
 
         body = QHBoxLayout()
         body.setSpacing(10)
@@ -621,6 +638,7 @@ class UserTab(QWidget):
         bar = QFrame(self)
         bar.setObjectName("presetsBar")
         bar.setAttribute(Qt.WA_StyledBackground, True)
+        self._presets_bar = bar  # disabled as a block while one-click runs
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(10, 4, 10, 4)
         layout.setSpacing(6)
@@ -747,6 +765,62 @@ class UserTab(QWidget):
         layout.addWidget(self.copy_resonance_button)
 
         layout.addStretch()
+        return bar
+
+    def _build_one_click_bar(self) -> QFrame:
+        """ONE-CLICK strip: profile combo + start/cancel + live progress.
+
+        Runs the OneClickTuner campaign (a6_auto_tune.py) for the edit axis
+        in a worker thread. See ONE_CLICK_TUNING.md.
+        """
+        bar = QFrame(self)
+        bar.setObjectName("presetsBar")  # reuse the strip styling
+        bar.setAttribute(Qt.WA_StyledBackground, True)
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(10, 4, 10, 4)
+        layout.setSpacing(6)
+
+        layout.addWidget(self._caption("ONE-CLICK"))
+
+        self.oc_profile_combo = QComboBox(bar)
+        self.oc_profile_combo.setObjectName("presetCombo")
+        for name in ("conservative", "balanced", "aggressive"):
+            if name in PROFILES:
+                self.oc_profile_combo.addItem(name.upper())
+        self.oc_profile_combo.setCurrentText("BALANCED")
+        self.oc_profile_combo.setToolTip(
+            "Ladder aggressiveness: gain caps, step sizes, and how much "
+            "improvement each step must show to keep climbing."
+        )
+        layout.addWidget(self.oc_profile_combo)
+
+        self.one_click_button = QPushButton(f"ONE-CLICK TUNE {self._axis}", bar)
+        self.one_click_button.setObjectName("btnPrimary")
+        self.one_click_button.setFocusPolicy(Qt.NoFocus)
+        self.one_click_button.setToolTip(
+            "Auto-tune the edit axis: baseline snapshot -> speed/position/"
+            "integral gain ladder with FFT stability gates and auto notch -> "
+            "verify. THE AXIS MOVES. Everything is journaled under "
+            "logs/tuning/one_click/ and reverts to baseline on cancel/failure."
+        )
+        self.one_click_button.clicked.connect(self._start_one_click)
+        layout.addWidget(self.one_click_button)
+
+        self.one_click_cancel_button = QPushButton("CANCEL", bar)
+        self.one_click_cancel_button.setObjectName("btnDanger")
+        self.one_click_cancel_button.setFocusPolicy(Qt.NoFocus)
+        self.one_click_cancel_button.setEnabled(False)
+        self.one_click_cancel_button.setToolTip(
+            "Stop the campaign: motion aborts, every touched SDO is restored "
+            "to its baseline value, journal is finalized."
+        )
+        self.one_click_cancel_button.clicked.connect(self._cancel_one_click)
+        layout.addWidget(self.one_click_cancel_button)
+
+        self.oc_status_label = QLabel("idle — tunes the EDIT axis", bar)
+        self.oc_status_label.setObjectName("lblParamHint")
+        layout.addWidget(self.oc_status_label, stretch=1)
+
         return bar
 
     def _build_ferr_group(self) -> QGroupBox:
@@ -1109,6 +1183,8 @@ class UserTab(QWidget):
         if axis == self._axis:
             return
         self._axis = axis
+        if hasattr(self, "one_click_button") and self._oc_tuner is None:
+            self.one_click_button.setText(f"ONE-CLICK TUNE {axis}")
         self._refresh_unit_columns()
         self._refresh_preset_list()
         if axis in self._live:
@@ -1463,6 +1539,173 @@ class UserTab(QWidget):
         except Exception as exc:
             LOG.exception("copy resonance failed")
             QMessageBox.warning(self, "Clipboard", str(exc))
+
+    # ------------------------------------------------------------------
+    # One-click auto-tune (a6_auto_tune.OneClickTuner in a worker thread)
+    # ------------------------------------------------------------------
+
+    def _start_one_click(self) -> None:
+        if self._oc_tuner is not None:
+            return
+        axis = self._axis
+        profile = self.oc_profile_combo.currentText().strip().lower()
+
+        if not machine_is_on():
+            QMessageBox.warning(
+                self,
+                "One-click tune",
+                "Machine must be ON (and out of ESTOP) before auto-tuning.",
+            )
+            return
+
+        try:
+            cfg = OneClickConfig.for_axis(axis, profile)
+        except Exception as exc:
+            QMessageBox.warning(self, "One-click tune", str(exc))
+            return
+        stim = cfg.stimulus
+        est_min = max(1.0, estimate_campaign_seconds(cfg) / 60.0)
+        unit = axis_unit(axis)
+
+        reply = QMessageBox.question(
+            self,
+            f"One-click tune {axis}",
+            f"Auto-tune axis {axis} ({profile.upper()} profile)?\n\n"
+            f"THE AXIS WILL MOVE: {stim.describe()}\n"
+            f"Strokes are RELATIVE to the current position — make sure there "
+            f"is at least {stim.stroke:g} {unit} of clearance (direction is "
+            f"picked from soft limits when homed).\n\n"
+            f"What it does: snapshots + backs up the current tune, then climbs "
+            f"speed / position gains and tightens the integral with an FFT "
+            f"stability gate between steps (auto notch if a resonance shows), "
+            f"then verifies. Worst case ~{est_min:.0f} min; usually much less."
+            f"\n\nSafety: writes are RAM-only via the normal APPLY path "
+            f"(motors cycle OFF/ON per step); motion aborts if drive FERR "
+            f"nears the 6065 window; CANCEL or any failure restores the "
+            f"baseline. Everything is journaled under logs/tuning/one_click/."
+            f"\n\nKeep a hand near ESTOP.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            io = HardwareTuneIO()
+        except Exception as exc:
+            QMessageBox.warning(self, "One-click tune", str(exc))
+            return
+
+        tuner = OneClickTuner(
+            cfg,
+            io=io,
+            progress=lambda phase, msg: self.ocProgress.emit(phase, msg),
+        )
+        self._oc_tuner = tuner
+        self._set_one_click_running(True)
+
+        # Show the live FERR trace for the axis being tuned.
+        if axis not in self._plot_axes:
+            self.axis_buttons[axis].setChecked(True)
+        self._logging_active = True
+        self._sync_log_button()
+
+        self._notify(f"One-click tune started on {axis} ({profile}).")
+        worker = threading.Thread(
+            target=self._one_click_worker, args=(tuner,), daemon=True
+        )
+        worker.start()
+
+    def _one_click_worker(self, tuner: OneClickTuner) -> None:
+        try:
+            result = tuner.run()
+        except Exception as exc:  # engine returns results; this is belt+braces
+            LOG.exception("one-click worker crashed")
+            result = exc
+        self.ocFinished.emit(result)
+
+    def _cancel_one_click(self) -> None:
+        tuner = self._oc_tuner
+        if tuner is None:
+            return
+        tuner.cancel()
+        self.one_click_cancel_button.setEnabled(False)
+        self.oc_status_label.setText(
+            "cancelling — aborting motion and restoring baseline…"
+        )
+        self._set_status("CANCELLING", "busy")
+
+    def _on_one_click_progress(self, phase: str, message: str) -> None:
+        text = f"{phase}: {message}"
+        self.oc_status_label.setText(
+            text if len(text) <= 110 else text[:107] + "…"
+        )
+        LOG.info("one-click: %s", text)
+
+    def _on_one_click_finished(self, result) -> None:
+        self._oc_tuner = None
+        self._set_one_click_running(False)
+
+        if isinstance(result, BaseException):
+            self._set_status("ERROR", "error")
+            self.oc_status_label.setText(f"crashed: {result}")
+            QMessageBox.warning(
+                self,
+                "One-click tune",
+                f"Tuner crashed unexpectedly: {result}\n\n"
+                f"Check the newest journal under {default_journal_root()} — "
+                "it records everything up to the crash.",
+            )
+            return
+
+        # Refresh Current/Pending from the drive so the table shows reality.
+        self._read_from_drive(quiet=True)
+        self._refresh_preset_list()
+
+        status = getattr(result, "status", "?")
+        ok = status in ("improved", "no-change", "dry-run")
+        self._set_status(f"TUNE {status.upper()}", "ok" if ok else "error")
+        first_line = result.summary().splitlines()[0]
+        self.oc_status_label.setText(first_line)
+
+        icon_fn = QMessageBox.information if ok else QMessageBox.warning
+        icon_fn(
+            self,
+            f"One-click tune {result.axis}: {status}",
+            result.summary()
+            + "\n\nGains are RAM-only — store to drive EEPROM (vendor tool / "
+            "panel) if you want them to survive power loss."
+            + "\nJournal (keep it — it is how we learn from failures):\n"
+            + str(result.journal_dir),
+        )
+
+    def _set_one_click_running(self, running: bool) -> None:
+        """Lock everything that could fight the campaign; keep CANCEL alive."""
+        for widget in (
+            self.one_click_button,
+            self.oc_profile_combo,
+            self.apply_button,
+            self.log_button,
+            self.copy_tuning_button,
+            self.copy_plot_button,
+            self.copy_resonance_button,
+            self.analyze_resonance_button,
+            self.suggest_notch_button,
+            self._presets_bar,
+            *self.axis_buttons.values(),
+        ):
+            widget.setEnabled(not running)
+        self.one_click_cancel_button.setEnabled(running)
+        if running:
+            self._set_status("TUNING", "busy")
+            self.one_click_button.setText(f"TUNING {self._axis}…")
+        else:
+            self.one_click_button.setText(f"ONE-CLICK TUNE {self._axis}")
+            # suggest_notch is only meaningful after an ANALYZE.
+            self.suggest_notch_button.setEnabled(
+                bool(self._resonance_report)
+                and bool(getattr(self._resonance_report, "suggested_notch", None))
+            )
 
     def _refresh_unit_columns(self) -> None:
         unit = axis_unit(self._axis)
