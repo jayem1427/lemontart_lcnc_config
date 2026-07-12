@@ -156,6 +156,14 @@ class FerrPlotWidget(QWidget):
                 self._legend = self.plot.addLegend(offset=(10, 10))
             except Exception:
                 self._legend = None
+            # Manual Y scale only — autoRange fights unit toggles and looks "random".
+            try:
+                self.plot.enableAutoRange(x=False, y=False)
+                self.plot.setMouseEnabled(x=False, y=True)
+                axis = self.plot.getAxis("left")
+                axis.enableAutoSIPrefix(False)
+            except Exception:
+                pass
             self.plot.setMinimumHeight(280)
             root.addWidget(self.plot)
             # Back-compat alias used by older single-curve call sites.
@@ -164,6 +172,7 @@ class FerrPlotWidget(QWidget):
             self._painter_mode = True
             self.plot = None
             self.curve = None
+        self._plot_unit = "mm"  # "mm"/"deg"/"pulses" — matches buffered sample units
 
     def _ensure_series(self, axis: str) -> Deque[float]:
         if axis not in self._series:
@@ -312,13 +321,33 @@ class FerrPlotWidget(QWidget):
             raise RuntimeError(f"failed to write PNG: {path}")
 
     def set_unit_label(self, unit: str) -> None:
-        self._unit_label = unit
+        """Update the Y-axis label only — never touches buffered samples or Y range."""
+        self._unit_label = str(unit or "")
+        self._plot_unit = self._unit_label
         if self.plot is not None:
-            self.plot.setLabel("left", text=unit, units="", color=PLOT_FG)
-            axis = self.plot.getAxis("left")
-            axis.enableAutoSIPrefix(False)
-            axis.setLabel(text=unit, units="")
-            self.plot.setYRange(-1, 1, padding=0)
+            try:
+                axis = self.plot.getAxis("left")
+                axis.enableAutoSIPrefix(False)
+                axis.setLabel(text=self._unit_label, units="")
+                self.plot.setLabel(
+                    "left", text=self._unit_label, units="", color=PLOT_FG
+                )
+            except Exception:
+                pass
+
+    def reset_y_scale(self) -> None:
+        """Neutral empty-plot scale for the current unit (after clear / unit switch)."""
+        if self.plot is None:
+            return
+        try:
+            self.plot.enableAutoRange(x=False, y=False)
+        except Exception:
+            pass
+        if self._plot_unit == "pulses":
+            self.plot.setYRange(-50.0, 50.0, padding=0)
+        else:
+            self.plot.setYRange(-0.01, 0.01, padding=0)
+        self.plot.setXRange(0.0, max(self._window_s * 0.25, 0.5), padding=0)
 
     def clear(self) -> None:
         for buf in self._series.values():
@@ -329,16 +358,50 @@ class FerrPlotWidget(QWidget):
                 curve.setData([], [])
             except Exception:
                 pass
+        self.reset_y_scale()
         self.update()
 
     def push(self, value: float, axis: str = "X") -> None:
         """Append one sample for ``axis`` and refresh that curve."""
         if value != value:  # NaN
             return
+        # Ignore absurd FERR spikes (bad HAL read / wrong pin) so one sample
+        # cannot lock the Y scale at ±1e8 until the buffer rolls over.
+        if self._plot_unit == "pulses":
+            if abs(value) > 5_000_000:  # ~380 mm at 13107 c/mm — not real FERR
+                return
+        elif abs(value) > 50.0:  # mm/deg — FERR past this is nonsense for the plot
+            return
         buf = self._ensure_series(axis)
         buf.append(float(value))
         self._waiting = False
         self._refresh_axis(axis)
+
+    def push_many(self, samples: Dict[str, float]) -> None:
+        """Append one sample per axis, then autoscale once (avoids mid-frame flicker)."""
+        any_pushed = False
+        for axis, value in samples.items():
+            if value != value:
+                continue
+            if self._plot_unit == "pulses":
+                if abs(value) > 5_000_000:
+                    continue
+            elif abs(value) > 50.0:
+                continue
+            buf = self._ensure_series(axis)
+            buf.append(float(value))
+            any_pushed = True
+            curve = self._curves.get(axis)
+            if curve is not None:
+                values = list(buf)
+                dt = self._sample_ms / 1000.0
+                xs = [i * dt for i in range(len(values))]
+                curve.setData(xs, values)
+        if any_pushed:
+            self._waiting = False
+            self._autoscale()
+        elif self._painter_mode:
+            self.update()
 
     def _refresh_axis(self, axis: str) -> None:
         values = list(self._series.get(axis, []))
@@ -353,13 +416,23 @@ class FerrPlotWidget(QWidget):
 
     def _refresh_all(self) -> None:
         for axis in list(self._series.keys()):
-            self._refresh_axis(axis)
+            values = list(self._series.get(axis, []))
+            curve = self._curves.get(axis)
+            if curve is not None:
+                dt = self._sample_ms / 1000.0
+                xs = [i * dt for i in range(len(values))]
+                curve.setData(xs, values)
+        self._autoscale()
         if self._painter_mode:
             self.update()
 
     def _autoscale(self) -> None:
         if self.plot is None:
             return
+        try:
+            self.plot.enableAutoRange(x=False, y=False)
+        except Exception:
+            pass
         finite: List[float] = []
         max_n = 0
         for values in self._series.values():
@@ -367,9 +440,17 @@ class FerrPlotWidget(QWidget):
             max_n = max(max_n, len(seq))
             finite.extend(v for v in seq if v == v)
         if finite:
-            peak = max(abs(min(finite)), abs(max(finite)), 1e-6)
-            pad = max(peak * 0.15, 1e-4)
-            self.plot.setYRange(-peak - pad, peak + pad, padding=0)
+            peak = max(abs(min(finite)), abs(max(finite)), 1e-9)
+            if self._plot_unit == "pulses":
+                floor = 10.0
+            else:
+                floor = 1e-4
+            pad = max(peak * 0.15, floor * 0.15)
+            y_max = max(peak + pad, floor)
+            self.plot.setYRange(-y_max, y_max, padding=0)
+        else:
+            self.reset_y_scale()
+            return
         if max_n > 0:
             dt = self._sample_ms / 1000.0
             x_end = max((max_n - 1) * dt, self._window_s * 0.25)
@@ -1002,12 +1083,15 @@ class UserTab(QWidget):
             self._ferr_unit_mode = "pulses"
         else:
             self._ferr_unit_mode = "unit"
+        # Drop old-unit samples before the label/scale change so mm and pulse
+        # values never share a buffer (that was the random out-of-scale bug).
         self._clear_ferr_plot()
         self._update_ferr_plot_label()
 
     def _update_ferr_unit_button_labels(self) -> None:
         unit = axis_unit(self._axis).upper()
         self.btn_ferr_unit.setText(unit)
+        # Label only — do not reset Y range while the buffer still has data.
         self._update_ferr_plot_label()
 
     def _update_ferr_plot_label(self) -> None:
@@ -1039,6 +1123,7 @@ class UserTab(QWidget):
         if not self._logging_active or not self._plot_axes:
             return
 
+        frame: Dict[str, float] = {}
         for axis in list(self._plot_axes):
             try:
                 counts, scaled_hal = read_drive_ferr(axis)
@@ -1058,7 +1143,10 @@ class UserTab(QWidget):
                 )
             plot_val = counts if self._ferr_unit_mode == "pulses" else scaled
             if plot_val == plot_val:
-                self.ferr_plot.push(plot_val, axis=axis)
+                frame[axis] = plot_val
+
+        if frame:
+            self.ferr_plot.push_many(frame)
 
         self._refresh_peak_label()
 
