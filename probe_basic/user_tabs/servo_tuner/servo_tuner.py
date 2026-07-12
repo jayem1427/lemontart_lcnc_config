@@ -476,7 +476,7 @@ class UserTab(QWidget):
         return header
 
     def _build_presets_bar(self) -> QFrame:
-        """Single-line preset strip: pick file, load into Pending, or save Pending."""
+        """Preset strip: optional named snapshots. Starts with no preset selected."""
         bar = QFrame(self)
         bar.setObjectName("presetsBar")
         bar.setAttribute(Qt.WA_StyledBackground, True)
@@ -489,25 +489,41 @@ class UserTab(QWidget):
         self.preset_combo.setObjectName("presetCombo")
         self.preset_combo.setMinimumWidth(160)
         self.preset_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.preset_combo.setToolTip(
+            "Named snapshots under config/tuning/presets/<axis>/. "
+            "Starts on (none) — drive values come from READ, not a preset."
+        )
         layout.addWidget(self.preset_combo, stretch=1)
 
         load_btn = QPushButton("LOAD", bar)
         load_btn.setFocusPolicy(Qt.NoFocus)
-        load_btn.setToolTip("Load preset into Pending (does not write the drive).")
+        load_btn.setToolTip(
+            "Load the selected preset into Pending only (does not write the drive)."
+        )
         load_btn.clicked.connect(lambda: self._load_selected_preset(apply=False))
         layout.addWidget(load_btn)
 
-        save_btn = QPushButton("SAVE", bar)
+        save_btn = QPushButton("SAVE AS PRESET", bar)
         save_btn.setObjectName("btnPrimary")
         save_btn.setFocusPolicy(Qt.NoFocus)
-        save_btn.setToolTip("Save current Pending values under the selected/typed name.")
+        save_btn.setToolTip(
+            "Save current drive tuning (last READ / live values) under the name "
+            "in the box. READ first if you have not yet."
+        )
         save_btn.clicked.connect(self._save_preset)
         layout.addWidget(save_btn)
 
         self.preset_name_edit = QLineEdit(bar)
-        self.preset_name_edit.setPlaceholderText("save as name…")
-        self.preset_name_edit.setMaximumWidth(140)
+        self.preset_name_edit.setPlaceholderText("new preset name…")
+        self.preset_name_edit.setMaximumWidth(160)
         layout.addWidget(self.preset_name_edit)
+
+        delete_btn = QPushButton("DELETE", bar)
+        delete_btn.setObjectName("btnDanger")
+        delete_btn.setFocusPolicy(Qt.NoFocus)
+        delete_btn.setToolTip("Delete the selected preset JSON from disk.")
+        delete_btn.clicked.connect(self._delete_preset)
+        layout.addWidget(delete_btn)
 
         # Keep notes field for save/load API compatibility (hidden).
         self.preset_notes_edit = QLineEdit(bar)
@@ -601,8 +617,8 @@ class UserTab(QWidget):
         self.load_soft_button = QPushButton("LOAD SOFT BASELINE", group)
         self.load_soft_button.setFocusPolicy(Qt.NoFocus)
         self.load_soft_button.setToolTip(
-            "Load soft preset into Pending (+ Fixed 1st / manual when writable). "
-            "Does not write the drive until APPLY."
+            "Load preset named 'soft' into Pending if it exists "
+            "(+ Fixed 1st / manual when writable). Save one with SAVE AS PRESET first."
         )
         self.load_soft_button.clicked.connect(self._load_soft_baseline)
         layout.addWidget(self.load_soft_button)
@@ -1688,34 +1704,61 @@ class UserTab(QWidget):
         self._apply_to_drive(baseline)
 
     def _refresh_preset_list(self) -> None:
-        current = self.preset_combo.currentText()
+        previous = self._selected_preset_name()
         self.preset_combo.blockSignals(True)
         self.preset_combo.clear()
+        self.preset_combo.addItem("(none)")
         names = list_presets(self._axis)
         self.preset_combo.addItems(names)
-        if current and current in names:
-            self.preset_combo.setCurrentText(current)
-        elif names:
-            self.preset_combo.setCurrentIndex(0)
+        if previous and previous in names:
+            self.preset_combo.setCurrentText(previous)
+        else:
+            self.preset_combo.setCurrentIndex(0)  # (none)
         self.preset_combo.blockSignals(False)
 
     def _selected_preset_name(self) -> str:
-        return self.preset_combo.currentText().strip()
+        name = self.preset_combo.currentText().strip()
+        if not name or name == "(none)":
+            return ""
+        return name
 
     def _save_preset(self) -> None:
+        """Save current drive tuning (last READ) as a named preset JSON."""
         name = self.preset_name_edit.text().strip() or self._selected_preset_name()
-        if not name:
-            QMessageBox.information(self, "Save preset", "Enter a preset name.")
+        if not name or name == "(none)":
+            QMessageBox.information(
+                self,
+                "Save as preset",
+                "Type a new preset name in the box (e.g. finish_10um), then SAVE AS PRESET.",
+            )
+            self.preset_name_edit.setFocus()
             return
+        live = self._live.get(self._axis)
+        if live is None or not live.values:
+            QMessageBox.information(
+                self,
+                "Save as preset",
+                "READ from the drive first so the preset captures live tuning "
+                "(not empty / catalog defaults).",
+            )
+            return
+        # Prefer live drive snapshot; fall back to Pending if somehow empty.
+        params = live.copy()
+        pending = self._params_from_ui()
+        for key, value in pending.values.items():
+            if key in self._ok_keys.get(self._axis, []):
+                params.set(key, value)
         notes = self.preset_notes_edit.text().strip()
         try:
-            path = save_preset(self._axis, name, self._params_from_ui(), notes=notes)
+            path = save_preset(self._axis, name, params, notes=notes)
             self.preset_name_edit.setText(name)
             self._refresh_preset_list()
             idx = self.preset_combo.findText(name)
             if idx >= 0:
                 self.preset_combo.setCurrentIndex(idx)
-            self.message_label.setText(f"Saved preset: {path}")
+            self.message_label.setText(
+                f"Saved current tuning as preset {name!r}: {path}"
+            )
         except Exception as exc:
             LOG.exception("save_preset failed")
             QMessageBox.warning(self, "Save failed", str(exc))
@@ -1723,7 +1766,12 @@ class UserTab(QWidget):
     def _load_selected_preset(self, apply: bool = False) -> None:
         name = self._selected_preset_name()
         if not name:
-            QMessageBox.information(self, "Load preset", "Select a preset from the list.")
+            QMessageBox.information(
+                self,
+                "Load preset",
+                "No preset selected (none). Pick a named preset first, "
+                "or READ to use live drive values.",
+            )
             return
         if not self._ok_keys.get(self._axis):
             QMessageBox.information(
@@ -1764,11 +1812,18 @@ class UserTab(QWidget):
     def _delete_preset(self) -> None:
         name = self._selected_preset_name()
         if not name:
+            QMessageBox.information(
+                self,
+                "Delete preset",
+                "Select a named preset to delete (not none).",
+            )
             return
         reply = QMessageBox.question(
             self,
             "Delete preset",
-            f"Delete preset {name!r} for axis {self._axis}?",
+            f"Delete preset {name!r} for axis {self._axis}?\n\n"
+            f"Removes config/tuning/presets/{self._axis}/{name}.json from disk.\n"
+            "Does not change what is on the drive.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -1776,8 +1831,11 @@ class UserTab(QWidget):
             return
         try:
             delete_preset(self._axis, name)
+            self.preset_name_edit.clear()
             self._refresh_preset_list()
-            self.message_label.setText(f"Deleted preset {name!r}.")
+            self.message_label.setText(
+                f"Deleted preset {name!r}. Combo is back on (none)."
+            )
         except Exception as exc:
             QMessageBox.warning(self, "Delete failed", str(exc))
 
