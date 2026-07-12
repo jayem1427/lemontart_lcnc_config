@@ -24,6 +24,10 @@ ls probe_basic/user_tabs/   # expect: signal_monitor, servo_tuner, templates
 
 Then: **Servo Tuning** → check axis buttons to plot (multi-OK) → parameters auto-read on open → **START PLOT** → **COPY TUNING** / **COPY PLOT** for LLM → edit Pending → **APPLY TO DRIVE**. Optional: **Logging** tab for multi-channel CSV.
 
+Or skip the loop entirely: **ONE-CLICK TUNE** on the same tab runs the whole
+gain ladder per axis automatically (stimulus moves + FFT stability gate +
+auto notch + journaled revert paths) — see **`ONE_CLICK_TUNING.md`**.
+
 ### Clipboard → LLM
 
 Servo Tuning → **CLIPBOARD** strip:
@@ -60,6 +64,7 @@ Backend: `probe_basic/python/resonance_analysis.py`.
 | Servo Tuning live FERR plot (mm/deg **or** pulses) | Working — multi-axis toggles + **START PLOT** (no CSV from this tab) |
 | Compact presets strip + right-side param table | Working |
 | APPLY with per-SDO retry/verify; continues after failures | Working |
+| **ONE-CLICK TUNE** per axis (auto gain ladder + notch + journal) | New — sim-tested; see `ONE_CLICK_TUNING.md` for hardware bring-up |
 | Read-only SDOs skipped (C01.10, C01.38) | Working — no longer abort the whole APPLY |
 | Startup C00/C01 SDOs in `ethercat-conf.xml` | **Removed** — was overwriting RAM tuning every bus claim |
 | Startup 6065/6066 fault windows | Still set (1.0 mm / 1.0° / 250 ms) |
@@ -84,7 +89,7 @@ These are operational, not “final tuned gains”:
 
 ### Open / next when you return
 
-1. Per-axis gain ladder with **COPY PLOT** / **COPY TUNING** + LLM (`SERVO_TUNING_LLM.md`); save presets when happy.
+1. Per-axis gain ladder: **ONE-CLICK TUNE** now automates it (`ONE_CLICK_TUNING.md`) — first hardware campaigns should be `--dry-run` then CONSERVATIVE on X; keep the journals. The **COPY PLOT** / **COPY TUNING** + LLM loop (`SERVO_TUNING_LLM.md`) remains for judgment calls (torque filter, FF, 2nd set).
 2. Store good tunes to drive **EEPROM** (vendor tool / panel) so they survive power loss — LinuxCNC no longer pushes C00/C01 at bus claim.
 3. Optional: inertia ratio (C00.06) after a real load measurement.
 4. Optional: feedforward / carrier / system ID (Tier 2 — not started).
@@ -236,9 +241,13 @@ A6 vendor objects often lack SDO dictionary info, so **`-t uint16` / `-t uint32`
 | `ethercat-conf.xml` | PDO telemetry + 6065/6066 only (no C00/C01 loop gains) |
 | `custom.hal` | Torque / velocity / **drive 60F4** → `tune-*` pins |
 | `probe_basic/python/a6_servo_tune.py` | SDO read/write, presets, FERR helpers |
-| `probe_basic/user_tabs/servo_tuner/` | Servo Tuning GUI |
+| `probe_basic/python/a6_auto_tune.py` | **One-click** auto-tune engine (`ONE_CLICK_TUNING.md`) |
+| `probe_basic/python/a6_auto_tune_sim.py` | Simulated axis for auto-tune tests / `--sim` |
+| `scripts/run_auto_tune.py` | Headless one-click CLI (`--sim`, `--dry-run`) |
+| `probe_basic/user_tabs/servo_tuner/` | Servo Tuning GUI (incl. ONE-CLICK strip) |
 | `config/tuning/presets/` | Per-axis JSON presets (e.g. `10um`, `20um`) — UI starts on **(none)** |
 | `config/logging/signals.json` | Logging-tab channels; default **1000 Hz** |
+| `logs/tuning/one_click/` | Auto-tune journals (gitignored) |
 | `SIGNAL_LOGGING.md` | Logging tab + HAL telemetry |
 | `nc_files/*_tuning.ngc` | Oscillation moves for FERR plots |
 

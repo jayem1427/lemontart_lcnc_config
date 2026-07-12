@@ -21,7 +21,9 @@ Manual tuning works but is fiddly: run a move, screenshot, paste into chat, inte
 4. **Human apply** — suggestions stay manual in Servo Tuning (**APPLY TO DRIVE**).
 5. **Auto-read on open** — no manual READ button; parameters load on tab open / unread axis focus.
 
-Non-goals: closed-loop auto-apply, one-button Tune Trial state machine, FFT scoring, Halscope integration, EEPROM store automation, multi-axis batch tuning.
+Non-goals *for this clipboard loop*: closed-loop auto-apply, Halscope integration, EEPROM store automation, multi-axis batch tuning.
+
+Two former non-goals were later built as separate features: FFT scoring (**ANALYZE** / `resonance_analysis.py`) and a one-button per-axis state machine (**ONE-CLICK TUNE** / `ONE_CLICK_TUNING.md`). The LLM loop stays human-in-the-loop by design.
 
 ---
 
