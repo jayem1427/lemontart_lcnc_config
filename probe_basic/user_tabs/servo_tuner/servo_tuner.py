@@ -75,6 +75,7 @@ from a6_servo_tune import (  # noqa: E402
 from tune_trial import (  # noqa: E402
     copy_plot_widget_to_clipboard,
     copy_text_to_clipboard,
+    format_param_display,
     format_tuning_text,
 )
 
@@ -730,8 +731,8 @@ class UserTab(QWidget):
         self.apply_button.setObjectName("btnPrimary")
         self.apply_button.setFocusPolicy(Qt.NoFocus)
         self.apply_button.setToolTip(
-            "Write Pending values to the edit-axis drive "
-            "(motors cycle OFF→ON if needed). Only keys from the last auto-read."
+            "Write changed Pending values to the edit-axis drive "
+            "(motors cycle OFF→ON if needed). Unchanged / unread keys are skipped."
         )
         self.apply_button.clicked.connect(lambda: self._apply_to_drive())
         table_actions.addWidget(self.apply_button)
@@ -1336,6 +1337,30 @@ class UserTab(QWidget):
             if self.status_label.text() == "BUSY":
                 self._set_status(f"EDIT {self._axis}", "ok")
 
+    @staticmethod
+    def _values_differ(key: str, pending: float, current: float) -> bool:
+        """True if Pending differs from Current at the param's display precision."""
+        decimals = int(PARAM_BY_KEY.get(key, {}).get("decimals", 1))
+        return round(pending, decimals) != round(current, decimals)
+
+    def _changed_keys(
+        self, params: AxisTuneParams, keys: List[str]
+    ) -> List[str]:
+        """Writable keys whose Pending value differs from last Current/live."""
+        live = self._live.get(self._axis)
+        if live is None:
+            return list(keys)
+        changed: List[str] = []
+        for key in keys:
+            if key not in params.values:
+                continue
+            if key not in live.values:
+                changed.append(key)
+                continue
+            if self._values_differ(key, params.get(key), live.get(key)):
+                changed.append(key)
+        return changed
+
     def _apply_to_drive(self, params: AxisTuneParams = None) -> None:
         # Qt clicked(bool) must never bind to this arg — guard anyway.
         if not isinstance(params, AxisTuneParams):
@@ -1361,6 +1386,16 @@ class UserTab(QWidget):
             )
             return
 
+        # Only show / write parameters that actually changed vs Current.
+        keys = self._changed_keys(params, keys)
+        if not keys:
+            QMessageBox.information(
+                self,
+                "Nothing changed",
+                "Pending matches Current — no SDOs to write.",
+            )
+            return
+
         was_on = machine_is_on()
         cycle_note = (
             "Motors are ON — they will be disabled, parameters written, "
@@ -1368,31 +1403,33 @@ class UserTab(QWidget):
             if was_on
             else "Motors are already OFF — parameters will be written as-is."
         )
-        # Show exactly what will be written so catalog defaults can't sneak in unseen.
+        live = self._live.get(self._axis)
         preview_lines = []
-        for key in keys[:12]:
+        for key in keys[:20]:
             defn = PARAM_BY_KEY[key]
-            val = float(params.values[key])
-            unit = defn.get("unit", "")
-            if unit == "mm|deg":
-                unit = axis_unit(self._axis)
-            preview_lines.append(f"  {defn['label']}: {val:g} {unit}".rstrip())
-        if len(keys) > 12:
-            preview_lines.append(f"  … and {len(keys) - 12} more")
+            new_txt = format_param_display(key, params.get(key), self._axis)
+            if live is not None and key in live.values:
+                old_txt = format_param_display(key, live.get(key), self._axis)
+                preview_lines.append(f"  {defn['label']}: {old_txt} → {new_txt}")
+            else:
+                preview_lines.append(f"  {defn['label']}: → {new_txt}")
+        if len(keys) > 20:
+            preview_lines.append(f"  … and {len(keys) - 20} more")
         preview = "\n".join(preview_lines)
 
         default_note = ""
         if self._allow_default_write:
             default_note = (
                 "\n\nWARNING: Pending came from LOAD DEFAULT — "
-                "this will push catalog defaults to the drive for all listed SDOs."
+                "this will push catalog defaults for the listed changed SDOs."
             )
         reply = QMessageBox.question(
             self,
             "Apply changes",
             f"Apply tuning to axis {self._axis} "
             f"(slave {AXES[self._axis]['slave']})?\n\n"
-            f"Will write {len(keys)} SDO(s) ONLY (unread keys untouched):\n"
+            f"Will write {len(keys)} changed SDO(s) "
+            f"(unchanged / unread keys untouched):\n"
             f"{preview}\n\n"
             f"{cycle_note}\n\n"
             "RAM only until you store EEPROM on the drive.\n"
@@ -1407,7 +1444,7 @@ class UserTab(QWidget):
         self._set_busy(True)
         self._set_status("APPLYING", "busy")
         self.message_label.setText(
-            f"Writing {len(keys)} SDO(s)…"
+            f"Writing {len(keys)} changed SDO(s)…"
             + (" (motors cycling)" if was_on else "")
         )
         try:
