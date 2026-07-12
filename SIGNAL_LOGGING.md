@@ -50,7 +50,7 @@ Nyquist says: to reconstruct a *continuous* signal that may contain energy up to
 
 For A6 loop tuning plots (DRIVE FERR, torque), **100–1000 Hz** is useful. At **1000 Hz** the logger aims for one sample per servo update via in-process `hal.get_value` (not slow `halcmd`). Polling faster than the servo thread only duplicates values — it does **not** unlock content that never appeared on the HAL pin.
 
-The Servo Tuning tab’s live FERR strip chart is separate (START PLOT / STOP PLOT, no CSV) and also targets ~1 kHz via `hal.get_value`.
+The Servo Tuning tab’s live FERR strip chart is separate (START PLOT / STOP PLOT, no CSV). It polls HAL at ~1 kHz **only while START PLOT is on** (and the tab is visible); opening the tab alone does not poll FERR.
 
 ---
 

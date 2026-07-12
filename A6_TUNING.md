@@ -61,7 +61,7 @@ Backend: `probe_basic/python/resonance_analysis.py`.
 | Item | State |
 |------|--------|
 | Drive 60F4 PDO → `tune-drive-ferr.*` | Working |
-| Servo Tuning live FERR plot (mm/deg **or** pulses) | Working — multi-axis toggles + **START PLOT** (no CSV from this tab) |
+| Servo Tuning live FERR plot (mm/deg **or** pulses) | Working — multi-axis toggles + **START PLOT** (no CSV). HAL poll only while plotting. |
 | Compact presets strip + right-side param table | Working |
 | APPLY with per-SDO retry/verify; continues after failures | Working |
 | **ONE-CLICK TUNE** per axis (auto gain ladder + notch + journal) | New — sim-tested; see `ONE_CLICK_TUNING.md` for hardware bring-up |
@@ -163,7 +163,7 @@ Open **Servo Tuning** in Probe Basic (`probe_basic/user_tabs/servo_tuner/`).
 | **PLOT / EDIT** | Axis buttons toggle FERR traces (multi-OK); last clicked-on = edit axis |
 | *(auto-read)* | SDOs load into Current + Pending on tab open / unread axis focus |
 | **COPY TUNING** / **COPY PLOT** | Clipboard text (table labels) + FERR image for LLM |
-| **START PLOT / STOP PLOT** | Live 60F4 FERR trace only — **nothing written to disk** |
+| **START PLOT / STOP PLOT** | Live 60F4 FERR trace only — **nothing written to disk**. HAL is polled (~1 kHz) **only while START PLOT is on** and this tab is visible; pulse/mm readouts stay idle otherwise. |
 | **MM** / **PULSES** | Plot Y-axis units (pulses = raw `lcec.0.N.ferr-fb`) |
 | **TUNING PARAMETERS** | Grouped table: Current / Pending / Unit / Range |
 | **APPLY TO DRIVE** | In the parameters box — cycles motors OFF if needed, writes Pending SDOs with retry+verify, re-enables |

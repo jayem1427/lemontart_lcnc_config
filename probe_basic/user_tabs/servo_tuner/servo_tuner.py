@@ -554,10 +554,10 @@ class UserTab(QWidget):
         self.ocFinished.connect(self._on_one_click_finished)
 
         self._build_ui()
+        # Poll HAL only while START PLOT is on (was 1 kHz from tab open — wasted CPU).
         self._ferr_timer = QTimer(self)
         self._ferr_timer.setInterval(FERR_SAMPLE_MS)
         self._ferr_timer.timeout.connect(self._poll_ferr)
-        self._ferr_timer.start()
 
     def _ensure_font(self):
         if PB_FONT in QFontDatabase().families():
@@ -608,6 +608,7 @@ class UserTab(QWidget):
         self._refresh_preset_list()
         self._update_value_readouts()
         self._sync_log_button()
+        self._idle_ferr_readout()
         self._update_plot_axis_hint()
 
     def _build_header(self) -> QFrame:
@@ -1187,6 +1188,8 @@ class UserTab(QWidget):
             self.one_click_button.setText(f"ONE-CLICK TUNE {axis}")
         self._refresh_unit_columns()
         self._refresh_preset_list()
+        if not self._logging_active:
+            self._idle_ferr_readout()
         if axis in self._live:
             self._set_params_to_ui(self._live[axis])
             self._update_value_readouts()
@@ -1263,13 +1266,13 @@ class UserTab(QWidget):
         return counts_to_unit(axis, counts)
 
     def _poll_ferr(self) -> None:
-        if not self.isVisible():
+        if not self._logging_active or not self.isVisible():
             return
 
-        # Live readout always follows the edit-focus axis.
+        # Live readout follows the edit-focus axis (only while plotting).
         self._update_focus_ferr_readout()
 
-        if not self._logging_active or not self._plot_axes:
+        if not self._plot_axes:
             return
 
         frame: Dict[str, float] = {}
@@ -1321,8 +1324,18 @@ class UserTab(QWidget):
             self.ferr_unit_value_label.setText(f"{axis} {unit.upper()}: {scaled:.4f}")
         else:
             self.ferr_unit_value_label.setText(f"{axis} {unit.upper()}: —")
-        if not self._logging_active:
-            self._refresh_peak_label()
+        self._refresh_peak_label()
+
+    def _idle_ferr_readout(self) -> None:
+        """Show frozen / idle readouts when not plotting (no HAL poll)."""
+        axis = self._axis
+        unit = axis_unit(axis)
+        scale = float(AXES[axis]["scale"])
+        pin = drive_ferr_counts_halpin(axis)
+        self.ferr_scale_label.setText(f"{pin}  SCALE={scale:g}/{unit}  (plot off)")
+        self.ferr_pulses_label.setText(f"{axis} PULSES: —")
+        self.ferr_unit_value_label.setText(f"{axis} {unit.upper()}: —")
+        self.ferr_peak_label.setText("PEAK: —")
 
     def _refresh_peak_label(self) -> None:
         bits = []
@@ -1339,6 +1352,16 @@ class UserTab(QWidget):
         self.ferr_peak_label.setText(
             "PEAK: " + (" ".join(bits) if bits else "—")
         )
+
+    def _sync_ferr_timer(self) -> None:
+        """Run the 1 kHz HAL poll only while plotting and this tab is visible."""
+        want = bool(self._logging_active and self.isVisible())
+        if want:
+            if not self._ferr_timer.isActive():
+                self._ferr_timer.start()
+        else:
+            if self._ferr_timer.isActive():
+                self._ferr_timer.stop()
 
     def _toggle_logging(self) -> None:
         """Start/stop live FERR plot only — no CSV, nothing written to disk."""
@@ -1363,7 +1386,9 @@ class UserTab(QWidget):
             )
         else:
             self._logging_active = False
+            self._idle_ferr_readout()
             self._notify("Plot stopped / frozen.")
+        self._sync_ferr_timer()
         self._update_value_readouts()
         self._sync_log_button()
 
@@ -2191,6 +2216,9 @@ class UserTab(QWidget):
             self.ferr_plot.set_active_axes(["X"])
             self._update_plot_axis_hint()
         self._update_ferr_unit_button_labels()
+        self._sync_ferr_timer()
+        if not self._logging_active:
+            self._idle_ferr_readout()
         if not self._did_initial_read:
             self._did_initial_read = True
             try:
@@ -2211,6 +2239,13 @@ class UserTab(QWidget):
                 LOG.info("servo_tuner: initial read skipped: %s", exc)
                 self._notify(
                     "Could not auto-read drive (EtherCAT / sudo?). "
-                    "Re-open this tab or change axis to retry. FERR plot still polls HAL. "
+                    "Re-open this tab or change axis to retry. "
+                    "FERR HAL polling only runs after START PLOT. "
                     "APPLY is blocked until a successful auto-read."
                 )
+
+    def hideEvent(self, event):  # noqa: N802
+        # Stop 1 kHz poll when leaving the tab (resume on show if plot still on).
+        if self._ferr_timer.isActive():
+            self._ferr_timer.stop()
+        super().hideEvent(event)
