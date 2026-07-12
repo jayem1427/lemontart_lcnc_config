@@ -198,6 +198,17 @@ class OneClickConfig:
     # A spectral peak below this absolute amplitude (axis units) is noise,
     # not a resonance — do not let it block the ladder on a quiet axis.
     min_resonance_amplitude: float = 0.001
+    # ...and it must also stand out against the tracking error itself:
+    # short-stroke stimuli put motion harmonics 30-60 Hz above the noise
+    # floor with huge prominence (found via the sim — see ONE_CLICK_TUNING.md
+    # "lessons learned"). A real resonance carries a meaningful fraction of
+    # the buffer RMS; forced motion harmonics do not.
+    resonance_vs_rms: float = 0.10
+    # Ignore FFT peaks below ~gate_min_hz_factor / leg_time (capped): that
+    # band is dominated by the stimulus pulse train, not mechanics.
+    gate_min_hz_factor: float = 6.0
+    gate_min_hz_floor: float = 25.0
+    gate_min_hz_cap: float = 120.0
     min_meaningful_rms: float = 0.0005
     # Motion watchdog aborts the move when |FERR| crosses this fraction of
     # the drive 6065 window (or ferr_abort_fallback when 6065 is unreadable).
@@ -1501,11 +1512,13 @@ class OneClickTuner:
             raise OneClickCancelled()
 
         report: Optional[ResonanceReport] = None
+        gate_min_hz = self._gate_min_hz()
         try:
             report = analyze_ferr_resonance(
                 samples,
                 axis=cfg.axis,
                 fs_hz=cfg.sample_hz,
+                min_hz=gate_min_hz,
                 hf_fail=cfg.hf_fail,
                 ring_fail=cfg.ring_fail,
                 min_prominence_ratio=cfg.min_prominence_ratio,
@@ -1536,6 +1549,8 @@ class OneClickTuner:
             report=report,
         )
         csv_path = self.journal.record_samples(label, samples, cfg.sample_hz)
+        fft_info = _report_to_dict(report)
+        fft_info["gate_min_hz"] = gate_min_hz
         self.journal.event(
             "measure",
             "measurement",
@@ -1543,9 +1558,23 @@ class OneClickTuner:
             meta=meta,
             csv=csv_path,
             gains={k: self._current.get(k) for k in TOUCHABLE_KEYS},
-            fft=_report_to_dict(report),
+            fft=fft_info,
         )
         return m
+
+    def _gate_min_hz(self) -> float:
+        """Lowest frequency the stability gate treats as a possible resonance.
+
+        The stimulus pulse train forces FERR content up to roughly
+        ``gate_min_hz_factor / leg_time`` — flagging those harmonics as
+        "resonance" would block the ladder on short/fast strokes.
+        """
+        cfg = self.cfg
+        leg = max(cfg.stimulus.leg_time_s(), 1e-3)
+        return min(
+            cfg.gate_min_hz_cap,
+            max(cfg.gate_min_hz_floor, cfg.gate_min_hz_factor / leg),
+        )
 
     def _classify(
         self, report: Optional[ResonanceReport], meta: Dict[str, Any]
@@ -1560,14 +1589,19 @@ class OneClickTuner:
             if report.n_samples < 64:
                 reasons.append(f"short buffer ({int(report.n_samples)})")
             dom = report.dominant
+            amp_floor = max(
+                cfg.min_resonance_amplitude,
+                cfg.resonance_vs_rms * float(report.rms),
+            )
             if (
                 dom is not None
                 and dom.prominence >= cfg.min_prominence_ratio
-                and dom.magnitude >= cfg.min_resonance_amplitude
+                and dom.magnitude >= amp_floor
             ):
                 reasons.append(
                     f"resonance peak {dom.freq_hz:.1f} Hz "
-                    f"(mag {dom.magnitude:.4g}, x{dom.prominence:.1f} floor)"
+                    f"(mag {dom.magnitude:.4g}, x{dom.prominence:.1f} floor, "
+                    f"amp floor {amp_floor:.4g})"
                 )
             if (
                 report.hf_energy_ratio >= cfg.hf_fail

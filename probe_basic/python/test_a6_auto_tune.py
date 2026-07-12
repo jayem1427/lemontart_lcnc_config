@@ -213,6 +213,26 @@ def test_preflight_failure(tmp: str) -> None:
     print(f"  preflight: blocked cleanly ({result.reason})")
 
 
+def test_short_stroke_gate_not_fooled(tmp: str) -> None:
+    """Regression: short fast strokes (Y default: 0.09s legs) push stimulus
+    harmonics into the 30-60 Hz band with huge FFT prominence. The gate must
+    treat those as forced motion, not resonance, or the ladder never starts.
+    Found via this simulator — see ONE_CLICK_TUNING.md lessons learned."""
+    from a6_auto_tune import DEFAULT_STIMULI
+
+    for axis in ("Y", "Z"):
+        io = SimTuneIO()
+        cfg = OneClickConfig.for_axis(axis, "balanced",
+                                      stimulus=DEFAULT_STIMULI[axis])
+        tuner = OneClickTuner(cfg, io=io, journal_root=tmp)
+        gate_hz = tuner._gate_min_hz()
+        assert gate_hz > 40.0, (axis, gate_hz)  # above the harmonic band
+        result = tuner.run()
+        assert result.status == "improved", (axis, result.summary())
+    print("  short-stroke gate: Y/Z default stimuli tune clean "
+          f"(gate floor {gate_hz:.0f} Hz)")
+
+
 def test_estimate_and_config() -> None:
     cfg = OneClickConfig.for_axis("Z", "conservative")
     est = estimate_campaign_seconds(cfg)
@@ -238,6 +258,7 @@ def main() -> int:
         test_cancel_reverts,
         test_dry_run_writes_nothing,
         test_preflight_failure,
+        test_short_stroke_gate_not_fooled,
     ]
     tmp_root = tempfile.mkdtemp(prefix="one_click_test_")
     try:
