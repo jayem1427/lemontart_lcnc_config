@@ -785,7 +785,7 @@ class Ui_dros_xyza(object):
 "]"))
         self.zero_all_button.setProperty("MDICommand", _translate("dros_xyza", "G10 L20 P{ch[0]} X0.0 Y0.0 Z0.0"))
         self.ref_all_button.setText(_translate("dros_xyza", "REF ALL"))
-        self.ref_all_button.setProperty("rules", _translate("dros_xyza", "[{\"channels\": [{\"url\": \"status:all_axes_homed\", \"trigger\": true}], \"property\": \"Text\", \"expression\": \"\'HOMED\' if ch[0] else \'REF ALL\'\", \"name\": \"reference_all\"}, {\"name\": \"home_prohibit\", \"property\": \"Enable\", \"expression\": \"not (ch[0] or ch[1] or ch[2] or ch[3])\", \"channels\": [{\"url\": \"status:joint.0.homing\", \"trigger\": true}, {\"url\": \"status:joint.1.homing\", \"trigger\": true}, {\"url\": \"status:joint.2.homing\", \"trigger\": true}, {\"url\": \"status:joint.3.homing\", \"trigger\": true}]}]"))
+        self.ref_all_button.setProperty("rules", _translate("dros_xyza", "[{\"name\": \"home_prohibit\", \"property\": \"Enable\", \"expression\": \"not (ch[0] or ch[1] or ch[2] or ch[3])\", \"channels\": [{\"url\": \"status:joint.0.homing\", \"trigger\": true}, {\"url\": \"status:joint.1.homing\", \"trigger\": true}, {\"url\": \"status:joint.2.homing\", \"trigger\": true}, {\"url\": \"status:joint.3.homing\", \"trigger\": true}]}]"))
         self.ref_all_button.setProperty("actionName", _translate("dros_xyza", "machine.home.all"))
 from qtpyvcp.widgets.button_widgets.action_button import ActionButton
 from qtpyvcp.widgets.button_widgets.mdi_button import MDIButton

@@ -159,7 +159,7 @@ Drive fault **Er47.0** compares internal position demand vs feedback (CiA 6062 v
 
 ## Tuning G-code
 
-`nc_files/x_tuning.ngc` — 10 oscillation cycles on X between 0 and 80 mm at F1000 (mm/min), 0.5 s dwell each end. Same pattern for `y_tuning.ngc`, `y_tuning_85.ngc`, `z_tuning.ngc`, and `a_tuning.ngc`. Use with **LOG NEXT PROGRAM** and **DRIVE** (or FERR / TORQUE) on the plot.
+`nc_files/x_tuning.ngc` — 10 oscillation cycles on X between 0 and 80 mm at F1000 (mm/min), 0.5 s dwell each end. Same 10-cycle pattern for `y_tuning.ngc`, `y_tuning_85.ngc`, and `a_tuning.ngc`. `z_tuning.ngc` is **1 cycle** 0↔15 mm @ F10000 (same dwell). Use with **LOG NEXT PROGRAM** and **DRIVE** (or FERR / TORQUE) on the plot.
 
 `ethercat_mill.ini` sets:
 

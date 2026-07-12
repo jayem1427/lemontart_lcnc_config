@@ -114,6 +114,7 @@ Default probe tool is **T99**; `#3014`, `tool.tbl`, and HAL must all match. See 
 ## Current machine behavior (captured config)
 
 - Built-in M6 tool-change motion is **disabled** (`TOOL_CHANGE_AT_G30=0`, `TOOL_CHANGE_QUILL_UP=0`); retract and G30 are handled by `tool_touch_off.ngc` / `M600`.
+- **REF ALL** order is Z → X → Y → A (`HOME_SEQUENCE` 0/1/2/3). Search velocities are 2× prior values; latch/final unchanged. A has no home switch (virtual home at current position). See [DEVIATIONS.md](DEVIATIONS.md#ref-all-sequence).
 - Home/limit inputs below are wired active-low NC and inverted in HAL (`not.*`).
 - Touch probe (Slave 1 DI5) and contact toolsetter (Slave 1 DI2 / DB15 pin 9) are NC and **gated** to `motion.probe-input` by spindle tool (T99 → probe, else → toolsetter). See **Touch probe vs toolsetter routing** above.
 - Software E-stop is wired NC on Slave 3 DI1 / DB15 pin 10 and gates `iocontrol.0.emc-enable-in`.

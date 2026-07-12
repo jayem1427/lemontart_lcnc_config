@@ -69,7 +69,7 @@ Backend: `probe_basic/python/resonance_analysis.py`.
 | Startup C00/C01 SDOs in `ethercat-conf.xml` | **Removed** — was overwriting RAM tuning every bus claim |
 | Startup 6065/6066 fault windows | Still set (1.0 mm / 1.0° / 250 ms) |
 | Logging tab default sample rate | **1000 Hz** via in-process `hal.get_value` |
-| Bench presets `X/10um`, `Z/20um` | Under `config/tuning/presets/` — combo starts on **(none)** |
+| Bench presets `X/10um`, `Y/20um_y_axis`, `Z/20um`, `Z/no_buzz` | Under `config/tuning/presets/` — combo starts on **(none)** |
 
 ### What we deliberately abandoned
 
@@ -170,7 +170,7 @@ Open **Servo Tuning** in Probe Basic (`probe_basic/user_tabs/servo_tuner/`).
 
 **Not on this tab anymore:** READ button, REVERT, LOAD DEFAULT, Tune Trial / Cancel, Load Soft Baseline, Auto Cycle Start, notes field, CSV logging.
 
-Presets live under `config/tuning/presets/<axis>/*.json`. Combo starts on **(none)**. Bench examples: `10um` (X), `20um` (Z).
+Presets live under `config/tuning/presets/<axis>/*.json`. Combo starts on **(none)**. Bench examples: `10um` (X), `20um_y_axis` (Y), `20um` / `no_buzz` (Z).
 
 **Typical workflow**
 
@@ -245,7 +245,7 @@ A6 vendor objects often lack SDO dictionary info, so **`-t uint16` / `-t uint32`
 | `probe_basic/python/a6_auto_tune_sim.py` | Simulated axis for auto-tune tests / `--sim` |
 | `scripts/run_auto_tune.py` | Headless one-click CLI (`--sim`, `--dry-run`) |
 | `probe_basic/user_tabs/servo_tuner/` | Servo Tuning GUI (incl. ONE-CLICK strip) |
-| `config/tuning/presets/` | Per-axis JSON presets (e.g. `10um`, `20um`) — UI starts on **(none)** |
+| `config/tuning/presets/` | Per-axis JSON presets (`X/10um`, `Y/20um_y_axis`, `Z/20um`, `Z/no_buzz`) — UI starts on **(none)** |
 | `config/logging/signals.json` | Logging-tab channels; default **1000 Hz** |
 | `logs/tuning/one_click/` | Auto-tune journals (gitignored) |
 | `SIGNAL_LOGGING.md` | Logging tab + HAL telemetry |

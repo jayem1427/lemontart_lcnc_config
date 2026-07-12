@@ -77,7 +77,7 @@ Homing and limit wiring live in [`ethercat_mill.hal`](ethercat_mill.hal), not th
 **Bench / breakout shortcuts** (revert before production — details in [DEVIATIONS.md](DEVIATIONS.md#bench--breakout-shortcuts)):
 
 - `NO_FORCE_HOMING = 1` in `ethercat_mill.ini` — can run without homing
-- A axis `HOME_SEQUENCE = 0` with zero search/latch velocities — “Rev All” marks A homed at current position
+- REF ALL order is Z → X → Y → A (`HOME_SEQUENCE` 0/1/2/3). A uses zero search/latch — marks homed at current position (no switch)
 - Z/A limits and A home **gagged** via `and2.0` in HAL while X/Y use real switches
 
 ### Stage 4 — Spindle (H100 VFD + Modbus)

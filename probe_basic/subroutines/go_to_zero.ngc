@@ -5,6 +5,7 @@ G90
 G53 G0 Z0
 G0 X0 Y0
 
+#<geometry> = #<_ini[kins]joints>
 o100 if [EXISTS[#<_ini[traj]axes>]]
     #<geometry> = #<_ini[traj]axes>
 o100 endif

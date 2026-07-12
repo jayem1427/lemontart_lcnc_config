@@ -45,7 +45,7 @@ Optional: **SAVE AS PRESET** / **LOAD** for named snapshots (combo starts on `(n
 |------|------|--------|
 | X | `nc_files/x_tuning.ngc` | 10× 0↔80 mm @ F1000 |
 | Y | `nc_files/y_tuning.ngc` | 10× 0↔15 mm @ F30000 |
-| Z | `nc_files/z_tuning.ngc` | 10× 0↔15 mm @ F10000 |
+| Z | `nc_files/z_tuning.ngc` | 1× 0↔15 mm @ F10000 |
 | A | `nc_files/a_tuning.ngc` | 10× 0↔90° @ F3600 |
 
 `y_tuning_85.ngc` is an alternate — use it only if you intentionally change the campaign.
