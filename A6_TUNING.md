@@ -30,9 +30,27 @@ Servo Tuning → **CLIPBOARD** strip:
 
 - **COPY TUNING** — parameter text using the same labels as the table (`C01.00 1st position loop gain`, …)
 - **COPY PLOT** — FERR strip-chart image
+- **COPY RESONANCE** — FFT / stability-gate report (after **ANALYZE**)
 - Docs: `SEMI_AUTO_TUNING.md`, `SERVO_TUNING_LLM.md`
 
 Does **not** auto-apply LLM suggestions. C01.38 gain switchover remains read-only on APPLY.
+
+### Resonance analysis (FFT + notches)
+
+Under the FERR plot:
+
+1. **START PLOT** → run `nc_files/x_resonance.ngc` (short high-accel reversals).
+2. **ANALYZE** — Hann-windowed FFT of the edit-axis FERR buffer (~1 kHz → Nyquist ≈ 500 Hz).
+3. Stability gate: PASS/FAIL from spectral peaks, HF energy, ring score.
+4. **USE SUGGESTED NOTCH 3** — loads dominant peak into Pending `C01.46/47/48` (leaves 1st/2nd for adaptive).
+5. **APPLY TO DRIVE** yourself. Or enable `C01.30` adaptive and re-read notch freqs.
+
+Parameter table **Notch** group now exposes:
+
+- `C01.30`–`C01.33` adaptive mode / test diagnostics (`C01.32`/`C01.33` read-only)
+- Five torque notches `C01.40`–`C01.4E` (freq / width % / depth %; **8000 Hz = off**)
+
+Backend: `probe_basic/python/resonance_analysis.py`.
 
 ### What is done
 

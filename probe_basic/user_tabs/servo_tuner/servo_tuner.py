@@ -78,6 +78,10 @@ from tune_trial import (  # noqa: E402
     format_param_display,
     format_tuning_text,
 )
+from resonance_analysis import (  # noqa: E402
+    analyze_ferr_resonance,
+    format_resonance_text,
+)
 
 try:
     import pyqtgraph as pg
@@ -531,6 +535,7 @@ class UserTab(QWidget):
         # If True, next APPLY may write catalog defaults (unused — DEFAULT removed).
         self._allow_default_write = False
         self._logging_active = False  # live FERR plot only (no CSV / disk writes)
+        self._resonance_report = None
 
         self._build_ui()
         self._ferr_timer = QTimer(self)
@@ -733,6 +738,14 @@ class UserTab(QWidget):
         self.copy_plot_button.clicked.connect(self._copy_plot)
         layout.addWidget(self.copy_plot_button)
 
+        self.copy_resonance_button = QPushButton("COPY RESONANCE", bar)
+        self.copy_resonance_button.setFocusPolicy(Qt.NoFocus)
+        self.copy_resonance_button.setToolTip(
+            "Copy last FFT resonance report (run ANALYZE first)."
+        )
+        self.copy_resonance_button.clicked.connect(self._copy_resonance)
+        layout.addWidget(self.copy_resonance_button)
+
         layout.addStretch()
         return bar
 
@@ -788,6 +801,64 @@ class UserTab(QWidget):
         self.ferr_plot = FerrPlotWidget(group)
         self.ferr_plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self.ferr_plot, stretch=1)
+
+        # --- Resonance / FFT strip ---
+        layout.addWidget(self._caption("RESONANCE"))
+        res_row = QHBoxLayout()
+        self.analyze_resonance_button = QPushButton("ANALYZE", group)
+        self.analyze_resonance_button.setObjectName("btnPrimary")
+        self.analyze_resonance_button.setFocusPolicy(Qt.NoFocus)
+        self.analyze_resonance_button.setToolTip(
+            "FFT the edit-axis FERR buffer (run x_resonance.ngc with START PLOT). "
+            "Nyquist ≈ 500 Hz at 1 kHz sampling."
+        )
+        self.analyze_resonance_button.clicked.connect(self._analyze_resonance)
+        res_row.addWidget(self.analyze_resonance_button)
+
+        self.suggest_notch_button = QPushButton("USE SUGGESTED NOTCH 3", group)
+        self.suggest_notch_button.setFocusPolicy(Qt.NoFocus)
+        self.suggest_notch_button.setEnabled(False)
+        self.suggest_notch_button.setToolTip(
+            "Load FFT peak into Pending for C01.46/47/48 (3rd notch). "
+            "Then APPLY TO DRIVE yourself."
+        )
+        self.suggest_notch_button.clicked.connect(self._apply_suggested_notch_pending)
+        res_row.addWidget(self.suggest_notch_button)
+        res_row.addStretch()
+        layout.addLayout(res_row)
+
+        self.resonance_label = QLabel(
+            "RESONANCE: run START PLOT + nc_files/x_resonance.ngc → ANALYZE",
+            group,
+        )
+        self.resonance_label.setObjectName("lblParamHint")
+        self.resonance_label.setWordWrap(True)
+        layout.addWidget(self.resonance_label)
+
+        self._resonance_report = None
+        self._spectrum_curve = None
+        self.spectrum_plot = None
+        if pg is not None:
+            self.spectrum_plot = pg.PlotWidget()
+            self.spectrum_plot.setBackground(PLOT_BG)
+            self.spectrum_plot.showGrid(x=True, y=True, alpha=0.35)
+            self.spectrum_plot.setMinimumHeight(120)
+            self.spectrum_plot.setMaximumHeight(180)
+            self.spectrum_plot.setLabel(
+                "bottom", "Hz", color=PLOT_FG, **{"font-size": "11pt"}
+            )
+            self.spectrum_plot.setLabel(
+                "left", "mag", color=PLOT_FG, **{"font-size": "11pt"}
+            )
+            for axis_name in ("left", "bottom"):
+                axis = self.spectrum_plot.getAxis(axis_name)
+                axis.setPen(PLOT_FG)
+                axis.setTextPen(PLOT_FG)
+            self._spectrum_curve = self.spectrum_plot.plot(
+                pen=pg.mkPen("#fcaf3e", width=2)
+            )
+            layout.addWidget(self.spectrum_plot)
+
         return group
 
     def _build_param_table_group(self) -> QGroupBox:
@@ -914,6 +985,8 @@ class UserTab(QWidget):
                 "Manual load inertia ratio (%). Enter measured/estimated value — "
                 "this is not the F30 inertia auto-tune."
             )
+        elif defn.get("note"):
+            spin.setToolTip(str(defn["note"]))
         self.param_table.setCellWidget(row, COL_PENDING, spin)
         self._pending_edits[key] = spin
         if defn.get("writable", True) is False:
@@ -1290,6 +1363,105 @@ class UserTab(QWidget):
             )
         except Exception as exc:
             LOG.exception("copy plot failed")
+            QMessageBox.warning(self, "Clipboard", str(exc))
+
+    def _analyze_resonance(self) -> None:
+        samples = self.ferr_plot.get_samples(self._axis)
+        fs = 1000.0 / max(float(getattr(self.ferr_plot, "_sample_ms", 1.0)), 1e-6)
+        try:
+            report = analyze_ferr_resonance(
+                samples, axis=self._axis, fs_hz=fs
+            )
+        except Exception as exc:
+            LOG.exception("resonance analyze failed")
+            QMessageBox.warning(self, "Resonance", str(exc))
+            return
+
+        self._resonance_report = report
+        self.resonance_label.setText(report.summary_line() + f" · {report.reason}")
+        self.suggest_notch_button.setEnabled(bool(report.suggested_notch))
+
+        if (
+            self._spectrum_curve is not None
+            and report.freqs_hz is not None
+            and report.magnitude is not None
+            and len(report.freqs_hz) > 1
+        ):
+            try:
+                self._spectrum_curve.setData(
+                    list(report.freqs_hz), list(report.magnitude)
+                )
+                self.spectrum_plot.setXRange(
+                    0.0, min(500.0, float(report.freqs_hz[-1]))
+                )
+            except Exception:
+                LOG.exception("spectrum plot update failed")
+
+        gate = "PASS" if report.stable else "FAIL"
+        self._set_status(f"RESONANCE {gate}", "ok" if report.stable else "error")
+        self._notify(f"RESONANCE {gate} — {report.summary_line()}")
+        LOG.info("resonance: %s", report.summary_line())
+
+    def _apply_suggested_notch_pending(self) -> None:
+        report = self._resonance_report
+        if report is None or not report.suggested_notch:
+            QMessageBox.information(
+                self,
+                "Resonance",
+                "No suggestion yet — ANALYZE a buffer that shows a clear peak.",
+            )
+            return
+        missing = [
+            k for k in report.suggested_notch if k not in self._pending_edits
+        ]
+        if missing:
+            QMessageBox.warning(
+                self,
+                "Resonance",
+                "Notch Pending spins missing (unread SDO keys?): "
+                + ", ".join(missing),
+            )
+            return
+        for key, val in report.suggested_notch.items():
+            spin = self._pending_edits.get(key)
+            if spin is None or not spin.isEnabled():
+                continue
+            spin.setValue(float(val))
+        self._set_status("NOTCH 3 PENDING", "ok")
+        self._notify(
+            f"Suggested notch 3 loaded into Pending for {self._axis} — "
+            "APPLY TO DRIVE when ready."
+        )
+
+    def _copy_resonance(self) -> None:
+        report = self._resonance_report
+        if report is None:
+            samples = self.ferr_plot.get_samples(self._axis)
+            if len(samples) < 64:
+                QMessageBox.information(
+                    self,
+                    "Clipboard",
+                    "No resonance report yet. START PLOT, run the resonance NGC, "
+                    "then ANALYZE (or COPY after ANALYZE).",
+                )
+                return
+            fs = 1000.0 / max(
+                float(getattr(self.ferr_plot, "_sample_ms", 1.0)), 1e-6
+            )
+            try:
+                report = analyze_ferr_resonance(
+                    samples, axis=self._axis, fs_hz=fs
+                )
+                self._resonance_report = report
+            except Exception as exc:
+                QMessageBox.warning(self, "Clipboard", str(exc))
+                return
+        try:
+            copy_text_to_clipboard(format_resonance_text(report))
+            self._set_status("RESONANCE COPIED", "ok")
+            self._notify(f"COPY RESONANCE — {report.summary_line()}")
+        except Exception as exc:
+            LOG.exception("copy resonance failed")
             QMessageBox.warning(self, "Clipboard", str(exc))
 
     def _refresh_unit_columns(self) -> None:

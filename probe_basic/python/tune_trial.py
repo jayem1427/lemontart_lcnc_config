@@ -131,6 +131,13 @@ def format_tuning_text(
     return "\n".join(lines)
 
 
+def format_resonance_text_clipboard(report) -> str:
+    """Re-export analysis formatter for Servo Tuning clipboard."""
+    from resonance_analysis import format_resonance_text
+
+    return format_resonance_text(report)
+
+
 def copy_text_to_clipboard(text: str) -> None:
     from qtpy.QtGui import QGuiApplication
 
