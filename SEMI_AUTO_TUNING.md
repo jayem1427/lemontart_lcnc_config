@@ -21,7 +21,7 @@ Operator guide for the **Tune Trial** flow on the Servo Tuning tab: run a frozen
 
 1. Home / enable machine. Open **Servo Tuning**. Select axis.
 2. **READ**.
-3. Optional: **LOAD SOFT BASELINE** → review Pending → **APPLY TO DRIVE**.
+3. Optional: create a `soft` preset with **SAVE AS PRESET**, then **LOAD SOFT BASELINE** → **APPLY TO DRIVE** — or skip and tune from live READ values.
 4. Optional notes in the notes field (`buzzes on push`, etc.).
 5. **TUNE TRIAL** → confirm → **Cycle Start** (unless auto-run).
 6. When the program ends, PNG + paste pack land on the clipboard and under `logs/tuning/<trial_id>/`.
@@ -76,14 +76,14 @@ PNG title burn-in: `Y · <trial_id> · pos/speed/integral/filter · mm`.
 
 ## Soft baseline
 
-**LOAD SOFT BASELINE**:
+**LOAD SOFT BASELINE** (optional):
 
-- Overlays `config/tuning/presets/<axis>/soft.json` onto the last READ
-- Tries `manual_mode = 0` when that key is readable **and** writable
-- Tries `gain_sw_mode = 0` (Fixed 1st) only when writable — on this A6 build **C01.38 is read-only**, so switchover may need the drive panel
+- Overlays `config/tuning/presets/<axis>/soft.json` onto the last READ **if that file exists**
+- Create one yourself: READ → tweak soft gains → type `soft` → **SAVE AS PRESET**
+- Tries `manual_mode = 0` / `gain_sw_mode = 0` only when those keys are writable
 - **Does not write the drive** until you **APPLY TO DRIVE**
 
-Use this before the first LLM loop so you start from a known-soft Pending set.
+Generic `default` / `soft` snapshots were removed from the repo — start from **(none)** + **READ**, then save names you care about.
 
 ---
 

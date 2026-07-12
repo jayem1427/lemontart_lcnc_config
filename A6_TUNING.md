@@ -46,7 +46,7 @@ Does **not** auto-apply LLM suggestions. C01.38 gain switchover remains read-onl
 | Startup C00/C01 SDOs in `ethercat-conf.xml` | **Removed** — was overwriting RAM tuning every bus claim |
 | Startup 6065/6066 fault windows | Still set (1.0 mm / 1.0° / 250 ms) |
 | Logging tab default sample rate | **1000 Hz** via in-process `hal.get_value` |
-| Bench presets `X/10um`, `Z/20um` | Saved under `config/tuning/presets/` |
+| Bench presets `X/10um`, `Z/20um` | Under `config/tuning/presets/` — combo starts on **(none)** |
 
 ### What we deliberately abandoned
 
@@ -222,7 +222,7 @@ A6 vendor objects often lack SDO dictionary info, so **`-t uint16` / `-t uint32`
 | `custom.hal` | Torque / velocity / **drive 60F4** → `tune-*` pins |
 | `probe_basic/python/a6_servo_tune.py` | SDO read/write, presets, FERR helpers |
 | `probe_basic/user_tabs/servo_tuner/` | Servo Tuning GUI |
-| `config/tuning/presets/` | Per-axis JSON presets (`default`, `soft`, `10um`, `20um`, …) |
+| `config/tuning/presets/` | Per-axis JSON presets (e.g. `10um`, `20um`) — UI starts on **(none)** |
 | `config/logging/signals.json` | Logging-tab channels; default **1000 Hz** |
 | `SIGNAL_LOGGING.md` | Logging tab + HAL telemetry |
 | `nc_files/*_tuning.ngc` | Oscillation moves for FERR plots |
