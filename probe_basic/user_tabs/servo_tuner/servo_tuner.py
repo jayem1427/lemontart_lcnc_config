@@ -1629,10 +1629,13 @@ class UserTab(QWidget):
         self._oc_tuner = tuner
         self._set_one_click_running(True)
 
-        # Show the live FERR trace for the axis being tuned.
+        # Show the live FERR trace for the axis being tuned. Must start the
+        # gated HAL poll timer (START PLOT path) — flag alone is not enough.
         if axis not in self._plot_axes:
             self.axis_buttons[axis].setChecked(True)
+        self.ferr_plot.set_active_axes(list(self._plot_axes))
         self._logging_active = True
+        self._sync_ferr_timer()
         self._sync_log_button()
 
         self._notify(f"One-click tune started on {axis} ({profile}).")
