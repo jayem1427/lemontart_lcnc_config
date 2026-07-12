@@ -45,7 +45,7 @@ Optional: **SAVE AS PRESET** / **LOAD** for named snapshots (combo starts on `(n
 |------|------|--------|
 | X | `nc_files/x_tuning.ngc` | 10× 0↔80 mm @ F1000 |
 | Y | `nc_files/y_tuning.ngc` | 10× 0↔15 mm @ F30000 |
-| Z | `nc_files/z_tuning.ngc` | 10× 0↔15 mm @ F10000 |
+| Z | `nc_files/z_tuning.ngc` | 1× 0↔15 mm @ F10000 |
 | A | `nc_files/a_tuning.ngc` | 10× 0↔90° @ F3600 |
 
 `y_tuning_85.ngc` is an alternate — use it only if you intentionally change the campaign.
@@ -80,4 +80,6 @@ There is no **LOAD SOFT BASELINE** button. Start from auto-read live values, or 
 
 ## Not in scope
 
-Auto-apply of LLM JSON, FFT scoring, EEPROM store, multi-axis batch, Halscope, one-button Tune Trial. See `SEMI_AUTO_TUNING_SCOPE.md`.
+Auto-apply of LLM JSON, EEPROM store, multi-axis batch, Halscope. See `SEMI_AUTO_TUNING_SCOPE.md`.
+
+A one-button per-axis auto-tune now exists separately (**ONE-CLICK TUNE** on the same tab — `ONE_CLICK_TUNING.md`); this clipboard → LLM loop remains the tool for the judgment calls it does not automate (torque filter, feedforward, 2nd gain set).

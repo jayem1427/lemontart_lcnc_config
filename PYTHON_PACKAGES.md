@@ -124,6 +124,8 @@ which halcmd
 | `hal_signal_logger.py` | None |
 | Logging tab | `python3-pyqtgraph` for plots |
 | `plot_signal_log.py` | `python3-pyqtgraph` |
+| `run_auto_tune.py` / ONE-CLICK TUNE | `python3-numpy` (FFT stability gate) |
+| `test_a6_auto_tune.py` | `python3-numpy` only — no LinuxCNC/Qt needed |
 
 ---
 

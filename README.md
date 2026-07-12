@@ -16,6 +16,7 @@ Please treat this repo as a **reference built from examples**, not a guaranteed 
 | **[GETTING_STARTED.md](GETTING_STARTED.md)** | Zero-to-hero path, external links, first boot, troubleshooting |
 | **[DEVIATIONS.md](DEVIATIONS.md)** | How this config differs from stock LinuxCNC / Probe Basic |
 | **[TOOLSETTER.md](TOOLSETTER.md)** | M600 toolsetter, touch-probe routing, Fusion post |
+| **[ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md)** | One-click per-axis servo auto-tune: state machine, safety, journals, failure table |
 | **[PROBE_BASIC_UI.md](PROBE_BASIC_UI.md)** | Custom DRO (SET Z), spindle widgets, UI paths |
 | [probe_basic/subroutines/metrology/README.md](probe_basic/subroutines/metrology/README.md) | Z repeatability test macros |
 
@@ -46,7 +47,7 @@ Full staged path (sim → EtherCAT → Probe Basic → CAM): **[GETTING_STARTED.
 
 HAL telemetry, CSV logging, and a **Logging** tab in Probe Basic for following error, torque, and velocity on X/Y/Z/A. See **[SIGNAL_LOGGING.md](SIGNAL_LOGGING.md)** for the tab UI, HAL chain, drive SDO limits, tuning G-code, sample rate / Nyquist notes, and test plan.
 
-**A6 loop tuning + Servo Tuning GUI** (plot drive 60F4 separately): **[A6_TUNING.md](A6_TUNING.md)** — active; see Status. **Semi-auto Tune Trial** (plot → clipboard → LLM): **[SEMI_AUTO_TUNING.md](SEMI_AUTO_TUNING.md)** / **[SERVO_TUNING_LLM.md](SERVO_TUNING_LLM.md)**. **Install on another machine:** **[INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md)**. Manual playbook: **[SERVO_TUNING.md](SERVO_TUNING.md)**.
+**A6 loop tuning + Servo Tuning GUI** (plot drive 60F4 separately): **[A6_TUNING.md](A6_TUNING.md)** — active; see Status. **One-click per-axis auto-tune** (gain ladder + FFT gate + auto notch, fully journaled): **[ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md)**. **Semi-auto Tune Trial** (plot → clipboard → LLM): **[SEMI_AUTO_TUNING.md](SEMI_AUTO_TUNING.md)** / **[SERVO_TUNING_LLM.md](SERVO_TUNING_LLM.md)**. **Install on another machine:** **[INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md)**. Manual playbook: **[SERVO_TUNING.md](SERVO_TUNING.md)**.
 Branch: `servo-tuning-gui` (Logging tab + Servo Tuning + Tune Trial).
 
 ## Layout
@@ -113,6 +114,7 @@ Default probe tool is **T99**; `#3014`, `tool.tbl`, and HAL must all match. See 
 ## Current machine behavior (captured config)
 
 - Built-in M6 tool-change motion is **disabled** (`TOOL_CHANGE_AT_G30=0`, `TOOL_CHANGE_QUILL_UP=0`); retract and G30 are handled by `tool_touch_off.ngc` / `M600`.
+- **REF ALL** order is Z → X → Y → A (`HOME_SEQUENCE` 0/1/2/3). Search velocities are 2× prior values; latch/final unchanged. A has no home switch (virtual home at current position). See [DEVIATIONS.md](DEVIATIONS.md#ref-all-sequence).
 - Home/limit inputs below are wired active-low NC and inverted in HAL (`not.*`).
 - Touch probe (Slave 1 DI5) and contact toolsetter (Slave 1 DI2 / DB15 pin 9) are NC and **gated** to `motion.probe-input` by spindle tool (T99 → probe, else → toolsetter). See **Touch probe vs toolsetter routing** above.
 - Software E-stop is wired NC on Slave 3 DI1 / DB15 pin 10 and gates `iocontrol.0.emc-enable-in`.

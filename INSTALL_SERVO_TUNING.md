@@ -34,17 +34,26 @@ Probe Basic does **not** use pip plugins for UI. Custom tabs are **drop-in folde
 From this repo into your machine config (paths relative to the config root, e.g. `.../configs/ethercat_mill/`):
 
 ```text
-probe_basic/user_tabs/servo_tuner/          # Servo Tuning tab
+probe_basic/user_tabs/servo_tuner/          # Servo Tuning tab (incl. ONE-CLICK strip)
 probe_basic/user_tabs/signal_monitor/       # Logging tab (optional but recommended)
 probe_basic/python/a6_servo_tune.py
+probe_basic/python/a6_auto_tune.py          # one-click auto-tune engine
+probe_basic/python/a6_auto_tune_sim.py      # sim axis (tests / --sim demos)
+probe_basic/python/resonance_analysis.py    # FFT stability gate (needs numpy)
 probe_basic/python/tune_trial.py            # Tune Trial / paste pack helpers
 probe_basic/python/hal_signal_logger.py
 probe_basic/python/signal_plot_widget.py
+scripts/run_auto_tune.py                    # headless one-click CLI
 config/tuning/presets/                      # or start empty and SAVE from the tab
 config/logging/signals.json
 nc_files/*_tuning.ngc                       # frozen Tune Trial stimuli
-SEMI_AUTO_TUNING.md SERVO_TUNING.md SERVO_TUNING_LLM.md   # optional but recommended
+SEMI_AUTO_TUNING.md SERVO_TUNING.md SERVO_TUNING_LLM.md ONE_CLICK_TUNING.md   # optional but recommended
 ```
+
+One-click auto-tune also assumes the `AXES` map (step 5) is correct — it
+derives strokes, FERR scaling, and the 6065 abort window from it. Smoke-test
+with `python3 scripts/run_auto_tune.py --axis X --sim` (no hardware) and then
+`--dry-run` before a real campaign. See `ONE_CLICK_TUNING.md`.
 
 Remove leftover tab folders you do not want — Probe Basic loads **every** subfolder under `USER_TABS_PATH`:
 

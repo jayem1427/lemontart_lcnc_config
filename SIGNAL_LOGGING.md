@@ -50,7 +50,7 @@ Nyquist says: to reconstruct a *continuous* signal that may contain energy up to
 
 For A6 loop tuning plots (DRIVE FERR, torque), **100–1000 Hz** is useful. At **1000 Hz** the logger aims for one sample per servo update via in-process `hal.get_value` (not slow `halcmd`). Polling faster than the servo thread only duplicates values — it does **not** unlock content that never appeared on the HAL pin.
 
-The Servo Tuning tab’s live FERR strip chart is separate (START PLOT / STOP PLOT, no CSV) and also targets ~1 kHz via `hal.get_value`.
+The Servo Tuning tab’s live FERR strip chart is separate (START PLOT / STOP PLOT, no CSV). It polls HAL at ~1 kHz **only while START PLOT is on** (and the tab is visible); opening the tab alone does not poll FERR.
 
 ---
 
@@ -159,7 +159,7 @@ Drive fault **Er47.0** compares internal position demand vs feedback (CiA 6062 v
 
 ## Tuning G-code
 
-`nc_files/x_tuning.ngc` — 10 oscillation cycles on X between 0 and 80 mm at F1000 (mm/min), 0.5 s dwell each end. Same pattern for `y_tuning.ngc`, `y_tuning_85.ngc`, `z_tuning.ngc`, and `a_tuning.ngc`. Use with **LOG NEXT PROGRAM** and **DRIVE** (or FERR / TORQUE) on the plot.
+`nc_files/x_tuning.ngc` — 10 oscillation cycles on X between 0 and 80 mm at F1000 (mm/min), 0.5 s dwell each end. Same 10-cycle pattern for `y_tuning.ngc`, `y_tuning_85.ngc`, and `a_tuning.ngc`. `z_tuning.ngc` is **1 cycle** 0↔15 mm @ F10000 (same dwell). Use with **LOG NEXT PROGRAM** and **DRIVE** (or FERR / TORQUE) on the plot.
 
 `ethercat_mill.ini` sets:
 

@@ -23,7 +23,7 @@ Stock references:
 | Spindle feedback | Encoder or sim `scale_to_rpm` | **VFD Modbus** freq → `spindle.0.speed-in` |
 | At-speed | `near` or drive ready bit | **`near` + 5 s `timedelay`** after RPM match |
 | Homing required | Default (forced) | **`NO_FORCE_HOMING = 1`** (bench — revert for production) |
-| A axis homing | Real switch sequence | **Disabled** — `HOME_SEQUENCE = 0`, zero search vel |
+| A axis homing | Real switch sequence | **Disabled** — `HOME_SEQUENCE = 3` (after Z/X/Y), zero search vel |
 | Z− limit | Usually wired | **Commented out** in HAL (pin free) |
 | Feed override max | 100–200% | **250%** (`MAX_FEED_OVERRIDE = 2.5`) |
 | Fusion post | Stock `linuxcnc.cps`, `M6`, preload `T` | **`linuxcnc-djr.cps`**, M600 default, no preload |
@@ -44,16 +44,28 @@ Stock LinuxCNC blocks motion until all joints with `HOME_SEQUENCE > 0` are homed
 
 **Revert for production:** comment out the line and confirm Home All behavior on all four joints.
 
+### REF ALL sequence
+
+`HOME_SEQUENCE`: Z=`0`, X=`1`, Y=`2`, A=`3` — sequential (wait for prior joint). `HOME_SEARCH_VEL` is 2× prior; latch/final unchanged.
+
+### `[TRAJ] AXES = 4`
+
+Probe Basic macros such as `go_to_zero.ngc` / `go_to_home.ngc` expect `#<_ini[traj]axes>` (axis count). Without it, `#<geometry>` was undefined and those buttons failed. Default fallback is `#<_ini[kins]joints>` when the INI key is missing.
+
+### REF ALL button label
+
+XYZA DRO **REF ALL** always shows `REF ALL` (the old `status:all_axes_homed` → `HOMED` text rule was removed). The button still disables while any joint is homing.
+
 ### A axis “virtual homing”
 
 ```ini
 # ethercat_mill.ini [JOINT_3]
 HOME_SEARCH_VEL = 0.0
 HOME_LATCH_VEL = 0.0
-HOME_SEQUENCE = 0
+HOME_SEQUENCE = 3
 ```
 
-Comment in INI: `BREAKOUT OFF: Rev All sets homed at position`. No physical A home switch is active (`ethercat_mill.hal` has A home net commented out).
+Comment in INI: last in REF ALL; zero search/latch marks A homed at current position (no switch). No physical A home switch is active (`ethercat_mill.hal` has A home net commented out).
 
 ### `trivkins coordinates=XYZA`
 

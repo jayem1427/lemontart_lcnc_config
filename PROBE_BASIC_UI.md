@@ -11,6 +11,7 @@ Stock [Probe Basic](https://github.com/kcjengr/probe_basic) is the shell; this r
 | `DISPLAY` | `probe_basic` | Same |
 | `DRO_DISPLAY` | `XYZA` | Custom folder below |
 | `GEOMETRY` | `XYZA` | Template often XYZ |
+| `[TRAJ] AXES` | `4` | Needed by `go_to_zero` / `go_to_home` macros |
 | `TOOL_TABLE_COLUMNS` | `TDZR` | Template `TZDR` / `TPDZR` |
 | `ATC_TAB_DISPLAY` | `0` | ATC tab hidden |
 | `MAX_FEED_OVERRIDE` | `2.5` (250%) | Template `2.0` |
@@ -22,11 +23,13 @@ Required INI keys for Probe Basic compatibility: [`probe_basic/pb_required_ini_s
 
 ---
 
-## Custom XYZA DRO — SET Z
+## Custom XYZA DRO — SET Z / REF ALL
 
 **Files:** [`probe_basic/user_dro_display/xyza_dros/dros_xyza.py`](probe_basic/user_dro_display/xyza_dros/dros_xyza.py), [`dros_xyza.ui`](probe_basic/user_dro_display/xyza_dros/dros_xyza.ui)
 
 The main DRO panel includes a **SET Z** button (left) and mm entry field (right). This is a Lemontart-specific shortcut not present in upstream Probe Basic.
+
+**REF ALL** always shows the label `REF ALL` (does not flip to `HOMED`). It still runs `machine.home.all` and disables while any joint is homing. Homing order is Z → X → Y → A — see [DEVIATIONS.md](DEVIATIONS.md#ref-all-sequence).
 
 ### What it does
 
