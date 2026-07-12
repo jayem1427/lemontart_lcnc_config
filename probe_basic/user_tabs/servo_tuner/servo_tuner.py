@@ -107,6 +107,13 @@ PLOT_FG = "#eeeeec"
 PLOT_LINE = "#8ae234"
 PLOT_ZERO = "#6e7375"
 
+AXIS_PLOT_COLORS = {
+    "X": "#8ae234",  # green
+    "Y": "#729fcf",  # blue
+    "Z": "#fcaf3e",  # orange
+    "A": "#ad7fa8",  # purple
+}
+
 COL_PARAM = 0
 COL_CURRENT = 1
 COL_PENDING = 2
@@ -115,7 +122,7 @@ COL_RANGE = 4
 
 
 class FerrPlotWidget(QWidget):
-    """Simple live FERR strip chart (pyqtgraph when available, else QPainter)."""
+    """Live multi-axis FERR strip chart (pyqtgraph when available, else QPainter)."""
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -125,9 +132,14 @@ class FerrPlotWidget(QWidget):
         self._sample_ms = float(FERR_SAMPLE_MS)
         self._window_s = float(FERR_WINDOW_S)
         self._title = ""
-        self._samples: Deque[float] = collections.deque(maxlen=FERR_BUFFER)
         self._unit_label = "mm"
         self._waiting = True
+        self._buf_len = max(
+            1, int(self._window_s * (1000.0 / max(self._sample_ms, 1.0)))
+        )
+        self._series: Dict[str, Deque[float]] = {}
+        self._curves: Dict[str, object] = {}
+        self._legend = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -146,16 +158,55 @@ class FerrPlotWidget(QWidget):
                     axis.setStyle(tickFont=QFont(PB_FONT, 11))
                 except Exception:
                     pass
-            self.plot.setLabel("bottom", "time (s)", color=PLOT_FG, **{"font-size": "12pt"})
-            self.plot.setLabel("left", self._unit_label, color=PLOT_FG, **{"font-size": "12pt"})
-            self.curve = self.plot.plot(pen=pg.mkPen(color=PLOT_LINE, width=2.5))
-            self.plot.addLine(y=0, pen=pg.mkPen(color=PLOT_ZERO, width=1, style=Qt.DashLine))
+            self.plot.setLabel(
+                "bottom", "time (s)", color=PLOT_FG, **{"font-size": "12pt"}
+            )
+            self.plot.setLabel(
+                "left", self._unit_label, color=PLOT_FG, **{"font-size": "12pt"}
+            )
+            self.plot.addLine(
+                y=0, pen=pg.mkPen(color=PLOT_ZERO, width=1, style=Qt.DashLine)
+            )
+            try:
+                self._legend = self.plot.addLegend(offset=(10, 10))
+            except Exception:
+                self._legend = None
             self.plot.setMinimumHeight(280)
             root.addWidget(self.plot)
+            # Back-compat alias used by older single-curve call sites.
+            self.curve = None
         else:
             self._painter_mode = True
             self.plot = None
             self.curve = None
+
+    def _ensure_series(self, axis: str) -> Deque[float]:
+        if axis not in self._series:
+            self._series[axis] = collections.deque(maxlen=self._buf_len)
+            if self.plot is not None and pg is not None:
+                color = AXIS_PLOT_COLORS.get(axis, PLOT_LINE)
+                curve = self.plot.plot(
+                    pen=pg.mkPen(color=color, width=2.5), name=axis
+                )
+                self._curves[axis] = curve
+        return self._series[axis]
+
+    def set_active_axes(self, axes: List[str]) -> None:
+        """Keep only these axis series (drop curves for others)."""
+        wanted = [a for a in axes if a in AXIS_ORDER]
+        for axis in list(self._series.keys()):
+            if axis not in wanted:
+                self._series.pop(axis, None)
+                curve = self._curves.pop(axis, None)
+                if curve is not None and self.plot is not None:
+                    try:
+                        self.plot.removeItem(curve)
+                    except Exception:
+                        pass
+        for axis in wanted:
+            self._ensure_series(axis)
+        self._waiting = not any(self._series.values())
+        self._refresh_all()
 
     def set_window_seconds(
         self, window_s: float, sample_ms: Optional[float] = None
@@ -163,12 +214,14 @@ class FerrPlotWidget(QWidget):
         self._window_s = float(window_s)
         if sample_ms is not None:
             self._sample_ms = float(sample_ms)
-        buf = max(
-            1,
-            int(self._window_s * (1000.0 / max(self._sample_ms, 1.0))),
+        self._buf_len = max(
+            1, int(self._window_s * (1000.0 / max(self._sample_ms, 1.0)))
         )
-        old = list(self._samples)
-        self._samples = collections.deque(old[-buf:], maxlen=buf)
+        for axis, old in list(self._series.items()):
+            self._series[axis] = collections.deque(
+                list(old)[-self._buf_len :], maxlen=self._buf_len
+            )
+        self._refresh_all()
 
     def set_title(self, title: str) -> None:
         self._title = str(title or "")
@@ -180,8 +233,16 @@ class FerrPlotWidget(QWidget):
             except Exception:
                 pass
 
-    def get_samples(self) -> List[float]:
-        return list(self._samples)
+    def get_samples(self, axis: Optional[str] = None) -> List[float]:
+        if axis is None:
+            # Prefer a single series if only one; else first in AXIS_ORDER.
+            if len(self._series) == 1:
+                return list(next(iter(self._series.values())))
+            for name in AXIS_ORDER:
+                if name in self._series:
+                    return list(self._series[name])
+            return []
+        return list(self._series.get(axis, []))
 
     def export_png(self, path: str, title: Optional[str] = None) -> None:
         """Write the current strip chart to PNG (ImageExporter or QImage fallback)."""
@@ -205,8 +266,9 @@ class FerrPlotWidget(QWidget):
                 if burn != prev_title:
                     self.set_title(prev_title)
 
-        # QPainter fallback (painter mode or exporter failure).
-        values = list(self._samples)
+        self._export_png_painter(path, burn)
+
+    def _export_png_painter(self, path: str, burn: str) -> None:
         width, height = 960, 360
         image = QImage(width, height, QImage.Format_RGB32)
         image.fill(QColor(PLOT_BG))
@@ -227,24 +289,28 @@ class FerrPlotWidget(QWidget):
         mid_y = plot_rect.center().y()
         painter.setPen(QPen(QColor(PLOT_ZERO), 1, Qt.DashLine))
         painter.drawLine(plot_rect.left() + 2, mid_y, plot_rect.right() - 2, mid_y)
-        if values:
-            peak = max(abs(min(values)), abs(max(values)), 1e-6)
+
+        all_vals: List[float] = []
+        for values in self._series.values():
+            all_vals.extend(v for v in values if v == v)
+        if all_vals:
+            peak = max(abs(min(all_vals)), abs(max(all_vals)), 1e-6)
             pad = peak * 0.15
             y_max = peak + pad
-            n = len(values)
             w = max(1, plot_rect.width() - 4)
             h = max(1, plot_rect.height() - 4)
-            painter.setPen(QPen(QColor(PLOT_LINE), 2))
-            if n == 1:
-                x = plot_rect.left() + 2
-                y = mid_y - (values[0] / y_max) * (h / 2.0)
-                painter.drawPoint(int(x), int(y))
-            else:
+            for axis, values in self._series.items():
+                seq = list(values)
+                if len(seq) < 2:
+                    continue
+                color = AXIS_PLOT_COLORS.get(axis, PLOT_LINE)
+                painter.setPen(QPen(QColor(color), 2))
+                n = len(seq)
                 for i in range(1, n):
                     x0 = plot_rect.left() + 2 + ((i - 1) / (n - 1)) * w
                     x1 = plot_rect.left() + 2 + (i / (n - 1)) * w
-                    y0 = mid_y - (values[i - 1] / y_max) * (h / 2.0)
-                    y1 = mid_y - (values[i] / y_max) * (h / 2.0)
+                    y0 = mid_y - (seq[i - 1] / y_max) * (h / 2.0)
+                    y1 = mid_y - (seq[i] / y_max) * (h / 2.0)
                     painter.drawLine(int(x0), int(y0), int(x1), int(y1))
         else:
             painter.setPen(QColor(PLOT_FG))
@@ -263,41 +329,66 @@ class FerrPlotWidget(QWidget):
     def set_unit_label(self, unit: str) -> None:
         self._unit_label = unit
         if self.plot is not None:
-            # Explicitly clear SI "units=" so pyqtgraph doesn't keep a stale "mm".
             self.plot.setLabel("left", text=unit, units="", color=PLOT_FG)
             axis = self.plot.getAxis("left")
             axis.enableAutoSIPrefix(False)
             axis.setLabel(text=unit, units="")
-            self.plot.setYRange(-1, 1, padding=0)  # reset until new samples arrive
+            self.plot.setYRange(-1, 1, padding=0)
 
     def clear(self) -> None:
-        self._samples.clear()
+        for buf in self._series.values():
+            buf.clear()
         self._waiting = True
-        if self.curve is not None:
-            self.curve.setData([], [])
+        for curve in self._curves.values():
+            try:
+                curve.setData([], [])
+            except Exception:
+                pass
         self.update()
 
-    def push(self, value: float) -> None:
+    def push(self, value: float, axis: str = "X") -> None:
+        """Append one sample for ``axis`` and refresh that curve."""
         if value != value:  # NaN
             return
-        self._samples.append(float(value))
+        buf = self._ensure_series(axis)
+        buf.append(float(value))
         self._waiting = False
-        values = list(self._samples)
-        if self.curve is not None:
+        self._refresh_axis(axis)
+
+    def _refresh_axis(self, axis: str) -> None:
+        values = list(self._series.get(axis, []))
+        curve = self._curves.get(axis)
+        if curve is not None:
             dt = self._sample_ms / 1000.0
             xs = [i * dt for i in range(len(values))]
-            self.curve.setData(xs, values)
-            finite = [v for v in values if v == v]
-            if finite:
-                peak = max(abs(min(finite)), abs(max(finite)), 1e-6)
-                pad = max(peak * 0.15, 1e-4)
-                self.plot.setYRange(-peak - pad, peak + pad, padding=0)
-                if xs:
-                    self.plot.setXRange(
-                        xs[0], max(xs[-1], self._window_s * 0.25), padding=0
-                    )
+            curve.setData(xs, values)
+            self._autoscale()
         else:
             self.update()
+
+    def _refresh_all(self) -> None:
+        for axis in list(self._series.keys()):
+            self._refresh_axis(axis)
+        if self._painter_mode:
+            self.update()
+
+    def _autoscale(self) -> None:
+        if self.plot is None:
+            return
+        finite: List[float] = []
+        max_n = 0
+        for values in self._series.values():
+            seq = list(values)
+            max_n = max(max_n, len(seq))
+            finite.extend(v for v in seq if v == v)
+        if finite:
+            peak = max(abs(min(finite)), abs(max(finite)), 1e-6)
+            pad = max(peak * 0.15, 1e-4)
+            self.plot.setYRange(-peak - pad, peak + pad, padding=0)
+        if max_n > 0:
+            dt = self._sample_ms / 1000.0
+            x_end = max((max_n - 1) * dt, self._window_s * 0.25)
+            self.plot.setXRange(0.0, x_end, padding=0)
 
     def paintEvent(self, event):  # noqa: N802
         if not self._painter_mode:
@@ -316,35 +407,32 @@ class FerrPlotWidget(QWidget):
 
         painter.setPen(QColor(PLOT_FG))
         painter.setFont(QFont(PB_FONT, 10))
-        if self._waiting or not self._samples:
+        all_vals: List[float] = []
+        for values in self._series.values():
+            all_vals.extend(list(values))
+        if self._waiting or not all_vals:
             painter.drawText(rect, Qt.AlignCenter, "waiting for samples")
             painter.end()
             return
 
-        values = list(self._samples)
-        peak = max(abs(min(values)), abs(max(values)), 1e-6)
+        peak = max(abs(min(all_vals)), abs(max(all_vals)), 1e-6)
         pad = peak * 0.15
         y_max = peak + pad
-        n = len(values)
-        if n < 2:
-            painter.end()
-            return
-
-        painter.setPen(QPen(QColor(PLOT_LINE), 2))
         w = max(1, rect.width() - 8)
         h = max(1, rect.height() - 8)
-        points = []
-        for i, val in enumerate(values):
-            x = rect.left() + 4 + (i / (n - 1)) * w
-            y = mid_y - (val / y_max) * (h / 2.0)
-            points.append((x, y))
-        for i in range(1, len(points)):
-            painter.drawLine(
-                int(points[i - 1][0]),
-                int(points[i - 1][1]),
-                int(points[i][0]),
-                int(points[i][1]),
-            )
+        for axis, values in self._series.items():
+            seq = list(values)
+            n = len(seq)
+            if n < 2:
+                continue
+            color = AXIS_PLOT_COLORS.get(axis, PLOT_LINE)
+            painter.setPen(QPen(QColor(color), 2))
+            for i in range(1, n):
+                x0 = rect.left() + 4 + ((i - 1) / (n - 1)) * w
+                x1 = rect.left() + 4 + (i / (n - 1)) * w
+                y0 = mid_y - (seq[i - 1] / y_max) * (h / 2.0)
+                y1 = mid_y - (seq[i] / y_max) * (h / 2.0)
+                painter.drawLine(int(x0), int(y0), int(x1), int(y1))
         painter.end()
 
 
@@ -361,6 +449,7 @@ class UserTab(QWidget):
         self._apply_panel_background()
 
         self._axis = "X"
+        self._plot_axes: List[str] = ["X"]  # multi-select for FERR plot
         self._syncing = False
         self._baseline: Dict[str, AxisTuneParams] = {}
         self._live: Dict[str, AxisTuneParams] = {}
@@ -368,8 +457,8 @@ class UserTab(QWidget):
         self._failed_keys: Dict[str, List[str]] = {}
         self._did_initial_read = False
         self._ferr_unit_mode = "unit"  # "unit" (mm/deg) or "pulses"
-        self._ferr_peak_pulses = 0.0
-        self._ferr_peak_unit = 0.0
+        self._ferr_peak_pulses: Dict[str, float] = {a: 0.0 for a in AXIS_ORDER}
+        self._ferr_peak_unit: Dict[str, float] = {a: 0.0 for a in AXIS_ORDER}
         self._pending_edits: Dict[str, QDoubleSpinBox] = {}
         self._current_labels: Dict[str, QLabel] = {}
         self._row_keys: List[str] = []
@@ -436,10 +525,9 @@ class UserTab(QWidget):
         root_layout.addLayout(body, stretch=1)
 
         self.message_label = QLabel(
-            "READ loads drive SDOs into Pending. Edit Pending, then APPLY in the "
-            "parameters box to write the drive. START PLOT runs the live FERR trace "
-            "(nothing is written to disk). Tune Trial opens the axis NGC, captures "
-            "drive FERR, and saves a paste pack under logs/tuning/.",
+            "Axis buttons toggle FERR plot traces (multi-select). Last clicked-on "
+            "axis is the one you edit. READ / APPLY are in the parameters box. "
+            "START PLOT runs the live trace. Tune Trial captures drive FERR + paste pack.",
             self,
         )
         self.message_label.setObjectName("lblMessage")
@@ -447,10 +535,12 @@ class UserTab(QWidget):
         root_layout.addWidget(self.message_label, stretch=0)
 
         self.axis_buttons["X"].setChecked(True)
+        self.ferr_plot.set_active_axes(list(self._plot_axes))
         self._refresh_preset_list()
         self._update_value_readouts()
         self._sync_log_button()
         self._sync_trial_controls()
+        self._update_plot_axis_hint()
 
     def _build_header(self) -> QFrame:
         header = QFrame(self)
@@ -534,8 +624,7 @@ class UserTab(QWidget):
         row = QHBoxLayout()
         row.setSpacing(6)
 
-        row.addWidget(self._caption("AXIS"))
-        self.axis_group = QButtonGroup(self)
+        row.addWidget(self._caption("PLOT / EDIT"))
         self.axis_buttons = {}
         for axis in AXIS_ORDER:
             btn = QPushButton(axis, self)
@@ -543,22 +632,15 @@ class UserTab(QWidget):
             btn.setCheckable(True)
             btn.setFocusPolicy(Qt.NoFocus)
             btn.setMinimumWidth(44)
-            self.axis_group.addButton(btn)
+            btn.setToolTip(
+                f"Toggle {axis} on the FERR plot. Click on = plot + edit that axis; "
+                "click again = remove from plot. Multiple axes can plot at once."
+            )
             btn.toggled.connect(
-                lambda checked, ax=axis: self._on_axis_selected(ax, checked)
+                lambda checked, ax=axis: self._on_axis_toggled(ax, checked)
             )
             self.axis_buttons[axis] = btn
             row.addWidget(btn)
-
-        row.addSpacing(8)
-
-        self.read_button = QPushButton("READ", self)
-        self.read_button.setFocusPolicy(Qt.NoFocus)
-        self.read_button.setToolTip(
-            "Read live SDOs from the selected axis into Current + Pending."
-        )
-        self.read_button.clicked.connect(self._read_from_drive)
-        row.addWidget(self.read_button)
 
         row.addSpacing(8)
 
@@ -567,7 +649,8 @@ class UserTab(QWidget):
         self.log_button.setFocusPolicy(Qt.NoFocus)
         self.log_button.setCheckable(True)
         self.log_button.setToolTip(
-            "Start/stop the live FERR plot (no CSV — nothing saved to disk)."
+            "Start/stop the live FERR plot for all checked axes "
+            "(no CSV — nothing saved to disk)."
         )
         self.log_button.clicked.connect(self._toggle_logging)
         row.addWidget(self.log_button)
@@ -694,13 +777,10 @@ class UserTab(QWidget):
         self.ferr_plot = FerrPlotWidget(group)
         layout.addWidget(self.ferr_plot, stretch=1)
 
-        self.baseline_label = QLabel(
-            "Plot is paused until START PLOT. Live pulses/mm still update above.",
-            group,
-        )
-        self.baseline_label.setObjectName("lblParamHint")
-        self.baseline_label.setWordWrap(True)
-        layout.addWidget(self.baseline_label)
+        self.plot_axes_label = QLabel("Editing X · plotting —", group)
+        self.plot_axes_label.setObjectName("lblParamHint")
+        self.plot_axes_label.setWordWrap(True)
+        layout.addWidget(self.plot_axes_label)
         return group
 
     def _build_param_table_group(self) -> QGroupBox:
@@ -711,17 +791,20 @@ class UserTab(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
 
         table_actions = QHBoxLayout()
-        copy_btn = QPushButton("COPY CURRENT → PENDING", group)
-        copy_btn.setFocusPolicy(Qt.NoFocus)
-        copy_btn.clicked.connect(self._copy_current_to_pending)
-        table_actions.addWidget(copy_btn)
+        self.read_button = QPushButton("READ", group)
+        self.read_button.setFocusPolicy(Qt.NoFocus)
+        self.read_button.setToolTip(
+            "Read live SDOs for the edit axis into Current + Pending."
+        )
+        self.read_button.clicked.connect(self._read_from_drive)
+        table_actions.addWidget(self.read_button)
         table_actions.addStretch()
 
         self.apply_button = QPushButton("APPLY TO DRIVE", group)
         self.apply_button.setObjectName("btnPrimary")
         self.apply_button.setFocusPolicy(Qt.NoFocus)
         self.apply_button.setToolTip(
-            "Write Pending values to the selected axis drive "
+            "Write Pending values to the edit-axis drive "
             "(motors cycle OFF→ON if needed). Only keys from the last READ."
         )
         self.apply_button.clicked.connect(lambda: self._apply_to_drive())
@@ -899,18 +982,21 @@ class UserTab(QWidget):
     def _update_value_readouts(self) -> None:
         live = self._live.get(self._axis)
         if live is None:
-            self.live_label.setText("Not read yet — press READ")
+            self.live_label.setText(f"Edit {self._axis}: not read yet — press READ")
         else:
-            self.live_label.setText(format_params_summary(live, self._axis))
+            self.live_label.setText(
+                f"Edit {self._axis}: " + format_params_summary(live, self._axis)
+            )
+        self._update_plot_axis_hint()
 
-        if self._logging_active:
-            self.baseline_label.setText(
-                "Plot ON — live FERR trace. Press STOP PLOT to freeze."
-            )
-        else:
-            self.baseline_label.setText(
-                "Plot paused until START PLOT. Live pulses/mm still update above."
-            )
+    def _update_plot_axis_hint(self) -> None:
+        if not hasattr(self, "plot_axes_label"):
+            return
+        plotted = " ".join(self._plot_axes) if self._plot_axes else "—"
+        state = "live" if self._logging_active else "armed (press START PLOT)"
+        self.plot_axes_label.setText(
+            f"Editing {self._axis} · plotting {plotted} · {state}"
+        )
 
     def _store_baseline(self, params: AxisTuneParams) -> None:
         self._baseline[self._axis] = params.copy()
@@ -942,18 +1028,44 @@ class UserTab(QWidget):
             if PARAM_BY_KEY.get(k, {}).get("writable", True) is not False
         ]
 
-    def _on_axis_selected(self, axis: str, checked: bool) -> None:
-        if self._syncing or not checked:
+    def _set_edit_axis(self, axis: str) -> None:
+        """Switch parameter table / READ / APPLY focus without changing plot set."""
+        if axis == self._axis:
             return
         self._axis = axis
-        self._clear_ferr_plot()
         self._refresh_unit_columns()
         self._refresh_preset_list()
         if axis in self._live:
             self._set_params_to_ui(self._live[axis])
+        else:
+            # Clear pending visuals until READ for this axis.
+            for label in self._current_labels.values():
+                label.setText("—")
         self._update_value_readouts()
         self._update_ferr_unit_button_labels()
-        self._set_status(f"AXIS {axis}", "ok")
+        self._set_status(f"EDIT {axis}", "ok")
+
+    def _on_axis_toggled(self, axis: str, checked: bool) -> None:
+        if self._syncing:
+            return
+        if checked:
+            if axis not in self._plot_axes:
+                self._plot_axes.append(axis)
+                # Keep AXIS_ORDER sorting for stable legend/colors.
+                self._plot_axes = [a for a in AXIS_ORDER if a in self._plot_axes]
+            self.ferr_plot.set_active_axes(list(self._plot_axes))
+            self._set_edit_axis(axis)
+        else:
+            if axis in self._plot_axes:
+                self._plot_axes = [a for a in self._plot_axes if a != axis]
+            self.ferr_plot.set_active_axes(list(self._plot_axes))
+            # If we turned off the edit axis, move edit focus to another plotted axis.
+            if axis == self._axis and self._plot_axes:
+                self._set_edit_axis(self._plot_axes[0])
+            elif not self._plot_axes:
+                # No axes plotted — keep last edit axis for params; plot is empty.
+                self._update_plot_axis_hint()
+        self._update_plot_axis_hint()
 
     def _on_ferr_unit_toggled(self, checked: bool) -> None:
         # QButtonGroup fires toggled(False) on the button that was deselected
@@ -976,91 +1088,121 @@ class UserTab(QWidget):
         if self._ferr_unit_mode == "pulses":
             self.ferr_plot.set_unit_label("pulses")
         else:
+            # Mixed linear/rotary when multi-plotting — use edit axis unit.
             self.ferr_plot.set_unit_label(axis_unit(self._axis))
 
     def _clear_ferr_plot(self) -> None:
-        self._ferr_peak_pulses = 0.0
-        self._ferr_peak_unit = 0.0
+        self._ferr_peak_pulses = {a: 0.0 for a in AXIS_ORDER}
+        self._ferr_peak_unit = {a: 0.0 for a in AXIS_ORDER}
         self.ferr_plot.clear()
         self.ferr_peak_label.setText("PEAK: —")
 
-    def _scaled_ferr_from_counts(self, counts: float) -> float:
+    def _scaled_ferr_from_counts(self, axis: str, counts: float) -> float:
         """Always convert raw 60F4 counts → mm/deg via joint SCALE."""
         if counts != counts:
             return float("nan")
-        return counts_to_unit(self._axis, counts)
+        return counts_to_unit(axis, counts)
 
     def _poll_ferr(self) -> None:
         if not self.isVisible():
             return
-        try:
-            counts, scaled_hal = read_drive_ferr(self._axis)
-        except Exception:
+
+        # Live readout always follows the edit-focus axis.
+        self._update_focus_ferr_readout()
+
+        if not self._logging_active or not self._plot_axes:
             return
 
-        unit = axis_unit(self._axis)
-        scale = float(AXES[self._axis]["scale"])
-        pin = drive_ferr_counts_halpin(self._axis)
-        # Prefer counts→unit so plot/readouts match joint SCALE even if HAL
-        # scaled pin is missing or misconfigured.
+        for axis in list(self._plot_axes):
+            try:
+                counts, scaled_hal = read_drive_ferr(axis)
+            except Exception:
+                continue
+            if counts == counts:
+                scaled = self._scaled_ferr_from_counts(axis, counts)
+            else:
+                scaled = scaled_hal
+            if counts == counts:
+                self._ferr_peak_pulses[axis] = max(
+                    self._ferr_peak_pulses.get(axis, 0.0), abs(counts)
+                )
+            if scaled == scaled:
+                self._ferr_peak_unit[axis] = max(
+                    self._ferr_peak_unit.get(axis, 0.0), abs(scaled)
+                )
+            plot_val = counts if self._ferr_unit_mode == "pulses" else scaled
+            if plot_val == plot_val:
+                self.ferr_plot.push(plot_val, axis=axis)
+
+        self._refresh_peak_label()
+
+    def _update_focus_ferr_readout(self) -> None:
+        axis = self._axis
+        try:
+            counts, scaled_hal = read_drive_ferr(axis)
+        except Exception:
+            return
+        unit = axis_unit(axis)
+        scale = float(AXES[axis]["scale"])
+        pin = drive_ferr_counts_halpin(axis)
         if counts == counts:
-            scaled = self._scaled_ferr_from_counts(counts)
+            scaled = self._scaled_ferr_from_counts(axis, counts)
         else:
             scaled = scaled_hal
-
-        self.ferr_scale_label.setText(
-            f"{pin}  SCALE={scale:g}/{unit}"
-        )
-
+        self.ferr_scale_label.setText(f"{pin}  SCALE={scale:g}/{unit}")
         if counts == counts:
-            # Integer encoder counts — never show float leftovers.
-            self.ferr_pulses_label.setText(f"PULSES: {int(round(counts))}")
-            if self._logging_active:
-                self._ferr_peak_pulses = max(self._ferr_peak_pulses, abs(counts))
+            self.ferr_pulses_label.setText(f"{axis} PULSES: {int(round(counts))}")
         else:
-            self.ferr_pulses_label.setText("PULSES: —")
-
+            self.ferr_pulses_label.setText(f"{axis} PULSES: —")
         if scaled == scaled:
-            self.ferr_unit_value_label.setText(f"{unit.upper()}: {scaled:.4f}")
-            if self._logging_active:
-                self._ferr_peak_unit = max(self._ferr_peak_unit, abs(scaled))
+            self.ferr_unit_value_label.setText(f"{axis} {unit.upper()}: {scaled:.4f}")
         else:
-            self.ferr_unit_value_label.setText(f"{unit.upper()}: —")
+            self.ferr_unit_value_label.setText(f"{axis} {unit.upper()}: —")
+        if not self._logging_active:
+            self._refresh_peak_label()
 
-        if self._ferr_unit_mode == "pulses":
-            plot_val = counts
-            peak_txt = (
-                f"PEAK: {self._ferr_peak_pulses:.0f} p / "
-                f"{self._ferr_peak_unit:.4f} {unit}"
-                if self._ferr_peak_pulses or self._ferr_peak_unit
-                else "PEAK: —"
-            )
-        else:
-            plot_val = scaled
-            peak_txt = (
-                f"PEAK: {self._ferr_peak_unit:.4f} {unit} / "
-                f"{self._ferr_peak_pulses:.0f} p"
-                if self._ferr_peak_pulses or self._ferr_peak_unit
-                else "PEAK: —"
-            )
-        self.ferr_peak_label.setText(peak_txt)
-        # Plot only while START PLOT is active — nothing written to disk.
-        if self._logging_active and plot_val == plot_val:
-            self.ferr_plot.push(plot_val)
+    def _refresh_peak_label(self) -> None:
+        bits = []
+        for axis in self._plot_axes or [self._axis]:
+            unit = axis_unit(axis)
+            if self._ferr_unit_mode == "pulses":
+                peak = self._ferr_peak_pulses.get(axis, 0.0)
+                if peak:
+                    bits.append(f"{axis}:{peak:.0f}p")
+            else:
+                peak = self._ferr_peak_unit.get(axis, 0.0)
+                if peak:
+                    bits.append(f"{axis}:{peak:.4f}{unit}")
+        self.ferr_peak_label.setText(
+            "PEAK: " + (" ".join(bits) if bits else "—")
+        )
 
     def _toggle_logging(self) -> None:
         """Start/stop live FERR plot only — no CSV, nothing written to disk."""
         want_on = self.log_button.isChecked()
         if want_on:
+            if not self._plot_axes:
+                self.log_button.blockSignals(True)
+                self.log_button.setChecked(False)
+                self.log_button.blockSignals(False)
+                QMessageBox.information(
+                    self,
+                    "Start plot",
+                    "Check at least one axis button (X/Y/Z/A) to plot.",
+                )
+                self._sync_log_button()
+                return
             self._clear_ferr_plot()
+            self.ferr_plot.set_active_axes(list(self._plot_axes))
             self._logging_active = True
-            self.message_label.setText("Plot ON — live FERR trace (not saved).")
+            self.message_label.setText(
+                "Plot ON — live FERR for: " + " ".join(self._plot_axes)
+            )
         else:
             self._logging_active = False
             self.message_label.setText("Plot stopped / frozen.")
         self._update_value_readouts()
         self._sync_log_button()
-
     def _sync_log_button(self) -> None:
         if not hasattr(self, "log_button"):
             return
@@ -1244,7 +1386,7 @@ class UserTab(QWidget):
         params = self._trial_params or self._live.get(self._axis) or self._params_from_ui()
         notes = self.trial_notes_edit.text().strip()
         unit_label = self._trial_unit_label()
-        samples = self.ferr_plot.get_samples()
+        samples = self.ferr_plot.get_samples(self._axis)
         waited = not self._trial_auto_run
         auto_run = bool(self._trial_auto_run)
         gains_tag = short_gains_tag(params)
@@ -1337,8 +1479,11 @@ class UserTab(QWidget):
                 params=live,
                 ngc_name=os.path.basename(ngc),
                 peak_abs=max(
-                    self._ferr_peak_unit if self._ferr_unit_mode != "pulses"
-                    else self._ferr_peak_pulses,
+                    (
+                        self._ferr_peak_unit.get(self._axis, 0.0)
+                        if self._ferr_unit_mode != "pulses"
+                        else self._ferr_peak_pulses.get(self._axis, 0.0)
+                    ),
                     0.0,
                 ),
                 unit_label=self._trial_unit_label(),
@@ -1477,16 +1622,6 @@ class UserTab(QWidget):
             else:
                 label.setText("—")
         self._syncing = False
-
-    def _copy_current_to_pending(self) -> None:
-        live = self._live.get(self._axis)
-        if live is None:
-            QMessageBox.information(
-                self, "Copy", "No current values yet — press READ FROM DRIVE first."
-            )
-            return
-        self._set_params_to_ui(live)
-        self.message_label.setText("Pending copied from Current.")
 
     def _load_form_defaults(self) -> None:
         reply = QMessageBox.question(
@@ -1845,6 +1980,10 @@ class UserTab(QWidget):
             self._syncing = True
             self.axis_buttons["X"].setChecked(True)
             self._syncing = False
+            self._plot_axes = ["X"]
+            self._axis = "X"
+            self.ferr_plot.set_active_axes(["X"])
+            self._update_plot_axis_hint()
         self._update_ferr_unit_button_labels()
         if not self._did_initial_read:
             self._did_initial_read = True
