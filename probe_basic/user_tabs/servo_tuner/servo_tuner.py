@@ -490,19 +490,15 @@ class UserTab(QWidget):
 
         body = QHBoxLayout()
         body.setSpacing(10)
-        body.addWidget(self._build_ferr_group(), stretch=3)
-        body.addWidget(self._build_param_table_group(), stretch=2)
+        ferr = self._build_ferr_group()
+        params = self._build_param_table_group()
+        # Same vertical policy so both boxes share one bottom edge.
+        for panel in (ferr, params):
+            panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            panel.setMinimumHeight(0)
+        body.addWidget(ferr, stretch=3)
+        body.addWidget(params, stretch=2)
         root_layout.addLayout(body, stretch=1)
-
-        self.message_label = QLabel(
-            "Axis buttons toggle FERR plot traces (multi-select). Last clicked-on "
-            "axis is the one you edit. Parameters auto-read on tab open / axis "
-            "change. COPY TUNING / COPY PLOT for the LLM. APPLY writes Pending.",
-            self,
-        )
-        self.message_label.setObjectName("lblMessage")
-        self.message_label.setWordWrap(True)
-        root_layout.addWidget(self.message_label, stretch=0)
 
         self.axis_buttons["X"].setChecked(True)
         self.ferr_plot.set_active_axes(list(self._plot_axes))
@@ -709,12 +705,8 @@ class UserTab(QWidget):
         layout.addLayout(readouts)
 
         self.ferr_plot = FerrPlotWidget(group)
+        self.ferr_plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self.ferr_plot, stretch=1)
-
-        self.plot_axes_label = QLabel("Editing X · plotting —", group)
-        self.plot_axes_label.setObjectName("lblParamHint")
-        self.plot_axes_label.setWordWrap(True)
-        layout.addWidget(self.plot_axes_label)
         return group
 
     def _build_param_table_group(self) -> QGroupBox:
@@ -749,6 +741,7 @@ class UserTab(QWidget):
         self.param_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.param_table.setAlternatingRowColors(True)
         self.param_table.setWordWrap(False)
+        self.param_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         header = self.param_table.horizontalHeader()
         header.setSectionResizeMode(COL_PARAM, QHeaderView.Stretch)
         header.setSectionResizeMode(COL_CURRENT, QHeaderView.ResizeToContents)
@@ -893,6 +886,16 @@ class UserTab(QWidget):
         if busy:
             self._set_status("BUSY", "busy")
 
+    def _notify(self, text: str) -> None:
+        """Status feedback without a bottom message strip (avoids wrap/overlap)."""
+        clean = " ".join(str(text).split())
+        LOG.info("servo_tuner: %s", clean)
+        # Keep the compact header chip; full detail stays in the log.
+        short = clean if len(clean) <= 48 else clean[:45] + "…"
+        # Don't clobber transient BUSY/APPLYING chips mid-action.
+        if self.status_label.text() not in ("BUSY", "APPLYING"):
+            self._set_status(short, "ok")
+
     def _update_value_readouts(self) -> None:
         live = self._live.get(self._axis)
         if live is None:
@@ -904,13 +907,18 @@ class UserTab(QWidget):
         self._update_plot_axis_hint()
 
     def _update_plot_axis_hint(self) -> None:
-        if not hasattr(self, "plot_axes_label"):
+        """Reflect edit/plot selection in the toolbar plot status line."""
+        if not hasattr(self, "log_status_label"):
             return
         plotted = " ".join(self._plot_axes) if self._plot_axes else "—"
-        state = "live" if self._logging_active else "armed (press START PLOT)"
-        self.plot_axes_label.setText(
-            f"Editing {self._axis} · plotting {plotted} · {state}"
-        )
+        if self._logging_active:
+            self.log_status_label.setText(
+                f"PLOT: live · edit {self._axis} · {plotted}"
+            )
+        else:
+            self.log_status_label.setText(
+                f"PLOT: idle · edit {self._axis} · {plotted}"
+            )
 
     def _store_baseline(self, params: AxisTuneParams) -> None:
         self._baseline[self._axis] = params.copy()
@@ -1113,14 +1121,15 @@ class UserTab(QWidget):
             self._clear_ferr_plot()
             self.ferr_plot.set_active_axes(list(self._plot_axes))
             self._logging_active = True
-            self.message_label.setText(
+            self._notify(
                 "Plot ON — live FERR for: " + " ".join(self._plot_axes)
             )
         else:
             self._logging_active = False
-            self.message_label.setText("Plot stopped / frozen.")
+            self._notify("Plot stopped / frozen.")
         self._update_value_readouts()
         self._sync_log_button()
+
     def _sync_log_button(self) -> None:
         if not hasattr(self, "log_button"):
             return
@@ -1131,13 +1140,12 @@ class UserTab(QWidget):
         if active:
             self.log_button.setText("STOP PLOT")
             self.log_button.setObjectName("btnDanger")
-            self.log_status_label.setText("PLOT: live")
         else:
             self.log_button.setText("START PLOT")
             self.log_button.setObjectName("btnLog")
-            self.log_status_label.setText("PLOT: idle")
         self.log_button.style().unpolish(self.log_button)
         self.log_button.style().polish(self.log_button)
+        self._update_plot_axis_hint()
 
     def _copy_tuning(self) -> None:
         """Copy edit-axis parameters to clipboard using table labels."""
@@ -1173,7 +1181,7 @@ class UserTab(QWidget):
         )
         try:
             copy_text_to_clipboard(text_out)
-            self.message_label.setText(
+            self._notify(
                 f"COPY TUNING — {self._axis} parameters on clipboard "
                 f"({len(merged.values)} keys, table labels)."
             )
@@ -1189,7 +1197,7 @@ class UserTab(QWidget):
         )
         try:
             path = copy_plot_widget_to_clipboard(self.ferr_plot, title=title)
-            self.message_label.setText(
+            self._notify(
                 f"COPY PLOT — FERR image on clipboard ({path})."
             )
         except Exception as exc:
@@ -1296,7 +1304,7 @@ class UserTab(QWidget):
         self._ok_keys[self._axis] = [p["key"] for p in PARAM_DEFS]
         defaults = default_axis_params()
         self._set_params_to_ui(defaults)
-        self.message_label.setText(
+        self._notify(
             "Pending loaded with built-in defaults. APPLY will write all 28 SDOs. "
             "REVERT still uses the last successful auto-read baseline if present."
         )
@@ -1313,7 +1321,7 @@ class UserTab(QWidget):
             self._ingest_read(params, ok_keys, failed_keys)
             self._set_status(f"READ {self._axis}", "ok")
             if failed_keys:
-                self.message_label.setText(
+                self._notify(
                     f"Auto-read slave {AXES[self._axis]['slave']}: "
                     f"{len(ok_keys)}/{len(PARAM_DEFS)} ok. "
                     f"APPLY writes only the {len(ok_keys)} successful keys "
@@ -1321,14 +1329,14 @@ class UserTab(QWidget):
                     f"{'…' if len(failed_keys) > 6 else ''})."
                 )
             else:
-                self.message_label.setText(
+                self._notify(
                     f"Auto-read slave {AXES[self._axis]['slave']} "
                     f"({len(ok_keys)} SDOs). Edit Pending → APPLY."
                 )
         except Exception as exc:
             LOG.exception("read_axis_params failed")
             self._set_status("ERROR", "error")
-            self.message_label.setText(str(exc))
+            self._notify(str(exc))
             if not quiet:
                 QMessageBox.warning(self, "Read failed", str(exc))
         finally:
@@ -1443,7 +1451,7 @@ class UserTab(QWidget):
 
         self._set_busy(True)
         self._set_status("APPLYING", "busy")
-        self.message_label.setText(
+        self._notify(
             f"Writing {len(keys)} changed SDO(s)…"
             + (" (motors cycling)" if was_on else "")
         )
@@ -1462,7 +1470,7 @@ class UserTab(QWidget):
                 fail_txt = ", ".join(
                     f"{k}" for k, _err in failed[:8]
                 )
-                self.message_label.setText(
+                self._notify(
                     f"Wrote {len(written)} SDO(s); FAILED {len(failed)}: {fail_txt}"
                     + ("…" if len(failed) > 8 else "")
                     + (
@@ -1493,7 +1501,7 @@ class UserTab(QWidget):
                 )
             else:
                 self._set_status(f"APPLIED {self._axis}", "ok")
-                self.message_label.setText(
+                self._notify(
                     f"Wrote {len(written)} SDO(s) to slave {result['slave']}"
                     + (
                         "; motors cycled OFF→ON."
@@ -1510,7 +1518,7 @@ class UserTab(QWidget):
         except Exception as exc:
             LOG.exception("apply_axis_params failed")
             self._set_status("ERROR", "error")
-            self.message_label.setText(str(exc))
+            self._notify(str(exc))
             QMessageBox.warning(self, "Apply failed", str(exc))
         finally:
             self._set_busy(False)
@@ -1530,7 +1538,7 @@ class UserTab(QWidget):
             return
         self._allow_default_write = False
         self._set_params_to_ui(baseline)
-        self.message_label.setText(
+        self._notify(
             "Form restored to baseline — confirm APPLY to write it back to the drive."
         )
         self._apply_to_drive(baseline)
@@ -1587,7 +1595,7 @@ class UserTab(QWidget):
             idx = self.preset_combo.findText(name)
             if idx >= 0:
                 self.preset_combo.setCurrentIndex(idx)
-            self.message_label.setText(
+            self._notify(
                 f"Saved current tuning as preset {name!r}: {path}"
             )
         except Exception as exc:
@@ -1632,7 +1640,7 @@ class UserTab(QWidget):
             )
             if skipped:
                 msg += f" Skipped unread keys: {', '.join(skipped)}."
-            self.message_label.setText(msg)
+            self._notify(msg)
             if apply:
                 self._apply_to_drive(merged)
         except Exception as exc:
@@ -1663,7 +1671,7 @@ class UserTab(QWidget):
             delete_preset(self._axis, name)
             self.preset_name_edit.clear()
             self._refresh_preset_list()
-            self.message_label.setText(
+            self._notify(
                 f"Deleted preset {name!r}. Combo is back on (none)."
             )
         except Exception as exc:
@@ -1686,19 +1694,19 @@ class UserTab(QWidget):
                 params, ok_keys, failed_keys = read_axis_params(self._axis)
                 self._ingest_read(params, ok_keys, failed_keys)
                 if failed_keys:
-                    self.message_label.setText(
+                    self._notify(
                         f"Auto-read slave {AXES[self._axis]['slave']}: "
                         f"{len(ok_keys)}/{len(PARAM_DEFS)} ok. "
                         "APPLY only writes successful keys."
                     )
                 else:
-                    self.message_label.setText(
+                    self._notify(
                         f"Auto-read slave {AXES[self._axis]['slave']} on tab open "
                         f"({len(ok_keys)} SDOs). Edit Pending → APPLY."
                     )
             except Exception as exc:
                 LOG.info("servo_tuner: initial read skipped: %s", exc)
-                self.message_label.setText(
+                self._notify(
                     "Could not auto-read drive (EtherCAT / sudo?). "
                     "Re-open this tab or change axis to retry. FERR plot still polls HAL. "
                     "APPLY is blocked until a successful auto-read."

@@ -46,12 +46,6 @@ QLabel#lblCaption {
     padding-right: 4px;
 }
 
-QLabel#lblMessage {
-    color: #9a9e9f;
-    font: 11pt "BebasKai";
-    padding: 2px 2px;
-}
-
 QLabel#lblLiveValues {
     color: #8ae234;
     font: 11pt "BebasKai";
@@ -123,8 +117,9 @@ QGroupBox#grpPresets QComboBox {
     font: 11pt "BebasKai";
 }
 
-QGroupBox#grpFerr {
-    min-height: 360px;
+QGroupBox#grpFerr,
+QGroupBox#grpParams {
+    min-height: 0;
 }
 
 QPushButton#btnLog {
@@ -145,7 +140,7 @@ QWidget#ferrPlot {
     background-color: #1e2122;
     border: 1px solid #8a8484;
     border-radius: 4px;
-    min-height: 300px;
+    min-height: 220px;
 }
 
 QGroupBox#grpParams {
