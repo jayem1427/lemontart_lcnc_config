@@ -71,10 +71,10 @@ restored to its baseline value.
 ## What one campaign does (state machine)
 
 ```
-PREFLIGHT -> BASELINE -> [RESCUE] -> SPEED -> [NOTCH] -> POSITION -> INTEGRAL -> VERIFY -> FINALIZE
+PREFLIGHT -> BASELINE -> [RESCUE] -> SPEED -> [NOTCH] -> POSITION -> [INTEGRAL] -> VERIFY -> FINALIZE
      |            \                                                        (unstable?)   |
      fail          \-- backup preset (pre_one_click_*)                    backoff once   +-- save preset (one_click_*)
-                                                                          else REVERT
+                                                                          else keep best or REVERT
 ```
 
 Zone order follows `SERVO_TUNING.md` (high frequency → low frequency).
@@ -87,8 +87,8 @@ Zone order follows `SERVO_TUNING.md` (high frequency → low frequency).
 | **SPEED** | Multiply **C01.01** by 1.25/step (≤ profile cap, ≤ ¼ of the C01.03 torque filter cutoff). Each step: write → stimulus → gate | gate trips (→ notch attempt, else back off to last good) or improvement < 3% twice |
 | **NOTCH** | One-shot: if the unstable step shows a dominant FFT peak 40–500 Hz and notch 3 (C01.46/47/48) is free, write it (width 5%, depth 10%) and re-measure at the same gain | notch kept if the ring clears, reverted otherwise |
 | **POSITION** | Climb **C01.00** ×1.2/step toward ~**2× speed gain** (rad/s vs Hz rule of thumb), same gating | gate trips / stalls / cap |
-| **INTEGRAL** | Tighten **C01.02** ×0.7/step (lower ms = stronger) while RMS improves ≥0.5% and peak regresses <10% | first non-improvement or ring |
-| **VERIFY** | Re-measure with final gains. If unstable: back speed+position off 25% once and re-verify; still unstable → restore baseline | always produces a final measurement |
+| **INTEGRAL** | Tighten **C01.02** ×0.7/step (lower ms = stronger) while RMS improves ≥0.5% and peak regresses <10% — **skipped** if the best step so far is already ≥30% better than baseline | first non-improvement, ring, or skip |
+| **VERIFY** | Re-measure with final gains. If unstable: back speed+position off 25% once and re-verify; if still unstable but a **stable best step** beat baseline by ≥1%, **restore that best** (not baseline); else full revert | always produces a final measurement |
 | **FINALIZE** | Save `one_click_<stamp>` preset if improved; journal the summary | — |
 
 Also at setup: **C00.04 is forced to 0 (manual gain mode)** if it wasn't,
@@ -116,12 +116,20 @@ The **score** is `peak + 2×RMS` (axis units; lower is better). A ladder step
 is accepted only when stable **and** the score improves by ≥3%
 (`improvement_min_pct`), so the tuner prefers *quiet + good* over *hot*.
 
+**Verify measurements** use a slightly different gate: HF energy must exceed
+`max(35%, baseline_HF + 12pp)` *and* the score must not beat baseline — so
+stimulus harmonics that were acceptable during the ladder do not false-fail a
+good final tune on HF alone. Real resonance peaks and ring scores still fail
+hard. If verify/backoff fail anyway but a **stable best step** during the
+ladder beat baseline by ≥1%, the engine restores that best (journaled as
+`verify/keep-best`) instead of wiping gains.
+
 ### Profiles
 
 | Profile | Speed cap | Pos cap | Step | Steps/phase | Integral floor |
 |---------|-----------|---------|------|-------------|----------------|
 | CONSERVATIVE | 120 Hz | 250 rad/s | ×1.15 | 6 | 3.0 ms |
-| BALANCED | 200 Hz | 400 rad/s | ×1.25 | 8 | 2.0 ms |
+| BALANCED | 200 Hz | 400 rad/s | ×1.25 | 8 | 3.0 ms |
 | AGGRESSIVE | 400 Hz | 800 rad/s | ×1.4 | 10 | 1.0 ms |
 
 All profiles also respect `speed ≤ 0.25 × C01.03` (torque-filter phase-lag
@@ -159,7 +167,8 @@ the folder somewhere safe or paste `journal.md` into an issue/LLM chat.
 | `failed`: "rescue failed" | Axis rings even after softening 3× — probably mechanical (loose coupling, adaptive notch fighting, wrong inertia) or a resonance the 3rd notch can't reach | rescue measurements + FFT peaks; listen to the axis | fix mechanics; try drive panel notch; then rerun |
 | `failed`: "SDO write failed" | A write did not verify after retries | the `write` event has the drive's error string | check bus health; if it repeats on one SDO, that SDO may be RO on your firmware — report it so we mark it `writable: False` |
 | **`CRITICAL` in journal** | The *revert* failed — drive may hold a mixed tune | the CRITICAL event lists exact key=value pairs | machine OFF, restore values via Servo Tuning tab or `LOAD` the `pre_one_click_*` preset → APPLY |
-| `reverted` | Final verify stayed unstable even after one backoff — measurements were probably borderline/noisy all along | compare `verify*` measurements with the ladder ones | rerun CONSERVATIVE; consider a longer stimulus (more cycles) for less measurement noise |
+| `reverted` | Final verify stayed unstable after backoff **and** no stable best step beat baseline by ≥1% | compare `verify*` measurements with the ladder ones; look for `verify/keep-best` — if missing, nothing salvageable | rerun CONSERVATIVE; consider a longer stimulus (more cycles) for less measurement noise |
+| `improved` (verify/backoff failed) | Ladder found a strong stable step; verify tripped on HF harmonics or a late integral stress but engine kept `_best_values` | `verify/keep-best` event lists the restored gains | try the axis; store EEPROM if happy — journal explains why verify failed |
 | `no-change` | Ladder found nothing ≥3% better than baseline | accepted vs stalled steps | baseline may already be good; try AGGRESSIVE, or tune stimulus feed up so tracking error dominates noise |
 | `cancelled` | You pressed CANCEL / Ctrl+C | — | baseline was restored; journal keeps everything measured so far |
 | Watchdog trips at the *first* speed step | Baseline is closer to instability than it looks, or 6065 window is tight | `tripped_ferr` value in the measure meta | verify 6065 (should be ~1.0 mm), start from a softer baseline preset |
@@ -226,6 +235,7 @@ taught us, with the journal that proved it:
 
 | Date | Lesson | Evidence / fix |
 |------|--------|----------------|
+| 2026-07-12 (hardware X) | **Verify HF false-fail discarded a ~49% better tune.** Position ladder peaked at 150/224.6/5.0 ms; integral 2.45 ms hit 259 Hz ring; verify measured low peak but HF 45% > 35% and engine reverted to baseline. Fix: skip integral when best already ≥30% better; verify HF gate is relative to baseline; if verify/backoff fail but best stable step beats baseline ≥1%, restore best and save preset. | `one_click_best_20260712` preset; journal `20260712_172935_X`; `test_verify_fail_keeps_best` |
 | 2026-07-12 (pre-hardware, sim) | **Short strokes fool a naive resonance gate.** Y's default stimulus (15 mm @ F10000 → 0.09 s legs) puts *forced* tracking-error harmonics at 30–60 Hz with ~200× spectral prominence; a gate keyed only on prominence declared the untouched baseline "unstable" and the rescue phase softened a healthy axis until it gave up (`rescue failed: … check mechanics`). Fix: the gate now ignores the stimulus-harmonic band (`6 / leg_time` low cutoff) and requires a candidate peak to carry ≥10% of buffer RMS. | `test_short_stroke_gate_not_fooled` in `test_a6_auto_tune.py`; the false-positive is reproducible by calling `analyze_ferr_resonance` on a sim Y baseline buffer with `min_hz=25` |
 
 When a hardware campaign fails in a *new* way: keep the journal folder, add a

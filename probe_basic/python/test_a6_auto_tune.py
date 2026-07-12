@@ -24,6 +24,7 @@ if HERE not in sys.path:
 
 from a6_auto_tune import (  # noqa: E402
     CORE_GAIN_KEYS,
+    Measurement,
     OneClickConfig,
     OneClickTuner,
     StimulusSpec,
@@ -69,9 +70,23 @@ def test_happy_path(tmp: str) -> None:
     # Notch 3 landed on the plant resonance
     notch = io.params["notch3_freq_hz"]
     assert abs(notch - plant.resonance_hz) <= 0.15 * plant.resonance_hz, notch
-    # Position followed, integral tightened
+    jdir = result.journal_dir
+    assert jdir and os.path.isdir(jdir), jdir
+    # Position followed; integral tightened or skipped when already ≥30% better
     assert io.params["pos_gain_rad_s"] > SIM_BASELINE["pos_gain_rad_s"]
-    assert io.params["integral_ms"] < SIM_BASELINE["integral_ms"]
+    with open(os.path.join(jdir, "journal.json"), encoding="utf-8") as handle:
+        integral_events = {
+            (e["phase"], e["kind"])
+            for e in json.load(handle)["events"]
+            if e["phase"] == "integral"
+        }
+    if io.params["integral_ms"] < SIM_BASELINE["integral_ms"]:
+        assert ("integral", "accept") in integral_events or (
+            "integral",
+            "done",
+        ) in integral_events
+    else:
+        assert ("integral", "skip") in integral_events, integral_events
     # Backup + final presets saved
     names = [name for _axis, name, _params in io.presets_saved]
     assert any(n.startswith("pre_one_click_") for n in names), names
@@ -79,8 +94,6 @@ def test_happy_path(tmp: str) -> None:
     assert result.preset_name and result.preset_name.startswith("one_click_")
 
     # Journal artifacts exist and parse
-    jdir = result.journal_dir
-    assert jdir and os.path.isdir(jdir), jdir
     with open(os.path.join(jdir, "journal.json"), encoding="utf-8") as handle:
         data = json.load(handle)
     kinds = {(e["phase"], e["kind"]) for e in data["events"]}
@@ -233,6 +246,53 @@ def test_short_stroke_gate_not_fooled(tmp: str) -> None:
           f"(gate floor {gate_hz:.0f} Hz)")
 
 
+def test_verify_fail_keeps_best(tmp: str) -> None:
+    """Regression: ladder finds a strong stable step, verify/backoff fail —
+    engine must keep the best gains, not restore baseline (20260712 X run)."""
+    plant = SimPlant(instability_amp=1.2)
+    io = SimTuneIO(plant=plant)
+    cfg = make_config()
+    tuner = OneClickTuner(cfg, io=io, journal_root=tmp)
+    real_measure = tuner._measure
+
+    def measure(label: str) -> Measurement:
+        m = real_measure(label)
+        if not label.startswith("verify"):
+            return m
+        return Measurement(
+            label=m.label,
+            n_samples=m.n_samples,
+            peak=m.peak,
+            rms=m.rms,
+            score=m.score * 2.0,
+            unstable=True,
+            unstable_why="HF energy 45%",
+            aborted=m.aborted,
+            abort_reason=m.abort_reason,
+            dominant_hz=m.dominant_hz,
+            dominant_mag=m.dominant_mag,
+            report=m.report,
+        )
+
+    tuner._measure = measure  # type: ignore[method-assign]
+    result = tuner.run()
+
+    assert result.status == "improved", result.summary()
+    assert result.preset_name and result.preset_name.startswith("one_click_")
+    assert io.params["speed_gain_hz"] > SIM_BASELINE["speed_gain_hz"]
+    assert io.params["pos_gain_rad_s"] > SIM_BASELINE["pos_gain_rad_s"]
+    assert io.params["speed_gain_hz"] > plant.resonance_gain_threshold_hz
+    with open(os.path.join(result.journal_dir, "journal.json"),
+              encoding="utf-8") as handle:
+        data = json.load(handle)
+    kinds = {(e["phase"], e["kind"]) for e in data["events"]}
+    assert ("verify", "keep-best") in kinds, sorted(kinds)
+    print(
+        f"  verify keep-best: {result.reason}; "
+        f"speed={io.params['speed_gain_hz']:.1f}Hz"
+    )
+
+
 def test_estimate_and_config() -> None:
     cfg = OneClickConfig.for_axis("Z", "conservative")
     est = estimate_campaign_seconds(cfg)
@@ -259,6 +319,7 @@ def main() -> int:
         test_dry_run_writes_nothing,
         test_preflight_failure,
         test_short_stroke_gate_not_fooled,
+        test_verify_fail_keeps_best,
     ]
     tmp_root = tempfile.mkdtemp(prefix="one_click_test_")
     try:

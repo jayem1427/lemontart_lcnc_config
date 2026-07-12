@@ -192,6 +192,9 @@ class OneClickConfig:
     improvement_min_pct: float = 3.0  # keep climbing only if score improves
     integral_improve_min_pct: float = 0.5  # RMS gate for the integral phase
     integral_peak_guard_pct: float = 10.0  # peak may not regress more
+    integral_skip_improved_pct: float = 30.0  # skip integral if best already this much better
+    keep_best_min_improve_pct: float = 1.0  # salvage best stable step after verify fail
+    verify_hf_margin: float = 0.12  # verify HF fail needs baseline_hf + this margin
     hf_fail: float = 0.35
     ring_fail: float = 0.85
     min_prominence_ratio: float = 4.0
@@ -259,7 +262,7 @@ PROFILES: Dict[str, Dict[str, Any]] = {
         improvement_min_pct=4.0,
         integral_min_ms=3.0,
     ),
-    "balanced": dict(),
+    "balanced": dict(integral_min_ms=3.0),
     "aggressive": dict(
         speed_step_ratio=1.4,
         speed_gain_max_hz=400.0,
@@ -854,6 +857,8 @@ class OneClickTuner:
         self._touched: set = set()
         self._best_values: Dict[str, float] = {}
         self._best_score: float = math.inf
+        self._baseline_score: Optional[float] = None
+        self._baseline_hf: Optional[float] = None
         self._abort_ferr: float = config.ferr_abort_fallback
         self._measure_count = 0
         self._notch_attempted = False
@@ -890,6 +895,10 @@ class OneClickTuner:
 
             base_m = self._measure("baseline")
             result.baseline_score = base_m.score
+            self._baseline_score = base_m.score
+            if base_m.report is not None:
+                self._baseline_hf = float(base_m.report.hf_energy_ratio)
+            self._update_best(base_m)
             baseline_unstable = base_m.unstable
 
             if self.cfg.dry_run:
@@ -911,20 +920,40 @@ class OneClickTuner:
             ref = self._phase_speed(ref)
             ref = self._phase_position(ref)
             ref = self._phase_integral(ref)
-            final_m, reverted = self._phase_verify(ref)
+            final_m, verify_outcome = self._phase_verify(ref)
 
             result.measurements = self._measure_count
             result.final_values = {
                 k: self._current[k] for k in TOUCHABLE_KEYS if k in self._current
             }
-            result.final_score = final_m.score if final_m is not None else None
 
-            if reverted:
+            if verify_outcome == "revert_baseline":
+                result.final_score = final_m.score if final_m is not None else None
                 result.status = "reverted"
                 result.reason = (
                     "verify stayed unstable after backoff — baseline restored"
                 )
+            elif verify_outcome == "keep_best":
+                result.final_score = self._best_score
+                improvement = None
+                if self._baseline_score and self._best_score < math.inf:
+                    improvement = (
+                        (self._baseline_score - self._best_score)
+                        / self._baseline_score
+                        * 100.0
+                    )
+                result.improvement_pct = improvement
+                result.status = "improved"
+                result.reason = (
+                    f"verify/backoff failed but best stable step kept "
+                    f"({improvement:.1f}% better than baseline)"
+                    if improvement is not None
+                    else "verify/backoff failed but best stable step kept"
+                )
+                if self.cfg.save_presets:
+                    result.preset_name = self._save_final_preset()
             else:
+                result.final_score = final_m.score if final_m is not None else None
                 improvement = None
                 if result.baseline_score and result.final_score is not None:
                     improvement = (
@@ -1331,6 +1360,24 @@ class OneClickTuner:
         key = "integral_ms"
         cur = self._current[key]
         floor = max(cfg.integral_min_ms, float(PARAM_BY_KEY[key]["min"]))
+        if (
+            self._baseline_score is not None
+            and self._best_score < math.inf
+            and cfg.integral_skip_improved_pct > 0
+        ):
+            imp = (
+                (self._baseline_score - self._best_score)
+                / self._baseline_score
+                * 100.0
+            )
+            if imp >= cfg.integral_skip_improved_pct:
+                self.journal.event(
+                    "integral",
+                    "skip",
+                    f"best already {imp:.1f}% better than baseline "
+                    f"(≥{cfg.integral_skip_improved_pct:g}%) — skipping integral tighten",
+                )
+                return ref
         self.journal.event(
             "integral",
             "start",
@@ -1395,14 +1442,14 @@ class OneClickTuner:
 
     def _phase_verify(
         self, ref: Measurement
-    ) -> Tuple[Optional[Measurement], bool]:
-        """Final confirmation measure; one backoff attempt, else full revert."""
+    ) -> Tuple[Optional[Measurement], str]:
+        """Final confirmation measure; one backoff attempt, else salvage best."""
         self._progress("verify", "verifying final tune…")
         m = self._measure("verify")
         if not m.unstable:
             self.journal.event("verify", "ok", m.summary())
             self._update_best(m)
-            return m, False
+            return m, "pass"
 
         self.journal.event(
             "verify",
@@ -1427,17 +1474,24 @@ class OneClickTuner:
                 "verify", "ok", f"stable after backoff ({m2.summary()})"
             )
             self._update_best(m2)
-            return m2, False
+            return m2, "pass"
+
+        if self._keep_best_after_verify_failure(verify_m=m, backoff_m=m2):
+            salvage_m = self._measure("verify_best")
+            self.journal.event("verify", "best-check", salvage_m.summary())
+            self._update_best(salvage_m)
+            return salvage_m, "keep_best"
 
         self.journal.event(
             "verify",
             "revert",
-            "still unstable after backoff — restoring baseline",
+            "still unstable after backoff and no salvageable best step — "
+            "restoring baseline",
         )
         self._revert_to_baseline("verify")
         m3 = self._measure("verify_baseline")
         self.journal.event("verify", "baseline-check", m3.summary())
-        return m3, True
+        return m3, "revert_baseline"
 
     # -- primitives -----------------------------------------------------------
 
@@ -1531,7 +1585,7 @@ class OneClickTuner:
         peak = float(report.peak_abs) if report is not None else _peak(samples)
         rms = float(report.rms) if report is not None else _rms(samples)
         score = peak + SCORE_RMS_WEIGHT * rms
-        unstable, why = self._classify(report, meta)
+        unstable, why = self._classify(report, meta, label=label)
         dominant = report.dominant if report is not None else None
 
         m = Measurement(
@@ -1577,10 +1631,15 @@ class OneClickTuner:
         )
 
     def _classify(
-        self, report: Optional[ResonanceReport], meta: Dict[str, Any]
+        self,
+        report: Optional[ResonanceReport],
+        meta: Dict[str, Any],
+        label: str = "",
     ) -> Tuple[bool, str]:
         """Engine's own stability gate (report.stable is too twitchy on
         near-silent buffers — tiny spectral peaks must not block the ladder)."""
+        if label.startswith("verify"):
+            return self._classify_verify(report, meta)
         cfg = self.cfg
         reasons: List[str] = []
         if meta.get("aborted"):
@@ -1617,6 +1676,57 @@ class OneClickTuner:
             reasons.append("no FFT report")
         return (bool(reasons), "; ".join(reasons))
 
+    def _classify_verify(
+        self, report: Optional[ResonanceReport], meta: Dict[str, Any]
+    ) -> Tuple[bool, str]:
+        """Verify gate: hard-fail real resonance/ring/abort; HF is relative."""
+        cfg = self.cfg
+        reasons: List[str] = []
+        if meta.get("aborted"):
+            reasons.append(f"move aborted: {meta.get('abort_reason')}")
+        if report is not None:
+            if report.n_samples < 64:
+                reasons.append(f"short buffer ({int(report.n_samples)})")
+            dom = report.dominant
+            amp_floor = max(
+                cfg.min_resonance_amplitude,
+                cfg.resonance_vs_rms * float(report.rms),
+            )
+            if (
+                dom is not None
+                and dom.prominence >= cfg.min_prominence_ratio
+                and dom.magnitude >= amp_floor
+            ):
+                reasons.append(
+                    f"resonance peak {dom.freq_hz:.1f} Hz "
+                    f"(mag {dom.magnitude:.4g}, x{dom.prominence:.1f} floor, "
+                    f"amp floor {amp_floor:.4g})"
+                )
+            if (
+                report.ring_score >= cfg.ring_fail
+                and report.rms >= cfg.min_meaningful_rms
+            ):
+                reasons.append(f"ring score {report.ring_score:.2f}")
+            score = float(report.peak_abs) + SCORE_RMS_WEIGHT * float(report.rms)
+            baseline_hf = self._baseline_hf if self._baseline_hf is not None else 0.0
+            hf_limit = max(cfg.hf_fail, baseline_hf + cfg.verify_hf_margin)
+            if (
+                report.hf_energy_ratio >= hf_limit
+                and report.rms >= cfg.min_meaningful_rms
+            ):
+                beats_baseline = (
+                    self._baseline_score is not None
+                    and score < self._baseline_score * 0.99
+                )
+                if not beats_baseline:
+                    reasons.append(
+                        f"HF energy {report.hf_energy_ratio:.0%} "
+                        f"(verify limit {hf_limit:.0%})"
+                    )
+        elif not meta.get("aborted"):
+            reasons.append("no FFT report")
+        return (bool(reasons), "; ".join(reasons))
+
     def _improved(
         self, m: Measurement, ref: Measurement, min_pct: float
     ) -> bool:
@@ -1632,6 +1742,59 @@ class OneClickTuner:
             self._best_values = {
                 k: self._current[k] for k in TOUCHABLE_KEYS if k in self._current
             }
+
+    def _restore_campaign_values(
+        self, phase: str, target: Dict[str, float]
+    ) -> None:
+        keys = self._writable([k for k in TOUCHABLE_KEYS if k in target])
+        updates = {
+            k: float(target[k])
+            for k in keys
+            if abs(float(target[k]) - float(self._current.get(k, float("nan"))))
+            > 1e-9
+        }
+        if updates:
+            self._write_values(phase, updates)
+
+    def _keep_best_after_verify_failure(
+        self, verify_m: Measurement, backoff_m: Measurement
+    ) -> bool:
+        if not self._best_values or self._baseline_score is None:
+            return False
+        if self._best_score >= math.inf:
+            return False
+        improvement = (
+            (self._baseline_score - self._best_score)
+            / self._baseline_score
+            * 100.0
+        )
+        if improvement < self.cfg.keep_best_min_improve_pct:
+            self.journal.event(
+                "verify",
+                "no-salvage",
+                f"verify failed but best only improved {improvement:.1f}% "
+                f"(need ≥{self.cfg.keep_best_min_improve_pct:g}%) — reverting",
+            )
+            return False
+        backoff_note = (
+            backoff_m.abort_reason
+            if backoff_m.aborted
+            else backoff_m.unstable_why
+        )
+        self.journal.event(
+            "verify",
+            "keep-best",
+            f"verify unstable ({verify_m.unstable_why}); "
+            f"backoff failed ({backoff_note}) — restoring best stable step "
+            f"({improvement:.1f}% better than baseline)",
+            best_score=self._best_score,
+            baseline_score=self._baseline_score,
+            best_values={k: self._best_values[k] for k in sorted(self._best_values)},
+            verify_score=verify_m.score,
+            backoff_score=backoff_m.score,
+        )
+        self._restore_campaign_values("verify", self._best_values)
+        return True
 
     def _try_notch(self, phase: str, m: Measurement) -> bool:
         """Write the 3rd manual notch at the dominant FFT peak, if sensible."""
