@@ -797,7 +797,7 @@ class OneClickResult:
             if self.baseline_values.get(k) != self.final_values.get(k)
         }
         for key, (old, new) in changed.items():
-            bits.append(f"{key}: {old} -> {new}")
+            bits.append(f"{key}: {_fmt(old)} -> {_fmt(new)}")
         if self.preset_name:
             bits.append(f"preset: {self.preset_name}")
         if self.journal_dir:
@@ -939,7 +939,7 @@ class OneClickTuner:
             self._finalize(result)
             return result
 
-        except OneClickCancelled:
+        except (OneClickCancelled, KeyboardInterrupt):
             self.journal.event("cancel", "cancelled", "operator cancelled — reverting")
             self._revert_to_baseline("cancel")
             result.status = "cancelled"
@@ -1723,6 +1723,15 @@ class OneClickTuner:
             },
         )
         self._progress("done", result.summary().splitlines()[0])
+
+
+def _fmt(value: Any) -> str:
+    if value is None:
+        return "?"
+    try:
+        return f"{round(float(value), 4):g}"
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def _peak(samples: List[float]) -> float:

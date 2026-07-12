@@ -48,3 +48,6 @@ logs/tuning/**/*.txt
 logs/tuning/**/*.json
 !logs/**/.gitkeep
 !logs/tuning/.gitkeep
+
+# One-click auto-tune journals (journal.md + json + FERR CSVs per campaign)
+logs/tuning/one_click/
