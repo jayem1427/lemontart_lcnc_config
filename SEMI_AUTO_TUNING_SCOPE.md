@@ -2,7 +2,7 @@
 
 High-level scope for turning the manual A6 / LinuxCNC tuning workflow into a **plot-to-LLM** semi-auto loop. Builds on the existing Servo Tuning tab, signal logging, and `SERVO_TUNING.md`.
 
-**Branch context:** `cursor/a6-tuning-ferror-comp-70f6`  
+**Branch context:** `servo-tuning-gui`  
 **Related docs:** `SERVO_TUNING.md` (human procedure), `SERVO_TUNING_LLM.md` (LLM playbook), `A6_TUNING.md` (tooling pin), `SIGNAL_LOGGING.md`
 
 ---

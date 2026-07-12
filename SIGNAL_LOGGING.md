@@ -247,4 +247,4 @@ ls -lt logs/signals/
 
 ## Branch
 
-Development branch: `cursor/a6-tuning-ferror-comp-70f6` (extends `cursor/signal-logging-framework-0633`). See also **[A6_TUNING.md](A6_TUNING.md)**.
+Development branch: `servo-tuning-gui`. See also **[A6_TUNING.md](A6_TUNING.md)**.

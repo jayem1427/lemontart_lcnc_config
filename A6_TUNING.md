@@ -2,20 +2,20 @@
 
 Conservative **fault-window** SDOs (6065/6066) at EtherCAT startup, plus a **Servo Tuning** Probe Basic tab for C00/C01 loop gains. **Loop gains are NOT written from `ethercat-conf.xml`** — that was wiping bench tuning on every LinuxCNC start. **LinuxCNC `joint.N.f-error` / INI `FERROR` are left alone** — plot the drive’s own following error (CiA **60F4**) as a separate Logging signal (**DRIVE**).
 
-Based on the [kalico sota-motion](https://github.com/dderg/kalico/tree/sota-motion) approach (SDO object dictionary instead of StepperOnline GUI). This branch builds on **`cursor/signal-logging-framework-0633`**.
+Based on the [kalico sota-motion](https://github.com/dderg/kalico/tree/sota-motion) approach (SDO object dictionary instead of StepperOnline GUI). Logging tab + Servo Tuning live on this branch together.
 
 ---
 
 ## Status — active tuning branch
 
-**Branch:** `cursor/a6-tuning-ferror-comp-70f6`  
+**Branch:** `servo-tuning-gui`  
 Rebased onto current `main`. Servo Tuning UI + APPLY path hardened; loop gains no longer wiped on every LinuxCNC start.
 
 ### Resume checklist
 
 ```bash
 cd /home/jon/linuxcnc/configs/ethercat_mill
-git checkout cursor/a6-tuning-ferror-comp-70f6
+git checkout servo-tuning-gui
 # Clear leftover user tabs from other feature branches (Probe Basic loads every folder):
 rm -rf probe_basic/user_tabs/laser_setter
 ls probe_basic/user_tabs/   # expect: signal_monitor, servo_tuner, templates
@@ -75,9 +75,8 @@ These are operational, not “final tuned gains”:
 
 | Branch | Role |
 |--------|------|
-| `cursor/signal-logging-framework-0633` | Logging tab / HAL telemetry baseline |
+| `servo-tuning-gui` | **This pin** — Logging tab + A6 SDO Servo Tuning + drive FERR + Tune Trial |
 | `cursor/laser-setter-1afc` | Laser tool setter UI (remove its tab folder when on this branch) |
-| `cursor/a6-tuning-ferror-comp-70f6` | **This pin** — A6 SDO + Servo Tuning + drive FERR |
 
 See also branch-switching notes in README when present; otherwise use the `rm -rf` lines in the resume checklist above.
 
@@ -231,4 +230,4 @@ A6 vendor objects often lack SDO dictionary info, so **`-t uint16` / `-t uint32`
 
 ## Branch
 
-`cursor/a6-tuning-ferror-comp-70f6` — extends signal-logging work; rebased onto current `main`.
+`servo-tuning-gui` — Logging + Servo Tuning + Tune Trial; rebased onto current `main`.

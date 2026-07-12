@@ -47,7 +47,7 @@ Full staged path (sim → EtherCAT → Probe Basic → CAM): **[GETTING_STARTED.
 HAL telemetry, CSV logging, and a **Logging** tab in Probe Basic for following error, torque, and velocity on X/Y/Z/A. See **[SIGNAL_LOGGING.md](SIGNAL_LOGGING.md)** for the tab UI, HAL chain, drive SDO limits, tuning G-code, sample rate / Nyquist notes, and test plan.
 
 **A6 loop tuning + Servo Tuning GUI** (plot drive 60F4 separately): **[A6_TUNING.md](A6_TUNING.md)** — active; see Status. **Semi-auto Tune Trial** (plot → clipboard → LLM): **[SEMI_AUTO_TUNING.md](SEMI_AUTO_TUNING.md)** / **[SERVO_TUNING_LLM.md](SERVO_TUNING_LLM.md)**. **Install on another machine:** **[INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md)**. Manual playbook: **[SERVO_TUNING.md](SERVO_TUNING.md)**.
-Branch: `cursor/a6-tuning-ferror-comp-70f6` (extends signal-logging work).
+Branch: `servo-tuning-gui` (Logging tab + Servo Tuning + Tune Trial).
 
 ## Layout
 
