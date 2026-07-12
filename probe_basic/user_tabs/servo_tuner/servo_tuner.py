@@ -30,6 +30,7 @@ from qtpy.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -588,8 +589,7 @@ class UserTab(QWidget):
         root_layout.addWidget(self._build_header(), stretch=0)
         root_layout.addWidget(self._build_presets_bar(), stretch=0)
         root_layout.addLayout(self._build_toolbar(), stretch=0)
-        root_layout.addWidget(self._build_clipboard_bar(), stretch=0)
-        root_layout.addWidget(self._build_one_click_bar(), stretch=0)
+        root_layout.addWidget(self._build_actions_bar(), stretch=0)
 
         body = QHBoxLayout()
         body.setSpacing(10)
@@ -728,54 +728,14 @@ class UserTab(QWidget):
         row.addStretch()
         return row
 
-    def _build_clipboard_bar(self) -> QFrame:
-        """COPY TUNING (text) and COPY PLOT (image) for LLM paste."""
-        bar = QFrame(self)
-        bar.setObjectName("clipboardBar")
-        bar.setAttribute(Qt.WA_StyledBackground, True)
-        layout = QHBoxLayout(bar)
-        layout.setContentsMargins(10, 4, 10, 4)
-        layout.setSpacing(6)
+    def _build_actions_bar(self) -> QFrame:
+        """ONE-CLICK on the left, CLIPBOARD copies pushed to the right.
 
-        layout.addWidget(self._caption("CLIPBOARD"))
-
-        self.copy_tuning_button = QPushButton("COPY TUNING", bar)
-        self.copy_tuning_button.setObjectName("btnPrimary")
-        self.copy_tuning_button.setFocusPolicy(Qt.NoFocus)
-        self.copy_tuning_button.setToolTip(
-            "Copy live parameters for the edit axis as text "
-            "(same labels as the parameter table)."
-        )
-        self.copy_tuning_button.clicked.connect(self._copy_tuning)
-        layout.addWidget(self.copy_tuning_button)
-
-        self.copy_plot_button = QPushButton("COPY PLOT", bar)
-        self.copy_plot_button.setFocusPolicy(Qt.NoFocus)
-        self.copy_plot_button.setToolTip(
-            "Copy the current FERR plot image to the clipboard."
-        )
-        self.copy_plot_button.clicked.connect(self._copy_plot)
-        layout.addWidget(self.copy_plot_button)
-
-        self.copy_resonance_button = QPushButton("COPY RESONANCE", bar)
-        self.copy_resonance_button.setFocusPolicy(Qt.NoFocus)
-        self.copy_resonance_button.setToolTip(
-            "Copy last FFT resonance report (run ANALYZE first)."
-        )
-        self.copy_resonance_button.clicked.connect(self._copy_resonance)
-        layout.addWidget(self.copy_resonance_button)
-
-        layout.addStretch()
-        return bar
-
-    def _build_one_click_bar(self) -> QFrame:
-        """ONE-CLICK strip: profile combo + start/cancel + live progress.
-
-        Runs the OneClickTuner campaign (a6_auto_tune.py) for the edit axis
-        in a worker thread. See ONE_CLICK_TUNING.md.
+        One ribbon instead of two so FERR + parameters get the vertical space
+        back. See ONE_CLICK_TUNING.md / SEMI_AUTO_TUNING.md.
         """
         bar = QFrame(self)
-        bar.setObjectName("presetsBar")  # reuse the strip styling
+        bar.setObjectName("presetsBar")
         bar.setAttribute(Qt.WA_StyledBackground, True)
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(10, 4, 10, 4)
@@ -822,6 +782,34 @@ class UserTab(QWidget):
         self.oc_status_label.setObjectName("lblParamHint")
         layout.addWidget(self.oc_status_label, stretch=1)
 
+        layout.addWidget(self._caption("CLIPBOARD"))
+
+        self.copy_tuning_button = QPushButton("COPY TUNING", bar)
+        self.copy_tuning_button.setObjectName("btnPrimary")
+        self.copy_tuning_button.setFocusPolicy(Qt.NoFocus)
+        self.copy_tuning_button.setToolTip(
+            "Copy live parameters for the edit axis as text "
+            "(same labels as the parameter table)."
+        )
+        self.copy_tuning_button.clicked.connect(self._copy_tuning)
+        layout.addWidget(self.copy_tuning_button)
+
+        self.copy_plot_button = QPushButton("COPY PLOT", bar)
+        self.copy_plot_button.setFocusPolicy(Qt.NoFocus)
+        self.copy_plot_button.setToolTip(
+            "Copy the current FERR plot image to the clipboard."
+        )
+        self.copy_plot_button.clicked.connect(self._copy_plot)
+        layout.addWidget(self.copy_plot_button)
+
+        self.copy_resonance_button = QPushButton("COPY RESONANCE", bar)
+        self.copy_resonance_button.setFocusPolicy(Qt.NoFocus)
+        self.copy_resonance_button.setToolTip(
+            "Copy last FFT resonance report (run ANALYZE first)."
+        )
+        self.copy_resonance_button.clicked.connect(self._copy_resonance)
+        layout.addWidget(self.copy_resonance_button)
+
         return bar
 
     def _build_ferr_group(self) -> QGroupBox:
@@ -832,7 +820,29 @@ class UserTab(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
 
         top = QHBoxLayout()
-        top.addWidget(self._caption("PLOT"))
+        top.addWidget(self._caption("VIEW"))
+        self.plot_view_group = QButtonGroup(self)
+        self.btn_view_ferr = QPushButton("FERR", group)
+        self.btn_view_ferr.setObjectName("btnAxis")
+        self.btn_view_ferr.setCheckable(True)
+        self.btn_view_ferr.setChecked(True)
+        self.btn_view_ferr.setFocusPolicy(Qt.NoFocus)
+        self.btn_view_ferr.setToolTip("Show live drive following-error strip chart.")
+        self.btn_view_fft = QPushButton("FFT", group)
+        self.btn_view_fft.setObjectName("btnAxis")
+        self.btn_view_fft.setCheckable(True)
+        self.btn_view_fft.setFocusPolicy(Qt.NoFocus)
+        self.btn_view_fft.setToolTip(
+            "Show resonance spectrum (run ANALYZE on a FERR buffer first)."
+        )
+        self.plot_view_group.addButton(self.btn_view_ferr)
+        self.plot_view_group.addButton(self.btn_view_fft)
+        self.btn_view_ferr.toggled.connect(self._on_plot_view_toggled)
+        self.btn_view_fft.toggled.connect(self._on_plot_view_toggled)
+        top.addWidget(self.btn_view_ferr)
+        top.addWidget(self.btn_view_fft)
+
+        top.addWidget(self._caption("UNIT"))
         self.ferr_unit_group = QButtonGroup(self)
         self.btn_ferr_unit = QPushButton("MM", group)
         self.btn_ferr_unit.setObjectName("btnAxis")
@@ -873,19 +883,51 @@ class UserTab(QWidget):
         readouts.addStretch()
         layout.addLayout(readouts)
 
+        self.plot_stack = QStackedWidget(group)
+        self.plot_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
         self.ferr_plot = FerrPlotWidget(group)
         self.ferr_plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        layout.addWidget(self.ferr_plot, stretch=1)
+        self.plot_stack.addWidget(self.ferr_plot)
 
-        # --- Resonance / FFT strip ---
-        layout.addWidget(self._caption("RESONANCE"))
+        self._spectrum_curve = None
+        self.spectrum_plot = None
+        if pg is not None:
+            self.spectrum_plot = pg.PlotWidget()
+            self.spectrum_plot.setBackground(PLOT_BG)
+            self.spectrum_plot.showGrid(x=True, y=True, alpha=0.35)
+            self.spectrum_plot.setMinimumHeight(0)
+            self.spectrum_plot.setSizePolicy(
+                QSizePolicy.Expanding, QSizePolicy.Expanding
+            )
+            self.spectrum_plot.setLabel(
+                "bottom", "Hz", color=PLOT_FG, **{"font-size": "11pt"}
+            )
+            self.spectrum_plot.setLabel(
+                "left", "mag", color=PLOT_FG, **{"font-size": "11pt"}
+            )
+            for axis_name in ("left", "bottom"):
+                axis = self.spectrum_plot.getAxis(axis_name)
+                axis.setPen(PLOT_FG)
+                axis.setTextPen(PLOT_FG)
+            self._spectrum_curve = self.spectrum_plot.plot(
+                pen=pg.mkPen("#fcaf3e", width=2)
+            )
+            self.plot_stack.addWidget(self.spectrum_plot)
+        else:
+            self.btn_view_fft.setEnabled(False)
+            self.btn_view_fft.setToolTip("pyqtgraph not available — FFT view disabled.")
+
+        layout.addWidget(self.plot_stack, stretch=1)
+
         res_row = QHBoxLayout()
+        res_row.addWidget(self._caption("RESONANCE"))
         self.analyze_resonance_button = QPushButton("ANALYZE", group)
         self.analyze_resonance_button.setObjectName("btnPrimary")
         self.analyze_resonance_button.setFocusPolicy(Qt.NoFocus)
         self.analyze_resonance_button.setToolTip(
             "FFT the edit-axis FERR buffer (run x_resonance.ngc with START PLOT). "
-            "Nyquist ≈ 500 Hz at 1 kHz sampling."
+            "Nyquist ≈ 500 Hz at 1 kHz sampling. Switches view to FFT."
         )
         self.analyze_resonance_button.clicked.connect(self._analyze_resonance)
         res_row.addWidget(self.analyze_resonance_button)
@@ -895,7 +937,7 @@ class UserTab(QWidget):
         self.suggest_notch_button.setEnabled(False)
         self.suggest_notch_button.setToolTip(
             "Load FFT peak into Pending for C01.46/47/48 (3rd notch). "
-            "Then APPLY TO DRIVE yourself."
+            "Then APPLY CHANGES yourself."
         )
         self.suggest_notch_button.clicked.connect(self._apply_suggested_notch_pending)
         res_row.addWidget(self.suggest_notch_button)
@@ -911,29 +953,7 @@ class UserTab(QWidget):
         layout.addWidget(self.resonance_label)
 
         self._resonance_report = None
-        self._spectrum_curve = None
-        self.spectrum_plot = None
-        if pg is not None:
-            self.spectrum_plot = pg.PlotWidget()
-            self.spectrum_plot.setBackground(PLOT_BG)
-            self.spectrum_plot.showGrid(x=True, y=True, alpha=0.35)
-            self.spectrum_plot.setMinimumHeight(120)
-            self.spectrum_plot.setMaximumHeight(180)
-            self.spectrum_plot.setLabel(
-                "bottom", "Hz", color=PLOT_FG, **{"font-size": "11pt"}
-            )
-            self.spectrum_plot.setLabel(
-                "left", "mag", color=PLOT_FG, **{"font-size": "11pt"}
-            )
-            for axis_name in ("left", "bottom"):
-                axis = self.spectrum_plot.getAxis(axis_name)
-                axis.setPen(PLOT_FG)
-                axis.setTextPen(PLOT_FG)
-            self._spectrum_curve = self.spectrum_plot.plot(
-                pen=pg.mkPen("#fcaf3e", width=2)
-            )
-            layout.addWidget(self.spectrum_plot)
-
+        self.plot_stack.setCurrentWidget(self.ferr_plot)
         return group
 
     def _build_param_table_group(self) -> QGroupBox:
@@ -944,9 +964,7 @@ class UserTab(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
 
         table_actions = QHBoxLayout()
-        table_actions.addStretch()
-
-        self.apply_button = QPushButton("APPLY TO DRIVE", group)
+        self.apply_button = QPushButton("APPLY CHANGES", group)
         self.apply_button.setObjectName("btnPrimary")
         self.apply_button.setFocusPolicy(Qt.NoFocus)
         self.apply_button.setToolTip(
@@ -955,6 +973,7 @@ class UserTab(QWidget):
         )
         self.apply_button.clicked.connect(lambda: self._apply_to_drive())
         table_actions.addWidget(self.apply_button)
+        table_actions.addStretch()
         layout.addLayout(table_actions)
 
         self.param_table = QTableWidget(0, 5, group)
@@ -981,7 +1000,6 @@ class UserTab(QWidget):
         self._populate_param_table()
         layout.addWidget(self.param_table, stretch=1)
         return group
-
     def _populate_param_table(self) -> None:
         self.param_table.setRowCount(0)
         self._pending_edits.clear()
@@ -1253,6 +1271,34 @@ class UserTab(QWidget):
             # Mixed linear/rotary when multi-plotting — use edit axis unit.
             self.ferr_plot.set_unit_label(axis_unit(self._axis))
 
+    def _on_plot_view_toggled(self, checked: bool) -> None:
+        if not checked:
+            return
+        self._sync_plot_view()
+
+    def _sync_plot_view(self) -> None:
+        """Show FERR or FFT exclusively — stacked so they never fight for space."""
+        want_fft = bool(self.btn_view_fft.isChecked()) and self.spectrum_plot is not None
+        if want_fft:
+            self.plot_stack.setCurrentWidget(self.spectrum_plot)
+            self.btn_ferr_unit.setEnabled(False)
+            self.btn_ferr_pulses.setEnabled(False)
+        else:
+            self.plot_stack.setCurrentWidget(self.ferr_plot)
+            self.btn_ferr_unit.setEnabled(True)
+            self.btn_ferr_pulses.setEnabled(True)
+
+    def _show_fft_view(self) -> None:
+        if self.spectrum_plot is None:
+            return
+        self.btn_view_fft.blockSignals(True)
+        self.btn_view_ferr.blockSignals(True)
+        self.btn_view_fft.setChecked(True)
+        self.btn_view_ferr.setChecked(False)
+        self.btn_view_fft.blockSignals(False)
+        self.btn_view_ferr.blockSignals(False)
+        self._sync_plot_view()
+
     def _clear_ferr_plot(self) -> None:
         self._ferr_peak_pulses = {a: 0.0 for a in AXIS_ORDER}
         self._ferr_peak_unit = {a: 0.0 for a in AXIS_ORDER}
@@ -1498,6 +1544,8 @@ class UserTab(QWidget):
             except Exception:
                 LOG.exception("spectrum plot update failed")
 
+        self._show_fft_view()
+
         gate = "PASS" if report.stable else "FAIL"
         self._set_status(f"RESONANCE {gate}", "ok" if report.stable else "error")
         self._notify(f"RESONANCE {gate} — {report.summary_line()}")
@@ -1531,7 +1579,7 @@ class UserTab(QWidget):
         self._set_status("NOTCH 3 PENDING", "ok")
         self._notify(
             f"Suggested notch 3 loaded into Pending for {self._axis} — "
-            "APPLY TO DRIVE when ready."
+            "APPLY CHANGES when ready."
         )
 
     def _copy_resonance(self) -> None:
@@ -1719,6 +1767,8 @@ class UserTab(QWidget):
             self.copy_resonance_button,
             self.analyze_resonance_button,
             self.suggest_notch_button,
+            self.btn_view_ferr,
+            self.btn_view_fft,
             self._presets_bar,
             *self.axis_buttons.values(),
         ):
@@ -1734,6 +1784,9 @@ class UserTab(QWidget):
                 bool(self._resonance_report)
                 and bool(getattr(self._resonance_report, "suggested_notch", None))
             )
+            if self.spectrum_plot is None:
+                self.btn_view_fft.setEnabled(False)
+            self._sync_plot_view()
 
     def _refresh_unit_columns(self) -> None:
         unit = axis_unit(self._axis)
