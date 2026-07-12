@@ -39,7 +39,7 @@ Does **not** auto-apply LLM suggestions. C01.38 gain switchover remains read-onl
 | Item | State |
 |------|--------|
 | Drive 60F4 PDO → `tune-drive-ferr.*` | Working |
-| Servo Tuning live FERR plot (mm/deg **or** pulses) | Working — **START PLOT** only (no CSV from this tab) |
+| Servo Tuning live FERR plot (mm/deg **or** pulses) | Working — multi-axis toggles + **START PLOT** (no CSV from this tab) |
 | Compact presets strip + right-side param table | Working |
 | APPLY with per-SDO retry/verify; continues after failures | Working |
 | Read-only SDOs skipped (C01.10, C01.38) | Working — no longer abort the whole APPLY |
