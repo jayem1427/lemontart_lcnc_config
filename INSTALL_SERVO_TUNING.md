@@ -115,20 +115,21 @@ Wrong SCALE makes FERR mm/pulses and 6065 conversion wrong.
 
 1. Start LinuxCNC — no HAL `loadrt` errors.
 2. Probe Basic shows **SERVO TUNING** and **SIGNAL LOGGING** tabs.
-3. Servo Tuning → **READ FROM DRIVE** → Current column fills (not all `READ FAIL`).
+3. Servo Tuning → open tab (auto-read) → Current column fills (not all `READ FAIL`).
 4. Servo Tuning → **START PLOT** → jog or run a tuning NGC → FERR trace moves (no CSV from this tab).
-5. `halcmd getp tune-drive-ferr.0.out` changes when you jog (if PDO/HAL wired).
-6. Logging → **START LIVE** → plot updates; optional CSV under `logs/signals/`.
+5. **COPY TUNING** / **COPY PLOT** put text + image on the clipboard.
+6. `halcmd getp tune-drive-ferr.0.out` changes when you jog (if PDO/HAL wired).
+7. Logging → **START LIVE** → plot updates; optional CSV under `logs/signals/`.
 
 ---
 
 ## Safety notes (APPLY)
 
-- APPLY writes **only SDOs that were successfully READ** (does not invent catalog defaults for failed reads).
+- APPLY writes **only SDOs that were successfully auto-read** (does not invent catalog defaults for failed reads).
 - Read-only SDOs on this A6 firmware (C01.10 speed FB filter, C01.38 gain switchover) are **skipped** — they no longer abort the whole APPLY batch.
 - SDO writes are **RAM** until you store them in the drive EEPROM (vendor tool).
 - Does **not** modify INI / HAL / XML on disk by itself.
-- Prefer READ → edit Pending → **APPLY TO DRIVE**. Use preset **LOAD** for known-good sets, then APPLY.
+- Prefer auto-read → edit Pending → **APPLY TO DRIVE**. Use preset **LOAD** for known-good sets, then APPLY.
 - Do **not** put C00/C01 loop gains in `ethercat-conf.xml` `sdoConfig` — lcec re-downloads them on every bus claim and wipes bench tuning. Keep only mode/limits (6060/6065/6066) in XML if needed. See **[A6_TUNING.md](A6_TUNING.md)**.
 
 ---

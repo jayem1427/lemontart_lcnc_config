@@ -121,5 +121,5 @@ Only after 1st set is solid.
 
 ## Semi-auto (plot → LLM)
 
-On the machine: Servo Tuning → **TUNE TRIAL** (see `SEMI_AUTO_TUNING.md`).  
-Paste the plot into an LLM loaded with `SERVO_TUNING_LLM.md`, then APPLY suggested gains yourself.
+On the machine: Servo Tuning → **START PLOT** + frozen NGC → **COPY PLOT** + **COPY TUNING** (see `SEMI_AUTO_TUNING.md`).  
+Paste into an LLM loaded with `SERVO_TUNING_LLM.md`, then APPLY suggested gains yourself.

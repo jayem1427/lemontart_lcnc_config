@@ -1,6 +1,6 @@
 # Semi-Auto Servo Tuning
 
-Operator guide for the **Tune Trial** flow on the Servo Tuning tab: run a frozen back-and-forth move, capture drive FERR, paste into an LLM, apply suggested gains yourself.
+Operator guide for the **clipboard → LLM** loop on the Servo Tuning tab: run a frozen back-and-forth move, copy drive FERR + parameters, paste into an LLM, apply suggested gains yourself.
 
 **Related:** `SERVO_TUNING.md` (manual zones), `SERVO_TUNING_LLM.md` (LLM playbook), `SEMI_AUTO_TUNING_SCOPE.md` (design), `A6_TUNING.md` (tooling pin)
 
@@ -8,56 +8,34 @@ Operator guide for the **Tune Trial** flow on the Servo Tuning tab: run a frozen
 
 ## Safety rules
 
-1. **Machine clear** — trials move the selected axis through the NGC envelope.
-2. **Default is manual Cycle Start** — leave **AUTO CYCLE START** unchecked unless you intentionally want the UI to start motion after a second confirm.
-3. **LLM never writes SDOs** — suggestions go into Pending → you press **APPLY TO DRIVE** (motors cycle OFF→ON as usual).
-4. **Tune on drive 60F4** — the plot is CiA following error via `tune-drive-ferr.*`, not LinuxCNC `joint.f-error` / INI `FERROR`.
-5. **Abort** with the normal LinuxCNC Abort button if anything looks wrong. **CANCEL TRIAL** only stops waiting/export; it does not stop motion.
-6. **Same NGC all campaign** — do not edit `nc_files/*_tuning.ngc` mid-compare or trial plots lie.
+1. **Machine clear** — tuning NGCs move the selected axis through their envelope.
+2. **LLM never writes SDOs** — suggestions go into Pending → you press **APPLY TO DRIVE** (motors cycle OFF→ON as usual).
+3. **Tune on drive 60F4** — the plot is CiA following error via `tune-drive-ferr.*`, not LinuxCNC `joint.f-error` / INI `FERROR`.
+4. **Abort** with the normal LinuxCNC Abort button if anything looks wrong.
+5. **Same NGC all campaign** — do not edit `nc_files/*_tuning.ngc` mid-compare or plots lie.
 
 ---
 
 ## One-session recipe
 
-1. Home / enable machine. Open **Servo Tuning**. Select axis.
-2. **READ**.
-3. Optional: create a `soft` preset with **SAVE AS PRESET**, then **LOAD SOFT BASELINE** → **APPLY TO DRIVE** — or skip and tune from live READ values.
-4. Optional notes in the notes field (`buzzes on push`, etc.).
-5. **TUNE TRIAL** → confirm → **Cycle Start** (unless auto-run).
-6. When the program ends, PNG + paste pack land on the clipboard and under `logs/tuning/<trial_id>/`.
-7. Paste into an LLM that has `SERVO_TUNING_LLM.md` context (plot image + text).
-8. Edit Pending from the suggestion → **APPLY TO DRIVE** → repeat from step 5.
+1. Home / enable machine. Open **Servo Tuning**.
+2. Parameters **auto-read** on tab open and when you focus an unread axis (no READ button).
+3. Check the axis button(s) to plot; last clicked-on axis is the one you edit.
+4. **START PLOT**, then run the frozen axis NGC (MDI / AUTO + Cycle Start).
+5. **COPY PLOT** (image) and **COPY TUNING** (text — same labels as the parameter table).
+6. Paste into an LLM that has `SERVO_TUNING_LLM.md` context.
+7. Edit Pending from the suggestion → **APPLY TO DRIVE** → repeat from step 4.
 
-**COPY PASTE PACK** re-copies the text if your chat only accepted the image.
-
-You do **not** need to press **START PLOT** first — Tune Trial turns capture on for the run (at 100 Hz during the trial so a full move fits in memory).
+Optional: **SAVE AS PRESET** / **LOAD** for named snapshots (combo starts on `(none)`).
 
 ---
 
-## What TUNE TRIAL does
+## Clipboard buttons
 
-| Step | Behavior |
-|------|----------|
-| Preflight | ESTOP clear, machine ON, interpreter idle |
-| Plot | Clears FERR strip; enables capture; drops sample rate to **10 ms** and expands buffer to ~**180 s** |
-| Program | Opens `nc_files/<axis>_tuning.ngc` in AUTO |
-| Run | Waits for Cycle Start **or** issues AUTO_RUN if checked |
-| Capture | Polls live drive FERR into the plot |
-| Finish | Writes `drive_ferr.png`, `drive_ferr.csv`, `meta.json`, `paste_pack.txt` |
-| Clipboard | Image + paste-pack text (best-effort; files always saved) |
-| Restore | Returns the live plot timer to the normal 1 ms / 5 s window |
-
-Artifacts directory example:
-
-```text
-logs/tuning/20260711_133015_Y/
-  drive_ferr.png
-  drive_ferr.csv
-  meta.json
-  paste_pack.txt
-```
-
-PNG title burn-in: `Y · <trial_id> · pos/speed/integral/filter · mm`.
+| Button | What it copies |
+|--------|----------------|
+| **COPY TUNING** | Live/Pending parameters for the edit axis as text. Labels match the Parameter column (`C01.00 1st position loop gain`, …). |
+| **COPY PLOT** | Current FERR strip-chart image. |
 
 ---
 
@@ -70,20 +48,13 @@ PNG title burn-in: `Y · <trial_id> · pos/speed/integral/filter · mm`.
 | Z | `nc_files/z_tuning.ngc` | 10× 0↔15 mm @ F10000 |
 | A | `nc_files/a_tuning.ngc` | 10× 0↔90° @ F3600 |
 
-`y_tuning_85.ngc` is an alternate — **not** used by the button. Point `AXIS_TUNING_NGC` in `tune_trial.py` only if you intentionally change the campaign.
+`y_tuning_85.ngc` is an alternate — use it only if you intentionally change the campaign.
 
 ---
 
-## Soft baseline
+## Soft starting point
 
-**LOAD SOFT BASELINE** (optional):
-
-- Overlays `config/tuning/presets/<axis>/soft.json` onto the last READ **if that file exists**
-- Create one yourself: READ → tweak soft gains → type `soft` → **SAVE AS PRESET**
-- Tries `manual_mode = 0` / `gain_sw_mode = 0` only when those keys are writable
-- **Does not write the drive** until you **APPLY TO DRIVE**
-
-Generic `default` / `soft` snapshots were removed from the repo — start from **(none)** + **READ**, then save names you care about.
+There is no **LOAD SOFT BASELINE** button. Start from auto-read live values, or **SAVE AS PRESET** a soft set you like and **LOAD** it later. C01.38 gain switchover is read-only on this A6 — set Fixed 1st on the drive panel if needed.
 
 ---
 
@@ -91,9 +62,8 @@ Generic `default` / `soft` snapshots were removed from the repo — start from *
 
 | Path | Role |
 |------|------|
-| `probe_basic/python/tune_trial.py` | NGC resolve, preflight, paste pack, artifacts, clipboard |
-| `probe_basic/user_tabs/servo_tuner/servo_tuner.py` | Semi-Auto strip + trial state machine |
-| `logs/tuning/` | Trial outputs (created on demand) |
+| `probe_basic/python/tune_trial.py` | `format_tuning_text` + clipboard helpers |
+| `probe_basic/user_tabs/servo_tuner/servo_tuner.py` | Servo Tuning UI (auto-read, COPY TUNING / COPY PLOT) |
 
 ---
 
@@ -101,15 +71,13 @@ Generic `default` / `soft` snapshots were removed from the repo — start from *
 
 | Symptom | Check |
 |---------|--------|
-| Trial blocked | ESTOP, machine OFF, program already running |
-| Empty / short plot | Forgot Cycle Start; cancelled early; wrong axis selected |
-| Clipboard empty | Wayland/X11 quirks — open `drive_ferr.png` from `logs/tuning/` and use **COPY PASTE PACK** |
-| Paste pack gains look wrong | **READ** before the trial |
-| Motion continues after CANCEL TRIAL | Expected — hit LinuxCNC Abort |
-| Soft baseline didn’t fix switchover | C01.38 is read-only here — set Fixed 1st on the drive panel |
+| Current column empty / APPLY blocked | Auto-read failed (EtherCAT / sudo?) — re-open tab or change axis |
+| Clipboard empty | Wayland/X11 quirks — screenshot the plot; re-try **COPY TUNING** |
+| Copy labels look wrong | Should match Parameter column exactly — report if a key diverges |
+| Switchover still wrong | C01.38 is read-only here — set Fixed 1st on the drive panel |
 
 ---
 
-## Not in v0
+## Not in scope
 
-Auto-apply of LLM JSON, FFT scoring, EEPROM store, multi-axis batch, Halscope. See `SEMI_AUTO_TUNING_SCOPE.md` WP5.
+Auto-apply of LLM JSON, FFT scoring, EEPROM store, multi-axis batch, Halscope, one-button Tune Trial. See `SEMI_AUTO_TUNING_SCOPE.md`.

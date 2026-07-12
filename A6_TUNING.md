@@ -22,14 +22,14 @@ ls probe_basic/user_tabs/   # expect: signal_monitor, servo_tuner, templates
 ./launch.sh
 ```
 
-Then: **Servo Tuning** → check axis buttons to plot (multi-OK) → **START PLOT** (or **TUNE TRIAL**) → **READ** in the parameters box → edit Pending → **APPLY TO DRIVE**. Optional: **Logging** tab for multi-channel CSV.
+Then: **Servo Tuning** → check axis buttons to plot (multi-OK) → parameters auto-read on open → **START PLOT** → **COPY TUNING** / **COPY PLOT** for LLM → edit Pending → **APPLY TO DRIVE**. Optional: **Logging** tab for multi-channel CSV.
 
-### Semi-auto tune trial (v0)
+### Clipboard → LLM
 
-Servo Tuning → **SEMI-AUTO TUNE TRIAL** strip:
+Servo Tuning → **CLIPBOARD** strip:
 
-- **TUNE TRIAL** opens the frozen axis NGC, captures drive FERR (~100 Hz during the trial), writes `logs/tuning/<id>/`, copies plot + paste pack to clipboard
-- **LOAD SOFT BASELINE** / **COPY PASTE PACK** / optional **AUTO CYCLE START**
+- **COPY TUNING** — parameter text using the same labels as the table (`C01.00 1st position loop gain`, …)
+- **COPY PLOT** — FERR strip-chart image
 - Docs: `SEMI_AUTO_TUNING.md`, `SERVO_TUNING_LLM.md`
 
 Does **not** auto-apply LLM suggestions. C01.38 gain switchover remains read-only on APPLY.
@@ -66,7 +66,7 @@ These are operational, not “final tuned gains”:
 
 ### Open / next when you return
 
-1. Per-axis gain ladder with **TUNE TRIAL** + LLM (`SERVO_TUNING_LLM.md`); save presets when happy.
+1. Per-axis gain ladder with **COPY PLOT** / **COPY TUNING** + LLM (`SERVO_TUNING_LLM.md`); save presets when happy.
 2. Store good tunes to drive **EEPROM** (vendor tool / panel) so they survive power loss — LinuxCNC no longer pushes C00/C01 at bus claim.
 3. Optional: inertia ratio (C00.06) after a real load measurement.
 4. Optional: feedforward / carrier / system ID (Tier 2 — not started).
@@ -75,7 +75,7 @@ These are operational, not “final tuned gains”:
 
 | Branch | Role |
 |--------|------|
-| `servo-tuning-gui` | **This pin** — Logging tab + A6 SDO Servo Tuning + drive FERR + Tune Trial |
+| `servo-tuning-gui` | **This pin** — Logging tab + A6 SDO Servo Tuning + drive FERR + clipboard LLM flow |
 | `cursor/laser-setter-1afc` | Laser tool setter UI (remove its tab folder when on this branch) |
 
 See also branch-switching notes in README when present; otherwise use the `rm -rf` lines in the resume checklist above.
@@ -136,29 +136,27 @@ Open **Servo Tuning** in Probe Basic (`probe_basic/user_tabs/servo_tuner/`).
 
 | Control | Action |
 |---------|--------|
-| **PRESET** | One-line strip: combo + **LOAD** (Pending only) + **SAVE** |
-| **AXIS** | Select X / Y / Z / A |
-| **READ** | Upload live SDOs into Current + Pending |
+| **PRESET** | One-line strip: combo + **LOAD** (Pending only) + **SAVE AS PRESET** / **DELETE** |
+| **PLOT / EDIT** | Axis buttons toggle FERR traces (multi-OK); last clicked-on = edit axis |
+| *(auto-read)* | SDOs load into Current + Pending on tab open / unread axis focus |
+| **COPY TUNING** / **COPY PLOT** | Clipboard text (table labels) + FERR image for LLM |
 | **START PLOT / STOP PLOT** | Live 60F4 FERR trace only — **nothing written to disk** |
 | **MM** / **PULSES** | Plot Y-axis units (pulses = raw `lcec.0.N.ferr-fb`) |
 | **TUNING PARAMETERS** | Grouped table: Current / Pending / Unit / Range |
 | **APPLY TO DRIVE** | In the parameters box — cycles motors OFF if needed, writes Pending SDOs with retry+verify, re-enables |
 
-**Not on this tab anymore:** REVERT, LOAD DEFAULT, LOAD+APPLY, CSV logging.
+**Not on this tab anymore:** READ button, REVERT, LOAD DEFAULT, Tune Trial / Cancel, Load Soft Baseline, Auto Cycle Start, notes field, CSV logging.
 
-Presets live under `config/tuning/presets/<axis>/*.json`. Examples:
-
-- `default` — catalog reference only (not applied at EtherCAT startup)
-- `soft` — softer C01.01 starting point
-- `10um` (X), `20um` (Z) — bench saves from this branch
+Presets live under `config/tuning/presets/<axis>/*.json`. Combo starts on **(none)**. Bench examples: `10um` (X), `20um` (Z).
 
 **Typical workflow**
 
-1. Open tab (auto-READ when EtherCAT is up) or press **READ**.
+1. Open tab — auto-read when EtherCAT is up.
 2. **START PLOT** → pick **MM** or **PULSES** → run `nc_files/x_tuning.ngc` (or jog).
-3. Edit **Pending** (C01.01 first if ringing/whine).
-4. **APPLY TO DRIVE** — confirm the value list; unread / read-only keys are skipped.
-5. If better: **SAVE** a preset. Repeat per axis.
+3. **COPY PLOT** + **COPY TUNING** → paste into LLM with `SERVO_TUNING_LLM.md`.
+4. Edit **Pending** from the suggestion.
+5. **APPLY TO DRIVE** — confirm the value list; unread / read-only keys are skipped.
+6. If better: **SAVE AS PRESET**. Repeat per axis.
 
 ### APPLY reliability notes
 
@@ -170,7 +168,7 @@ Presets live under `config/tuning/presets/<axis>/*.json`. Examples:
 
 | Want | Do |
 |------|----|
-| Undo Pending edits | **READ** again (reloads from drive) |
+| Undo Pending edits | Re-open the Servo Tuning tab (fresh auto-read) |
 | Known-good named set | Preset **LOAD**, then **APPLY TO DRIVE** |
 | Survive power loss | Store to drive **EEPROM** via vendor tool after a good tune |
 

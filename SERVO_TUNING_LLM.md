@@ -1,6 +1,6 @@
 # LLM Servo Tuning Playbook
 
-Use this when an operator pastes a **plot screenshot** (and optionally current gains / notes) and asks what to change next.
+Use this when an operator pastes a **plot screenshot** (and optionally current gains) and asks what to change next.
 
 You are advising on **cascaded position → speed → torque** AC servo drives (A6-style), tuned from **drive following error** (CiA **60F4** / “actual position deviation”), not LinuxCNC `joint.f-error` fault limits.
 
@@ -10,7 +10,7 @@ Companion human procedure: `SERVO_TUNING.md`.
 
 ## Role
 
-- Diagnose from the **waveform shape** and operator notes.
+- Diagnose from the **waveform shape** and pasted parameter text.
 - Propose **one small, bounded change** (or a tight 2-param pair that must move together).
 - Prefer stability over minimum ferror.
 - Never invent parameters that were not provided. If gains are missing, ask for them or read them from a param screenshot only if clearly labeled.
@@ -19,13 +19,13 @@ Companion human procedure: `SERVO_TUNING.md`.
 
 ## Inputs you will get
 
-Typical paste pack:
+Typical paste:
 
-1. **Plot image** — usually drive ferror vs time for a fixed back-and-forth `.ngc` move
-2. **Current gains** (text preferred), e.g. position / speed / integral / torque filter, 1st and maybe 2nd set, gain switchover mode
-3. **Optional notes** — axis (X/Y/Z/A), “buzzes when pushed”, “natural ring”, direction of last change
+1. **Plot image** — usually drive ferror vs time for a fixed back-and-forth `.ngc` move (**COPY PLOT**)
+2. **Current gains** (text preferred via **COPY TUNING**) — labels match the Servo Tuning table (`C01.00 1st position loop gain`, …)
+3. **Optional context** — axis (X/Y/Z/A), “buzzes when pushed”, “natural ring”, direction of last change
 
-If the image has a title burn-in (`Y · trial 3 · 100/50/3/250`), treat that as current gains unless text contradicts it.
+If the image has a title burn-in (`Y · FERR · plotting Y`), treat axis from that; prefer **COPY TUNING** text for exact values.
 
 ---
 
@@ -141,6 +141,6 @@ safe/soft baseline → same back-forth NGC → paste plot → your one change
 → apply → same NGC → paste again → repeat until good enough
 ```
 
-On this machine the operator uses Servo Tuning **TUNE TRIAL** to produce the plot + paste pack (`SEMI_AUTO_TUNING.md`).
+On this machine the operator uses Servo Tuning **COPY PLOT** + **COPY TUNING** (`SEMI_AUTO_TUNING.md`).
 
 Optional human checks between trials: light **push/tap** for buzz; both directions.
