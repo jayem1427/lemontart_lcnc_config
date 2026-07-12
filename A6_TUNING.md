@@ -22,7 +22,7 @@ ls probe_basic/user_tabs/   # expect: signal_monitor, servo_tuner, templates
 ./launch.sh
 ```
 
-Then: **Servo Tuning** → **START PLOT** (or **TUNE TRIAL**) → toggle **MM** / **PULSES** → **READ** → edit Pending → **APPLY TO DRIVE** → run `nc_files/*_tuning.ngc`. Optional: **Logging** tab for multi-channel CSV.
+Then: **Servo Tuning** → check axis buttons to plot (multi-OK) → **START PLOT** (or **TUNE TRIAL**) → **READ** in the parameters box → edit Pending → **APPLY TO DRIVE**. Optional: **Logging** tab for multi-channel CSV.
 
 ### Semi-auto tune trial (v0)
 
