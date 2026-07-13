@@ -27,11 +27,14 @@ Open the **Logging** tab (`probe_basic/user_tabs/signal_monitor/`). The tab uses
 | **LOG NEXT PROGRAM** | Arms logging; starts when the next program runs in **AUTO**, stops when the cycle ends |
 | **START LIVE** / **STOP** | Continuous logging while jogging or testing (no G-code required) |
 | **AXIS** (X Y Z A) | Checkable toggles — multi-select which axes appear on the plot |
-| **SIGNAL** (FERR / DRIVE / TORQUE / VEL) | Exclusive — one signal family at a time on the plot |
+| **SIGNAL** | Exclusive — **DRIVE** (CiA 60F4), **TORQUE** (6077), **VEL** (606C), **POS** (actual joint position). Default **DRIVE**. Host `joint.N.f-error` is not plotted. |
 | **Y SCALE** | Auto, Symmetric, Fixed ±0.25 (mm ferr), Fixed ±60 (deg ferr), Fixed ±100% (torque) |
-| **RATE** | Sample rate: 25 / 50 / 100 / 200 / 500 / **1000** Hz |
+| **RATE** | Sample rate: 25 / 50 / 100 / **200** / 500 / 1000 Hz (default **200** — 1000 Hz is still available but heavy on the GUI) |
 
-CSV logging always records **all** channels from `config/logging/signals.json`. Axis/signal toggles and Y scale affect the **plot only**.
+| **DRIVE** | Drive CiA 60F4 via raw ``lcec.0.N.ferr-fb`` — **mm** (XYZ) / **deg** (A) |
+| **TORQUE** | Drive CiA 6077 via raw ``lcec.0.N.torque-fb`` × 0.1 — **% rated** |
+| **VEL** | Drive CiA 606C counts/s ÷ joint ``SCALE`` × 60 — **mm/min** (XYZ) / **deg/min** (A) |
+| **POS** | Actual joint position via ``linuxcnc.stat.joint_actual_position`` (``joint.N.pos-fb``) — **mm** / **deg** |
 
 ### Sample rate and Nyquist
 
@@ -45,10 +48,17 @@ Nyquist says: to reconstruct a *continuous* signal that may contain energy up to
 |------|------------------------|
 | “2× servo = 2 kHz required” | **False** for HAL logging — pins do not change between servo cycles |
 | Useful log rate | ≤ servo rate (≤ ~1 kHz); duplicates if you poll faster than HAL updates |
-| Default in this repo | **1000 Hz** (`config/logging/signals.json`); UI offers up to **1000 Hz** |
+| Default in this repo | **200 Hz** (`config/logging/signals.json`); UI offers up to **1000 Hz** |
 | When to lower rate | Reduce userspace load or shrink CSV size; still capped by servo updates |
+| When to raise rate | Capture near-servo detail for short sessions; keep RATE ≤200 while jogging if the UI feels laggy |
 
-For A6 loop tuning plots (DRIVE FERR, torque), **100–1000 Hz** is useful. At **1000 Hz** the logger aims for one sample per servo update via in-process `hal.get_value` (not slow `halcmd`). Polling faster than the servo thread only duplicates values — it does **not** unlock content that never appeared on the HAL pin.
+For A6 loop tuning plots (DRIVE FERR, torque), **100–200 Hz** is usually enough while staying responsive. At **1000 Hz** the logger aims for one sample per servo update via in-process `hal.get_value` (not slow `halcmd`), but sampling + CSV + live plot all run on Probe Basic’s Qt main thread — that combination historically starved jog buttons.
+
+The Logging tab samples HAL pins on the **Qt UI thread** (same pattern as
+Servo Tuning’s FERR plot — ``hal.get_value`` is not reliable across threads on
+this stack). CSV write is optional side work; the live plot is the primary
+path. The poll timer only runs while **START LIVE** or **ARMED**; plot redraw
+is ~10 Hz and decimated.
 
 The Servo Tuning tab’s live FERR strip chart is separate (START PLOT / STOP PLOT, no CSV). It polls HAL at ~1 kHz **only while START PLOT is on** (and the tab is visible); opening the tab alone does not poll FERR.
 
@@ -63,9 +73,9 @@ The legend panel on the right of the LOGGING box always shows all four axes for 
 - **Selected** axes: white text + white swatch border
 - **Unselected** axes: dimmed gray text
 
-The legend title updates with the signal family: `FERR`, `DRIVE FERR`, `TORQUE`, or `VELOCITY`.
+The legend title updates with the signal family: `DRIVE FERR`, `TORQUE`, `VELOCITY`, or `POSITION`.
 
-Y scale auto-suggests when you change axis or signal (e.g. FERR with only A → Fixed ±60; linear axes → Fixed ±0.25).
+Y scale auto-suggests when you change axis or signal (e.g. DRIVE with only A → Fixed ±60; linear axes → Fixed ±0.25).
 
 ---
 
@@ -98,7 +108,7 @@ lcec.0.N.torque-fb (6077, 0.1% per count)
   → conv-s32-float → mult2 (×0.1) → tune-torque.N.out  (% rated torque)
 
 lcec.0.N.vel-fb (606C, drive units)
-  → conv-s32-float → tune-velocity.N.out  (mm/s or deg/s after scale)
+  → conv-s32-float → tune-velocity.N.out  (mm/s or deg/s after HAL scale; Logging UI shows mm/min / deg/min)
 
 lcec.0.N.ferr-fb (60F4, encoder counts)
   → conv-s32-float → div2 (÷ joint SCALE) → tune-drive-ferr.N.out  (mm or deg)
@@ -159,7 +169,7 @@ Drive fault **Er47.0** compares internal position demand vs feedback (CiA 6062 v
 
 ## Tuning G-code
 
-`nc_files/x_tuning.ngc` — 10 oscillation cycles on X between 0 and 80 mm at F1000 (mm/min), 0.5 s dwell each end. Same 10-cycle pattern for `y_tuning.ngc`, `y_tuning_85.ngc`, and `a_tuning.ngc`. `z_tuning.ngc` is **1 cycle** 0↔15 mm @ F10000 (same dwell). Use with **LOG NEXT PROGRAM** and **DRIVE** (or FERR / TORQUE) on the plot.
+`nc_files/x_tuning.ngc` — 10 oscillation cycles on X between 0 and 80 mm at F1000 (mm/min), 0.5 s dwell each end. Same 10-cycle pattern for `y_tuning.ngc`, `y_tuning_85.ngc`, and `a_tuning.ngc`. `z_tuning.ngc` is **1 cycle** 0↔15 mm @ F10000 (same dwell). Use with **LOG NEXT PROGRAM** and **DRIVE** (or TORQUE / VEL) on the plot.
 
 `ethercat_mill.ini` sets:
 
@@ -182,7 +192,7 @@ Default channels (1000 Hz):
 | Following error (LinuxCNC) | `joint.0..3.f-error` | mm / deg |
 | Following error (drive 60F4) | `tune-drive-ferr.0..3.out` | mm / deg |
 | Torque | `tune-torque.0..3.out` | % rated |
-| Velocity | `tune-velocity.0..3.out` | mm/s / deg/s |
+| Velocity | `lcec.0.N.vel-fb` (Logging) | mm/min / deg/min |
 
 Context columns in each CSV row: `line`, `feed`, `enabled`.
 

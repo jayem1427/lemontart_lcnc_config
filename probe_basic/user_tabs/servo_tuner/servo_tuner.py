@@ -101,8 +101,9 @@ except ImportError:  # pragma: no cover
 FERR_SAMPLE_MS = 1
 FERR_WINDOW_S = 5.0
 # Visible time span on the FERR strip chart (fraction of buffer window).
-# Was 0.25 (1.25 s on a 5 s buffer); 0.075 ≈ 30% of that for more detail.
-FERR_PLOT_X_FRAC = 0.075
+# Was 0.25 → 0.075 (~0.375 s); 0.04 ≈ 0.20 s for more horizontal stretch.
+FERR_PLOT_X_FRAC = 0.04
+FERR_PLOT_X_MIN_S = 0.05
 FERR_BUFFER = int(FERR_WINDOW_S * (1000.0 / FERR_SAMPLE_MS))
 PLOT_BG = "#1e2122"
 PLOT_FG = "#eeeeec"
@@ -192,7 +193,7 @@ class FerrPlotWidget(QWidget):
         self._plot_unit = "mm"  # "mm"/"deg"/"pulses" — matches buffered sample units
 
     def _x_visible_span_s(self) -> float:
-        return max(self._window_s * FERR_PLOT_X_FRAC, 0.1)
+        return max(self._window_s * FERR_PLOT_X_FRAC, FERR_PLOT_X_MIN_S)
 
     def _x_display_range(self, sample_count: int) -> Tuple[float, float]:
         """Trailing time window — zooms in when the buffer holds more than x_span."""

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QLabel, QVBoxLayout, QWidget
@@ -27,6 +27,9 @@ AXIS_CHANNEL_ORDER = {
     "x": 0, "y": 1, "z": 2, "a": 3,
 }
 
+# Cap points sent to pyqtgraph — full 5k-point setData @ 100 Hz starved jog UI.
+PLOT_MAX_POINTS = 800
+
 
 def _channel_sort_key(channel_id: str) -> tuple:
     return (AXIS_CHANNEL_ORDER.get(channel_id[0], 9), channel_id)
@@ -34,6 +37,14 @@ def _channel_sort_key(channel_id: str) -> tuple:
 
 PLOT_BG = "#1e2122"
 PLOT_FG = "#eeeeec"
+
+
+def _decimate(values: List[float], max_points: int = PLOT_MAX_POINTS) -> List[float]:
+    n = len(values)
+    if n <= max_points:
+        return values
+    step = n / float(max_points)
+    return [values[int(i * step)] for i in range(max_points)]
 
 
 def _auto_y_range(values: List[float], symmetric: bool = False) -> tuple:
@@ -89,6 +100,8 @@ class LiveSignalPlotWidget(QWidget):
         self._curves: Dict[str, object] = {}
         self._visible: Set[str] = set()
         self._scale_mode = "Fixed ±0.25"
+        self._y_unit = "value"
+        self._last_yrange: Optional[Tuple[float, float]] = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -105,6 +118,11 @@ class LiveSignalPlotWidget(QWidget):
         self.plot.setLabel("bottom", "samples", color=PLOT_FG)
         self.plot.setLabel("left", "value", color=PLOT_FG)
         self.plot.setMinimumHeight(320)
+        try:
+            self.plot.enableAutoRange(x=False, y=False)
+            self.plot.setMouseEnabled(x=False, y=False)
+        except Exception:
+            pass
         root.addWidget(self.plot, stretch=1)
 
         self.stat_label = QLabel("—")
@@ -130,31 +148,44 @@ class LiveSignalPlotWidget(QWidget):
             curve.setVisible(channel_id in self._visible)
 
     def set_scale_mode(self, mode: str) -> None:
+        if mode != self._scale_mode:
+            self._last_yrange = None
         self._scale_mode = mode
+
+    def set_y_unit(self, unit: str) -> None:
+        """Y-axis label — e.g. ``mm``, ``%``, ``mm/min``."""
+        label = (unit or "value").strip() or "value"
+        if label == self._y_unit or pg is None or not hasattr(self, "plot"):
+            self._y_unit = label
+            return
+        self._y_unit = label
+        self.plot.setLabel("left", label, color=PLOT_FG)
 
     def refresh(self) -> None:
         if pg is None:
             return
 
-        buffers = self.logger.get_buffers()
-        stats = self.logger.live_stats
+        visible = sorted(self._visible, key=_channel_sort_key)
+        buffers = self.logger.snapshot_buffers(visible)
+        stats = self.logger.snapshot_live_stats(visible)
         plot_values: List[float] = []
         stat_lines: List[str] = []
 
-        for channel_id in sorted(self._visible, key=_channel_sort_key):
+        for channel_id in visible:
             curve = self._curves.get(channel_id)
             if curve is None:
                 continue
-            values = list(buffers.get(channel_id, []))
+            values = _decimate(buffers.get(channel_id, []))
             curve.setData(list(range(len(values))), values)
             plot_values.extend(values)
 
             channel = self.channel_map[channel_id]
             info = stats.get(channel_id, {})
-            unit = channel.units or ""
+            unit = f" {channel.units}" if channel.units else ""
             stat_lines.append(
                 f"{channel.label.upper()}: last={info.get('last', 0.0):.4f}{unit}  "
-                f"rms={info.get('rms', 0.0):.4f}  peak={info.get('peak', 0.0):.4f}"
+                f"rms={info.get('rms', 0.0):.4f}{unit}  "
+                f"peak={info.get('peak', 0.0):.4f}{unit}"
             )
 
         if len(stat_lines) == 1:
@@ -171,7 +202,13 @@ class LiveSignalPlotWidget(QWidget):
         else:
             ymin, ymax = _auto_y_range(plot_values, symmetric=False)
 
-        self.plot.setYRange(ymin, ymax, padding=0)
+        xmax = max((len(buffers.get(cid, [])) for cid in visible), default=1)
+        self.plot.setXRange(0, max(xmax - 1, 1), padding=0)
+
+        yrange = (ymin, ymax)
+        if yrange != self._last_yrange:
+            self._last_yrange = yrange
+            self.plot.setYRange(ymin, ymax, padding=0)
 
 
 SignalPlotWidget = LiveSignalPlotWidget

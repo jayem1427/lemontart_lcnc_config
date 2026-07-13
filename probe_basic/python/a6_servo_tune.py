@@ -1049,7 +1049,11 @@ def _ensure_hal_component():
 
 
 def hal_getp(pin: str) -> float:
-    """Read a HAL pin via in-process API when possible; else halcmd."""
+    """Read a HAL pin via in-process API when possible; else halcmd.
+
+    ``hal.get_value`` sometimes returns NaN without raising (seen on
+    ``tune-*`` mirrors). Treat NaN as failure and fall back to ``halcmd``.
+    """
     try:
         import hal as linuxcnc_hal
 
@@ -1057,7 +1061,9 @@ def hal_getp(pin: str) -> float:
             val = linuxcnc_hal.get_value(pin)
             if isinstance(val, bool):
                 return 1.0 if val else 0.0
-            return float(val)
+            parsed = float(val)
+            if parsed == parsed:  # not NaN
+                return parsed
     except Exception:
         pass
     try:
@@ -1109,6 +1115,29 @@ def read_drive_ferr(axis: str) -> Tuple[float, float]:
     elif scaled == scaled:
         counts = float(unit_to_counts(axis, scaled))
     return counts, scaled
+
+
+def read_drive_torque(axis: str) -> float:
+    """CiA 6077 torque feedback as % rated (0.1% per count, same as custom.hal)."""
+    slave = AXES[axis]["slave"]
+    raw = hal_getp_s32(f"lcec.0.{slave}.torque-fb")
+    if raw != raw:
+        return raw
+    return float(raw) * 0.1
+
+
+def read_drive_velocity(axis: str) -> float:
+    """CiA 606C velocity in mm/min (linear) or deg/min (rotary).
+
+    606C is encoder increments per second (same count space as position).
+    Divide by joint SCALE → unit/s, then ×60 → unit/min. The old
+    ``raw * 0.001`` guess was ~SCALE/1000 too large (~13× on this mill).
+    """
+    slave = AXES[axis]["slave"]
+    raw = hal_getp_s32(f"lcec.0.{slave}.vel-fb")
+    if raw != raw:
+        return raw
+    return counts_to_unit(axis, raw) * 60.0
 
 
 def read_axis_params(axis: str) -> Tuple["AxisTuneParams", List[str], List[str]]:

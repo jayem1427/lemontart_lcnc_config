@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 
 from qtpy import uic
 from qtpy.QtCore import Qt
@@ -37,21 +38,33 @@ from hal_signal_logger import HalSignalLogger, default_config_path, load_config 
 from signal_plot_widget import LiveSignalPlotWidget, SCALE_MODES  # noqa: E402
 
 AXIS_SIGNALS = {
-    "X": {"FERR": "x_ferr", "DRIVE": "x_ferr_drive", "TORQUE": "x_torque", "VEL": "x_vel"},
-    "Y": {"FERR": "y_ferr", "DRIVE": "y_ferr_drive", "TORQUE": "y_torque", "VEL": "y_vel"},
-    "Z": {"FERR": "z_ferr", "DRIVE": "z_ferr_drive", "TORQUE": "z_torque", "VEL": "z_vel"},
-    "A": {"FERR": "a_ferr", "DRIVE": "a_ferr_drive", "TORQUE": "a_torque", "VEL": "a_vel"},
+    "X": {"DRIVE": "x_ferr_drive", "TORQUE": "x_torque", "VEL": "x_vel", "POS": "x_pos"},
+    "Y": {"DRIVE": "y_ferr_drive", "TORQUE": "y_torque", "VEL": "y_vel", "POS": "y_pos"},
+    "Z": {"DRIVE": "z_ferr_drive", "TORQUE": "z_torque", "VEL": "z_vel", "POS": "z_pos"},
+    "A": {"DRIVE": "a_ferr_drive", "TORQUE": "a_torque", "VEL": "a_vel", "POS": "a_pos"},
 }
 
 SIGNAL_Y_DEFAULTS = {
-    "FERR": "Fixed ±0.25",
     "DRIVE": "Fixed ±0.25",
     "TORQUE": "Fixed ±100%",
     "VEL": "Symmetric",
+    "POS": "Auto",
+}
+
+SIGNAL_UNITS = {
+    "DRIVE": "mm",
+    "TORQUE": "%",
+    "VEL": "mm/min",
+    "POS": "mm",
 }
 
 AXIS_ORDER = ("X", "Y", "Z", "A")
 RATE_HZ_OPTIONS = (25, 50, 100, 200, 500, 1000)
+# HAL reads must run on the UI thread (same as Servo Tuning). Keep the timer
+# fast enough to catch the sample rate; plot redraw stays slower.
+POLL_MS_LOGGING = 10
+POLL_MS_ARMED = 100
+PLOT_REFRESH_MS = 100
 
 
 class UserTab(QWidget):
@@ -73,16 +86,47 @@ class UserTab(QWidget):
         self.plot_widget = None
         self._updating_controls = False
         self._syncing_selection = False
-        self._current_signal = "FERR"
+        self._current_signal = "DRIVE"
+        self._last_status = None
+        self._last_plot_refresh = 0.0
+
+        # Timer before first _sync_controls (which calls _sync_timer).
+        # Idle = stopped; only runs while logging or armed.
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._tick)
 
         self._build_controls()
         self._rebuild_plot()
         self._sync_controls()
         self._apply_plot_view()
+        self._sync_timer()
 
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self._tick)
-        self.timer.start(10)
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        self._sync_timer()
+
+    def hideEvent(self, event):  # noqa: N802
+        super().hideEvent(event)
+        self._sync_timer()
+
+    def _sync_timer(self) -> None:
+        """Poll while logging or armed (even if another tab is focused).
+
+        Plot refresh stays gated to visible+logging in ``_tick``. Leaving the
+        Logging tab must not pause CSV capture or miss an armed program start.
+        """
+        logging = self.logger.status == "logging"
+        armed = self.logger.is_armed()
+        want = bool(logging or armed)
+        if not want:
+            if self.timer.isActive():
+                self.timer.stop()
+            return
+        interval = POLL_MS_LOGGING if logging else POLL_MS_ARMED
+        if self.timer.interval() != interval:
+            self.timer.setInterval(interval)
+        if not self.timer.isActive():
+            self.timer.start()
 
     def _ensure_font(self):
         if os.path.exists(PB_FONT_PATH):
@@ -178,11 +222,32 @@ class UserTab(QWidget):
         self.signal_group = QButtonGroup(panel)
         self.signal_group.setExclusive(True)
         self.signal_buttons = {}
-        for signal in ("FERR", "DRIVE", "TORQUE", "VEL"):
-            btn = QPushButton(signal, panel)
+        # Drive PDOs + host actual position (joint.pos-fb via linuxcnc.stat).
+        for signal, label in (
+            ("DRIVE", "DRIVE mm"),
+            ("TORQUE", "TORQUE %"),
+            ("VEL", "VEL mm/min"),
+            ("POS", "POS mm"),
+        ):
+            btn = QPushButton(label, panel)
             btn.setObjectName("btnSignal")
             btn.setCheckable(True)
             btn.setFocusPolicy(Qt.NoFocus)
+            if signal == "DRIVE":
+                btn.setToolTip(
+                    "Drive following error (CiA 60F4) — mm on XYZ, deg on A "
+                    "(same signal as Servo Tuning)"
+                )
+            elif signal == "TORQUE":
+                btn.setToolTip("Drive torque feedback (CiA 6077), % of rated torque")
+            elif signal == "VEL":
+                btn.setToolTip(
+                    "Drive velocity feedback (CiA 606C) — mm/min on XYZ, deg/min on A"
+                )
+            elif signal == "POS":
+                btn.setToolTip(
+                    "Actual joint position (joint.N.pos-fb) — mm on XYZ, deg on A"
+                )
             self.signal_group.addButton(btn)
             btn.toggled.connect(
                 lambda checked, sig=signal: self._on_signal_toggled(sig, checked)
@@ -192,7 +257,7 @@ class UserTab(QWidget):
 
         self._syncing_selection = True
         self.axis_buttons["X"].setChecked(True)
-        self.signal_buttons["FERR"].setChecked(True)
+        self.signal_buttons["DRIVE"].setChecked(True)
         self._syncing_selection = False
 
         row_view.addSpacing(16)
@@ -201,7 +266,7 @@ class UserTab(QWidget):
         self.scale_combo = QComboBox(panel)
         self.scale_combo.setObjectName("cmbYScale")
         self.scale_combo.addItems(SCALE_MODES)
-        self.scale_combo.setCurrentText(SIGNAL_Y_DEFAULTS["FERR"])
+        self.scale_combo.setCurrentText(SIGNAL_Y_DEFAULTS["DRIVE"])
         self.scale_combo.currentTextChanged.connect(self._on_scale_changed)
         row_view.addWidget(self.scale_combo)
 
@@ -282,10 +347,10 @@ class UserTab(QWidget):
             return
 
         titles = {
-            "FERR": "FERR",
-            "DRIVE": "DRIVE FERR",
-            "TORQUE": "TORQUE",
-            "VEL": "VELOCITY",
+            "DRIVE": "DRIVE FERR (mm / deg)",
+            "TORQUE": "TORQUE (% rated)",
+            "VEL": "VELOCITY (mm/min / deg/min)",
+            "POS": "POSITION (mm / deg)",
         }
         self.legend_title.setText(titles.get(self._current_signal, "LEGEND"))
 
@@ -297,7 +362,7 @@ class UserTab(QWidget):
             if channel is None:
                 continue
 
-            unit = f" ({channel.units})" if channel.units else ""
+            unit = f"  {channel.units}" if channel.units else ""
             active = self.axis_buttons[axis].isChecked()
             border = "2px solid white" if active else "1px solid #8a8484"
             swatch.setStyleSheet(
@@ -305,7 +370,7 @@ class UserTab(QWidget):
                     channel.color, border
                 )
             )
-            text.setText("{0}{1}".format(channel.label, unit))
+            text.setText("{0}{1}".format(channel.label.upper(), unit))
             text.setProperty("active", "true" if active else "false")
             text.style().unpolish(text)
             text.style().polish(text)
@@ -335,12 +400,27 @@ class UserTab(QWidget):
         channels = self._active_channel_ids()
         self.plot_widget.set_visible_channels(channels)
         self.plot_widget.set_scale_mode(self.scale_combo.currentText())
+        self.plot_widget.set_y_unit(self._plot_y_unit(channels))
         self.plot_widget.refresh()
         self._update_fixed_legend()
 
+    def _plot_y_unit(self, channel_ids: set) -> str:
+        """Y-axis unit from visible channels (mixed → hint string)."""
+        channels = self.logger.channel_by_id()
+        units = []
+        for cid in sorted(channel_ids):
+            ch = channels.get(cid)
+            if ch is not None and ch.units and ch.units not in units:
+                units.append(ch.units)
+        if not units:
+            return SIGNAL_UNITS.get(self._current_signal, "value")
+        if len(units) == 1:
+            return units[0]
+        return " / ".join(units)
+
     def _suggested_scale(self) -> str:
         axes = self._selected_axes()
-        if self._current_signal == "FERR" or self._current_signal == "DRIVE":
+        if self._current_signal == "DRIVE":
             if axes == {"A"}:
                 return "Fixed ±60"
             if "A" in axes:
@@ -381,14 +461,21 @@ class UserTab(QWidget):
             self.logger.set_rate_hz(float(hz))
 
     def _sync_controls(self) -> None:
-        self._updating_controls = True
         status = self.logger.status
-        self.arm_checkbox.setChecked(self.logger.is_armed())
+        armed = self.logger.is_armed()
+        # Avoid 100 Hz unpolish/polish — only update widgets when state changes.
+        state_key = (status, armed, self.logger.is_live_session)
+        if state_key == self._last_status:
+            return
+        self._last_status = state_key
+
+        self._updating_controls = True
+        self.arm_checkbox.setChecked(armed)
         self.arm_checkbox.setEnabled(status != "logging")
         self.live_start_button.setEnabled(status == "idle")
         self.live_stop_button.setEnabled(self.logger.is_live_session)
 
-        if self.logger.is_armed():
+        if armed:
             self.status_label.setText("ARMED")
             self.status_label.setProperty("state", "armed")
         elif status == "logging":
@@ -401,6 +488,7 @@ class UserTab(QWidget):
         self.status_label.style().unpolish(self.status_label)
         self.status_label.style().polish(self.status_label)
         self._updating_controls = False
+        self._sync_timer()
 
     def _on_arm_toggled(self, checked: bool) -> None:
         if self._updating_controls:
@@ -412,15 +500,26 @@ class UserTab(QWidget):
             self.logger.disarm()
             if self.logger.status == "idle":
                 self.message_label.setText("")
+        self._last_status = None
         self._sync_controls()
 
     def _start_live(self) -> None:
-        self.logger.start_live()
-        self.message_label.setText("Live logging — all signals to one CSV.")
+        try:
+            self.logger.start_live()
+        except RuntimeError as exc:
+            QMessageBox.warning(self, "Signal logging", str(exc))
+            self.message_label.setText(str(exc))
+            self._last_status = None
+            self._sync_controls()
+            return
+        self.message_label.setText("Live logging — HAL sampled on UI thread (same as Servo Tuning).")
+        self._last_status = None
         self._sync_controls()
 
     def _stop_live(self) -> None:
         self.logger.stop()
+        self._last_status = None
+        self._sync_controls()
 
     def _on_session_saved(self, csv_path: str, _summary_path: str) -> None:
         self.message_label.setText(f"Log saved: {csv_path}")
@@ -429,10 +528,21 @@ class UserTab(QWidget):
             "Signal log saved",
             f"Log saved:\n{csv_path}",
         )
+        self._last_status = None
         self._sync_controls()
 
     def _tick(self) -> None:
+        prev_error = self.logger.last_error
         self.logger.poll()
+        if self.logger.last_error and self.logger.last_error != prev_error:
+            self.message_label.setText(self.logger.last_error)
         self._sync_controls()
-        if self.plot_widget is not None:
-            self.plot_widget.refresh()
+        if self.plot_widget is None or self.logger.status != "logging":
+            return
+        if not self.isVisible():
+            return
+        now = time.monotonic()
+        if (now - self._last_plot_refresh) * 1000.0 < PLOT_REFRESH_MS:
+            return
+        self._last_plot_refresh = now
+        self.plot_widget.refresh()

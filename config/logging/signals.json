@@ -1,8 +1,8 @@
 {
   "name": "signals",
-  "description": "HAL telemetry — LinuxCNC f-error, drive 60F4 ferror, torque, velocity",
-  "rate_hz": 1000,
-  "live_buffer": 5000,
+  "description": "HAL telemetry — drive FERR/torque/velocity, actual joint position",
+  "rate_hz": 100,
+  "live_buffer": 1000,
   "log_subdir": "signals",
   "context": ["line", "feed", "enabled"],
   "channels": [
@@ -18,10 +18,14 @@
     {"id": "y_torque", "pin": "tune-torque.1.out", "label": "Y TQ", "units": "%", "color": "#27ae60", "group": "torque"},
     {"id": "z_torque", "pin": "tune-torque.2.out", "label": "Z TQ", "units": "%", "color": "#2980b9", "group": "torque"},
     {"id": "a_torque", "pin": "tune-torque.3.out", "label": "A TQ", "units": "%", "color": "#d35400", "group": "torque"},
-    {"id": "x_vel", "pin": "tune-velocity.0.out", "label": "X Vel", "units": "mm/s", "color": "#1abc9c", "group": "velocity"},
-    {"id": "y_vel", "pin": "tune-velocity.1.out", "label": "Y Vel", "units": "mm/s", "color": "#16a085", "group": "velocity"},
-    {"id": "z_vel", "pin": "tune-velocity.2.out", "label": "Z Vel", "units": "mm/s", "color": "#3498db", "group": "velocity"},
-    {"id": "a_vel", "pin": "tune-velocity.3.out", "label": "A Vel", "units": "deg/s", "color": "#8e44ad", "group": "velocity"}
+    {"id": "x_vel", "pin": "tune-velocity.0.out", "label": "X Vel", "units": "mm/min", "color": "#1abc9c", "group": "velocity"},
+    {"id": "y_vel", "pin": "tune-velocity.1.out", "label": "Y Vel", "units": "mm/min", "color": "#16a085", "group": "velocity"},
+    {"id": "z_vel", "pin": "tune-velocity.2.out", "label": "Z Vel", "units": "mm/min", "color": "#3498db", "group": "velocity"},
+    {"id": "a_vel", "pin": "tune-velocity.3.out", "label": "A Vel", "units": "deg/min", "color": "#8e44ad", "group": "velocity"},
+    {"id": "x_pos", "pin": "joint.0.pos-fb", "label": "X Pos", "units": "mm", "color": "#f39c12", "group": "position"},
+    {"id": "y_pos", "pin": "joint.1.pos-fb", "label": "Y Pos", "units": "mm", "color": "#e67e22", "group": "position"},
+    {"id": "z_pos", "pin": "joint.2.pos-fb", "label": "Z Pos", "units": "mm", "color": "#d35400", "group": "position"},
+    {"id": "a_pos", "pin": "joint.3.pos-fb", "label": "A Pos", "units": "deg", "color": "#c0392b", "group": "position"}
   ],
   "plot_groups": [
     {
@@ -59,6 +63,12 @@
       "title": "Velocity",
       "y_mode": "sym",
       "channels": ["x_vel", "y_vel", "z_vel", "a_vel"]
+    },
+    {
+      "id": "position",
+      "title": "Actual position (joint.pos-fb)",
+      "y_mode": "auto",
+      "channels": ["x_pos", "y_pos", "z_pos", "a_pos"]
     }
   ]
 }

@@ -129,11 +129,12 @@ setp tune-torque.1.offset 0.0
 setp tune-torque.2.offset 0.0
 setp tune-torque.3.offset 0.0
 
-# 606C scaling is drive-specific; adjust gain if logged velocity looks wrong.
-setp tune-velocity.0.gain 0.001
-setp tune-velocity.1.gain 0.001
-setp tune-velocity.2.gain 0.001
-setp tune-velocity.3.gain 0.001
+# 606C is encoder counts/sec. Divide by joint SCALE for mm/s or deg/s
+# (same as 60F4 → div2). Old gain 0.001 was wrong (~13× high on SCALE=13107.2).
+setp tune-velocity.0.gain 0.0000762939453125
+setp tune-velocity.1.gain 0.0000762939453125
+setp tune-velocity.2.gain 0.0000762939453125
+setp tune-velocity.3.gain 0.0027467
 setp tune-velocity.0.offset 0.0
 setp tune-velocity.1.offset 0.0
 setp tune-velocity.2.offset 0.0
