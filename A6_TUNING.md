@@ -69,7 +69,7 @@ Backend: `probe_basic/python/resonance_analysis.py`.
 | Startup C00/C01 SDOs in `ethercat-conf.xml` | **Removed** — was overwriting RAM tuning every bus claim |
 | Startup 6065/6066 fault windows | Still set (1.0 mm / 1.0° / 250 ms) |
 | Logging tab default sample rate | **1000 Hz** via in-process `hal.get_value` |
-| Bench presets `X/10um`, `Y/20um_y_axis`, `Z/20um`, `Z/no_buzz` | Under `config/tuning/presets/` — combo starts on **(none)** |
+| Bench presets incl. `one_click_best_20260712` (X/Y), `10um`, `20um_y_axis`, `Z/20um`, `Z/no_buzz` | Under `config/tuning/presets/` — combo starts on **(none)** |
 
 ### What we deliberately abandoned
 
@@ -164,13 +164,34 @@ Open **Servo Tuning** in Probe Basic (`probe_basic/user_tabs/servo_tuner/`).
 | *(auto-read)* | SDOs load into Current + Pending on tab open / unread axis focus |
 | **COPY TUNING** / **COPY PLOT** | Clipboard text (table labels) + FERR image for LLM |
 | **START PLOT / STOP PLOT** | Live 60F4 FERR trace only — **nothing written to disk**. HAL is polled (~1 kHz) **only while START PLOT is on** and this tab is visible; pulse/mm readouts stay idle otherwise. |
+| **FERR / FFT** | Toggle the plot stack: live FERR strip chart (default) or post-**ANALYZE** FFT spectrum. |
 | **MM** / **PULSES** | Plot Y-axis units (pulses = raw `lcec.0.N.ferr-fb`) |
 | **TUNING PARAMETERS** | Grouped table: Current / Pending / Unit / Range |
 | **APPLY TO DRIVE** | In the parameters box — cycles motors OFF if needed, writes Pending SDOs with retry+verify, re-enables |
 
 **Not on this tab anymore:** READ button, REVERT, LOAD DEFAULT, Tune Trial / Cancel, Load Soft Baseline, Auto Cycle Start, notes field, CSV logging.
 
-Presets live under `config/tuning/presets/<axis>/*.json`. Combo starts on **(none)**. Bench examples: `10um` (X), `20um_y_axis` (Y), `20um` / `no_buzz` (Z).
+Presets live under `config/tuning/presets/<axis>/*.json`. Combo starts on **(none)**.
+
+**Bench / validated presets (2026-07-12 hardware)**
+
+| Axis | Preset | Gains (C01.01 / C01.00 / C01.02) | Notes |
+|------|--------|-----------------------------------|-------|
+| X | `one_click_best_20260712` | 150 Hz / 224.6 rad/s / 5.0 ms | Best stable step from first X one-click run (verify reverted; salvaged manually). |
+| Y | `one_click_best_20260712` | 164.6 Hz / 60 rad/s / 3.5 ms | AGGRESSIVE one-click; ~39% score improvement; kept via verify-fail → best-step logic. |
+| X | `10um` | (legacy hand tune) | Older reference. |
+| Y | `20um_y_axis` | (legacy hand tune) | Older reference. |
+| Z | `20um`, `no_buzz` | — | Z references. |
+
+Auto-tune also writes timestamped `one_click_*` / `pre_one_click_*` presets per campaign; copy anything worth keeping into a named preset.
+
+### FERR plot time zoom
+
+The live strip chart keeps a **5 s** sample buffer at **1 kHz** (`FERR_WINDOW_S` in `servo_tuner.py`) so **COPY PLOT**, **ANALYZE**, and resonance FFT still see the full capture.
+
+The **visible X axis** is zoomed in for detail: `FERR_PLOT_X_FRAC = 0.075` → about **0.375 s** of trailing time on screen (~30% of the old default span). When the buffer holds more data than fits, the view follows the **most recent** samples (trailing window). Y autoscale is unchanged.
+
+To zoom more or less, edit `FERR_PLOT_X_FRAC` in `probe_basic/user_tabs/servo_tuner/servo_tuner.py` (smaller = tighter zoom, e.g. `0.05` ≈ 0.25 s).
 
 **Typical workflow**
 
@@ -245,7 +266,7 @@ A6 vendor objects often lack SDO dictionary info, so **`-t uint16` / `-t uint32`
 | `probe_basic/python/a6_auto_tune_sim.py` | Simulated axis for auto-tune tests / `--sim` |
 | `scripts/run_auto_tune.py` | Headless one-click CLI (`--sim`, `--dry-run`) |
 | `probe_basic/user_tabs/servo_tuner/` | Servo Tuning GUI (incl. ONE-CLICK strip) |
-| `config/tuning/presets/` | Per-axis JSON presets (`X/10um`, `Y/20um_y_axis`, `Z/20um`, `Z/no_buzz`) — UI starts on **(none)** |
+| `config/tuning/presets/` | Per-axis JSON presets — see table above; UI starts on **(none)** |
 | `config/logging/signals.json` | Logging-tab channels; default **1000 Hz** |
 | `logs/tuning/one_click/` | Auto-tune journals (gitignored) |
 | `SIGNAL_LOGGING.md` | Logging tab + HAL telemetry |

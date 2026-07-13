@@ -11,7 +11,7 @@ import os
 import sys
 import threading
 import time
-from typing import Deque, Dict, List, Optional
+from typing import Deque, Dict, List, Optional, Tuple
 
 from qtpy import uic
 from qtpy.QtCore import Qt, QTimer, Signal
@@ -100,6 +100,9 @@ except ImportError:  # pragma: no cover
 
 FERR_SAMPLE_MS = 1
 FERR_WINDOW_S = 5.0
+# Visible time span on the FERR strip chart (fraction of buffer window).
+# Was 0.25 (1.25 s on a 5 s buffer); 0.075 ≈ 30% of that for more detail.
+FERR_PLOT_X_FRAC = 0.075
 FERR_BUFFER = int(FERR_WINDOW_S * (1000.0 / FERR_SAMPLE_MS))
 PLOT_BG = "#1e2122"
 PLOT_FG = "#eeeeec"
@@ -187,6 +190,18 @@ class FerrPlotWidget(QWidget):
             self.plot = None
             self.curve = None
         self._plot_unit = "mm"  # "mm"/"deg"/"pulses" — matches buffered sample units
+
+    def _x_visible_span_s(self) -> float:
+        return max(self._window_s * FERR_PLOT_X_FRAC, 0.1)
+
+    def _x_display_range(self, sample_count: int) -> Tuple[float, float]:
+        """Trailing time window — zooms in when the buffer holds more than x_span."""
+        dt = self._sample_ms / 1000.0
+        x_span = self._x_visible_span_s()
+        data_end = max((max(sample_count, 1) - 1) * dt, 0.0)
+        x_end = max(data_end, x_span)
+        x_start = max(0.0, x_end - x_span)
+        return x_start, x_end
 
     def _ensure_series(self, axis: str) -> Deque[float]:
         if axis not in self._series:
@@ -307,16 +322,28 @@ class FerrPlotWidget(QWidget):
             y_max = peak + pad
             w = max(1, plot_rect.width() - 4)
             h = max(1, plot_rect.height() - 4)
+            plot_left = plot_rect.left() + 2
+            dt = self._sample_ms / 1000.0
+            max_n = max(len(list(v)) for v in self._series.values())
+            x_start, x_end = self._x_display_range(max_n)
+            x_span = max(x_end - x_start, 1e-9)
+
+            def _time_to_x(t: float) -> float:
+                return plot_left + ((t - x_start) / x_span) * w
+
             for axis, values in self._series.items():
                 seq = list(values)
                 if len(seq) < 2:
                     continue
                 color = AXIS_PLOT_COLORS.get(axis, PLOT_LINE)
                 painter.setPen(QPen(QColor(color), 2))
-                n = len(seq)
-                for i in range(1, n):
-                    x0 = plot_rect.left() + 2 + ((i - 1) / (n - 1)) * w
-                    x1 = plot_rect.left() + 2 + (i / (n - 1)) * w
+                for i in range(1, len(seq)):
+                    t0 = (i - 1) * dt
+                    t1 = i * dt
+                    if t1 < x_start or t0 > x_end:
+                        continue
+                    x0 = _time_to_x(t0)
+                    x1 = _time_to_x(t1)
                     y0 = mid_y - (seq[i - 1] / y_max) * (h / 2.0)
                     y1 = mid_y - (seq[i] / y_max) * (h / 2.0)
                     painter.drawLine(int(x0), int(y0), int(x1), int(y1))
@@ -361,7 +388,8 @@ class FerrPlotWidget(QWidget):
             self.plot.setYRange(-50.0, 50.0, padding=0)
         else:
             self.plot.setYRange(-0.01, 0.01, padding=0)
-        self.plot.setXRange(0.0, max(self._window_s * 0.25, 0.5), padding=0)
+        _x0, x1 = self._x_display_range(0)
+        self.plot.setXRange(_x0, x1, padding=0)
 
     def clear(self) -> None:
         for buf in self._series.values():
@@ -466,9 +494,8 @@ class FerrPlotWidget(QWidget):
             self.reset_y_scale()
             return
         if max_n > 0:
-            dt = self._sample_ms / 1000.0
-            x_end = max((max_n - 1) * dt, self._window_s * 0.25)
-            self.plot.setXRange(0.0, x_end, padding=0)
+            x_start, x_end = self._x_display_range(max_n)
+            self.plot.setXRange(x_start, x_end, padding=0)
 
     def paintEvent(self, event):  # noqa: N802
         if not self._painter_mode:
@@ -500,6 +527,15 @@ class FerrPlotWidget(QWidget):
         y_max = peak + pad
         w = max(1, rect.width() - 8)
         h = max(1, rect.height() - 8)
+        plot_left = rect.left() + 4
+        dt = self._sample_ms / 1000.0
+        max_n = max(len(seq) for seq in self._series.values())
+        x_start, x_end = self._x_display_range(max_n)
+        x_span = max(x_end - x_start, 1e-9)
+
+        def _time_to_x(t: float) -> float:
+            return plot_left + ((t - x_start) / x_span) * w
+
         for axis, values in self._series.items():
             seq = list(values)
             n = len(seq)
@@ -508,8 +544,12 @@ class FerrPlotWidget(QWidget):
             color = AXIS_PLOT_COLORS.get(axis, PLOT_LINE)
             painter.setPen(QPen(QColor(color), 2))
             for i in range(1, n):
-                x0 = rect.left() + 4 + ((i - 1) / (n - 1)) * w
-                x1 = rect.left() + 4 + (i / (n - 1)) * w
+                t0 = (i - 1) * dt
+                t1 = i * dt
+                if t1 < x_start or t0 > x_end:
+                    continue
+                x0 = _time_to_x(t0)
+                x1 = _time_to_x(t1)
                 y0 = mid_y - (seq[i - 1] / y_max) * (h / 2.0)
                 y1 = mid_y - (seq[i] / y_max) * (h / 2.0)
                 painter.drawLine(int(x0), int(y0), int(x1), int(y1))
