@@ -6,7 +6,7 @@ No LinuxCNC / Qt / hardware required — only numpy. Run directly:
     python3 probe_basic/python/test_a6_auto_tune.py
 
 Each scenario exercises a different branch of the state machine, mirroring
-the failure modes documented in ONE_CLICK_TUNING.md.
+the failure modes documented in docs/ONE_CLICK_TUNING.md.
 """
 
 from __future__ import annotations
@@ -230,7 +230,7 @@ def test_short_stroke_gate_not_fooled(tmp: str) -> None:
     """Regression: short fast strokes (Y default: 0.09s legs) push stimulus
     harmonics into the 30-60 Hz band with huge FFT prominence. The gate must
     treat those as forced motion, not resonance, or the ladder never starts.
-    Found via this simulator — see ONE_CLICK_TUNING.md lessons learned."""
+    Found via this simulator — see docs/ONE_CLICK_TUNING.md lessons learned."""
     from a6_auto_tune import DEFAULT_STIMULI
 
     for axis in ("Y", "Z"):

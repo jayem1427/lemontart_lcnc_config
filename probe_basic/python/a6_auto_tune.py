@@ -1,6 +1,6 @@
 """One-click per-axis auto-tuning for StepperOnline A6-EC servo drives.
 
-Automates the manual gain ladder documented in SERVO_TUNING.md, one axis at a
+Automates the manual gain ladder documented in docs/SERVO_TUNING.md, one axis at a
 time, using the pieces this repo already trusts:
 
 - SDO read/write with retry + verify        (a6_servo_tune.py)
@@ -20,7 +20,7 @@ The campaign for one axis:
                 A clear FFT resonance peak triggers an automatic 3rd-notch
                 attempt (C01.46/47/48) before giving up on the climb.
     POSITION    climb C01.00 position loop gain toward ~2x speed gain (rad/s
-                vs Hz rule of thumb from SERVO_TUNING.md), same gating
+                vs Hz rule of thumb from docs/SERVO_TUNING.md), same gating
     INTEGRAL    tighten C01.02 speed integral (lower ms = stronger) while RMS
                 keeps improving and nothing rings
     VERIFY      re-measure with the final gains; if unstable, back off once,
@@ -29,7 +29,7 @@ The campaign for one axis:
 
 Every step is journaled to ``logs/tuning/one_click/<stamp>_<axis>/`` as it
 happens (crash-safe append), including raw FERR sample CSVs per measurement,
-so failed runs can be analyzed afterwards. See ONE_CLICK_TUNING.md.
+so failed runs can be analyzed afterwards. See docs/ONE_CLICK_TUNING.md.
 
 Safety model:
 
@@ -185,7 +185,7 @@ class OneClickConfig:
     integral_min_ms: float = 2.0
     max_steps_per_phase: int = 8
     max_stall_steps: int = 2
-    backoff_ratio: float = 0.75  # "back off ~20-25%" from SERVO_TUNING.md
+    backoff_ratio: float = 0.75  # "back off ~20-25%" from docs/SERVO_TUNING.md
     rescue_max_steps: int = 3
 
     # Acceptance / stability gates
@@ -203,7 +203,7 @@ class OneClickConfig:
     min_resonance_amplitude: float = 0.001
     # ...and it must also stand out against the tracking error itself:
     # short-stroke stimuli put motion harmonics 30-60 Hz above the noise
-    # floor with huge prominence (found via the sim — see ONE_CLICK_TUNING.md
+    # floor with huge prominence (found via the sim — see docs/ONE_CLICK_TUNING.md
     # "lessons learned"). A real resonance carries a meaningful fraction of
     # the buffer RMS; forced motion harmonics do not.
     resonance_vs_rms: float = 0.10

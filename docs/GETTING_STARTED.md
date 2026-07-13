@@ -55,8 +55,8 @@ Probe Basic is QtPyVCP-based. Skim upstream UI docs even if you use Axis first:
 This machine uses **linuxcnc-ethercat** (`lcec`) with **CiA 402** drives:
 
 - Project: [linuxcnc-ethercat](https://github.com/linuxcnc-ethercat/linuxcnc-ethercat)
-- Our slave layout: [`ethercat-conf.xml`](ethercat-conf.xml) (4× generic A6-class slaves, VID `00400000` PID `00000715`)
-- HAL load order: [`ethercat_loadusr.hal`](ethercat_loadusr.hal) (`#NOTWOPASS`) then [`ethercat_mill.hal`](ethercat_mill.hal)
+- Our slave layout: [`ethercat-conf.xml`](../ethercat-conf.xml) (4× generic A6-class slaves, VID `00400000` PID `00000715`)
+- HAL load order: [`ethercat_loadusr.hal`](../ethercat_loadusr.hal) (`#NOTWOPASS`) then [`ethercat_mill.hal`](../ethercat_mill.hal)
 
 **First-time EtherCAT checklist**
 
@@ -72,7 +72,7 @@ Drive docs (vendor):
 
 ### Stage 3 — Homing, limits, bench mode
 
-Homing and limit wiring live in [`ethercat_mill.hal`](ethercat_mill.hal), not the INI. See [README.md](README.md#current-machine-behavior-captured-config) for the DI map.
+Homing and limit wiring live in [`ethercat_mill.hal`](../ethercat_mill.hal), not the INI. See [README.md](../README.md#current-machine-behavior-captured-config) for the DI map.
 
 **Bench / breakout shortcuts** (revert before production — details in [DEVIATIONS.md](DEVIATIONS.md#bench--breakout-shortcuts)):
 
@@ -82,8 +82,8 @@ Homing and limit wiring live in [`ethercat_mill.hal`](ethercat_mill.hal), not th
 
 ### Stage 4 — Spindle (H100 VFD + Modbus)
 
-- [`h100.mb2hal`](h100.mb2hal) — register map; set `SERIAL_PORT`
-- [`custom.hal`](custom.hal) — RPM scaling, at-speed compare + 5 s settle, fault → estop
+- [`h100.mb2hal`](../h100.mb2hal) — register map; set `SERIAL_PORT`
+- [`custom.hal`](../custom.hal) — RPM scaling, at-speed compare + 5 s settle, fault → estop
 
 H100 manual: search vendor PDF for register `0x0201` (freq set), `0x000A` (current fault).
 
@@ -91,7 +91,7 @@ Modbus HAL: [mb2hal documentation](https://linuxcnc.org/docs/html/man/man1/mb2ha
 
 ### Stage 5 — Pendant (XHC WHB04B-6)
 
-- [`xhc-whb04b-6.hal`](xhc-whb04b-6.hal) — MPG jog with `ilowpass` smoothing, feed override to 250%
+- [`xhc-whb04b-6.hal`](../xhc-whb04b-6.hal) — MPG jog with `ilowpass` smoothing, feed override to 250%
 - Component: [xhc-whb04b-6](https://github.com/welter/welder/tree/master/xhc-whb04b-6) (check your package source)
 
 With bench homing disabled, pendant “axis homed” gates are tied to `halui.machine.is-on` so Z jogging is not blocked.
@@ -101,14 +101,14 @@ With bench homing disabled, pendant “axis homed” gates are tied to `halui.ma
 When XYZ motion is trustworthy:
 
 1. Copy this repo’s `probe_basic/` tree and INI `[DISPLAY]` / `[RS274NGC]` sections.
-2. Align [`probe_basic/pb_required_ini_settings.ini`](probe_basic/pb_required_ini_settings.ini) with your INI (geometry, paths, `OWORD_NARGS`, etc.).
-3. Launch: [`launch.sh`](launch.sh) or `linuxcnc /path/to/ethercat_mill.ini`
+2. Align [`probe_basic/pb_required_ini_settings.ini`](../probe_basic/pb_required_ini_settings.ini) with your INI (geometry, paths, `OWORD_NARGS`, etc.).
+3. Launch: [`launch.sh`](../launch.sh) or `linuxcnc /path/to/ethercat_mill.ini`
 4. Teach toolsetter and probe params — [TOOLSETTER.md](TOOLSETTER.md)
 5. UI extras — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md)
 
 ### Stage 7 — CAM
 
-- Fusion post: [`linuxcnc-djr.cps`](linuxcnc-djr.cps) — see [TOOLSETTER.md § CAM](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps)
+- Fusion post: [`linuxcnc-djr.cps`](../linuxcnc-djr.cps) — see [TOOLSETTER.md § CAM](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps)
 - Default tool change: **`T<n> M600`** (toolsetter probe), not stock `M6` motion
 
 ## How the config fits together
@@ -128,10 +128,10 @@ ethercat_mill.ini
 
 | Subsystem | Primary files | Deep dive |
 |-----------|---------------|-----------|
-| Motion + EtherCAT | `ethercat_mill.ini`, `ethercat_mill.hal`, `ethercat-conf.xml` | [README](README.md), [DEVIATIONS](DEVIATIONS.md) |
+| Motion + EtherCAT | `ethercat_mill.ini`, `ethercat_mill.hal`, `ethercat-conf.xml` | [README](../README.md), [DEVIATIONS](DEVIATIONS.md) |
 | Toolsetter + touch probe | `tool_touch_off.ngc`, `m600.ngc`, HAL probe gating | [TOOLSETTER.md](TOOLSETTER.md) |
 | Probe Basic UI | `probe_basic/`, custom DRO | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
-| Metrology macros | `probe_z_three_samples.ngc`, etc. | [probe_basic/subroutines/metrology/README.md](probe_basic/subroutines/metrology/README.md) |
+| Metrology macros | `probe_z_three_samples.ngc`, etc. | [probe_basic/subroutines/metrology/README.md](../probe_basic/subroutines/metrology/README.md) |
 | CAM | `linuxcnc-djr.cps` | [TOOLSETTER.md](TOOLSETTER.md) |
 
 ## First boot on this repo
@@ -155,7 +155,7 @@ ethercat_mill.ini
 | Set WCO Z after shim touch-off | XYZA DRO **SET Z** field → [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Touch-off without CAM | **TOUCH OFF CURRENT TOOL** |
 | WCS probing | Probe tab routines (requires T99 / `#3014` aligned) |
-| Repeatability check | `o<probe_z_repeat_stats> call [10]` — [metrology README](probe_basic/subroutines/metrology/README.md) |
+| Repeatability check | `o<probe_z_repeat_stats> call [10]` — [metrology README](../probe_basic/subroutines/metrology/README.md) |
 
 ## Troubleshooting
 

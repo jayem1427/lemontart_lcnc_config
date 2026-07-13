@@ -2,7 +2,7 @@
 """Headless one-click servo auto-tune for one axis (A6-EC / LinuxCNC).
 
 Same engine as the Servo Tuning tab's ONE-CLICK TUNE button — see
-ONE_CLICK_TUNING.md before running this on the real machine.
+docs/ONE_CLICK_TUNING.md before running this on the real machine.
 
 Examples:
 

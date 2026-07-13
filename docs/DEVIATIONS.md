@@ -4,7 +4,7 @@ This document lists deliberate differences between **this config** and typical u
 
 Stock references:
 
-- [Probe Basic INI template](probe_basic/pb_required_ini_settings.ini) and [stock hallib](probe_basic/hallib/)
+- [Probe Basic INI template](../probe_basic/pb_required_ini_settings.ini) and [stock hallib](../probe_basic/hallib/)
 - [LinuxCNC tool change](https://linuxcnc.org/docs/html/config/ini-config.html#sub:emcio-section)
 - [RS274NGC remapping](https://linuxcnc.org/docs/html/remap/remap.html)
 
@@ -119,7 +119,7 @@ Here: `halui.tool.number` compared to constant **99** (`probe-tool-num`):
 
 Uses `and2` + `or2`, not `mux2` (float-only). **`#3014` does not update HAL** — renumbering requires editing `setp probe-tool-num.value`.
 
-See [README.md](README.md#touch-probe-vs-toolsetter-routing) and [TOOLSETTER.md](TOOLSETTER.md#touch-probe-tool-number-setup-and-renumbering).
+See [README.md](../README.md#touch-probe-vs-toolsetter-routing) and [TOOLSETTER.md](TOOLSETTER.md#touch-probe-tool-number-setup-and-renumbering).
 
 ### Tool change HAL loop broken on purpose
 
@@ -198,7 +198,7 @@ Documented in [TOOLSETTER.md](TOOLSETTER.md#probe--length-math-fixes-vs-stock-pb
 
 ### Custom DRO display
 
-`DRO_DISPLAY = XYZA` → [`probe_basic/user_dro_display/xyza_dros/`](probe_basic/user_dro_display/xyza_dros/) with **SET Z** widget (not in stock Probe Basic). See [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md).
+`DRO_DISPLAY = XYZA` → [`probe_basic/user_dro_display/xyza_dros/`](../probe_basic/user_dro_display/xyza_dros/) with **SET Z** widget (not in stock Probe Basic). See [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md).
 
 ### `custom_config.yml`
 
@@ -241,7 +241,7 @@ PDO template matches StepperOnline A6 EtherCAT module (`vid/pid` in XML). SDO `2
 
 ## Files that are intentionally local / ignored
 
-From [README.md](README.md#what-was-left-out-of-git-but-is-helpful-to-keep-in-the-config): PDFs, pickles, `spindle_warmup.ngc`, personal notes. Clone may need fresh `linuxcnc.var` / `position.txt` from machine backup.
+From [README.md](../README.md#what-was-left-out-of-git-but-is-helpful-to-keep-in-the-config): PDFs, pickles, `spindle_warmup.ngc`, personal notes. Clone may need fresh `linuxcnc.var` / `position.txt` from machine backup.
 
 ---
 

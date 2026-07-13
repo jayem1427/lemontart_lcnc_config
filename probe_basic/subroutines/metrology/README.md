@@ -3,7 +3,7 @@
 These files document the small test macros used for probing and homing
 repeatability checks.
 
-**See also:** [GETTING_STARTED.md](../../../GETTING_STARTED.md) (troubleshooting) · [TOOLSETTER.md](../../../TOOLSETTER.md) (probe tool T99 / `#3014`)
+**See also:** [GETTING_STARTED.md](../../../docs/GETTING_STARTED.md) (troubleshooting) · [TOOLSETTER.md](../../../docs/TOOLSETTER.md) (probe tool T99 / `#3014`)
 
 The runnable copies remain one directory up in `probe_basic/subroutines/`
 because `ethercat_mill.ini` currently has:

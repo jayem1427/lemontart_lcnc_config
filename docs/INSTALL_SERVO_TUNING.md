@@ -14,7 +14,7 @@ Probe Basic does **not** use pip plugins for UI. Custom tabs are **drop-in folde
 | **Logging** tab | CSV + live plots of FERR / DRIVE / TORQUE / VEL |
 | HAL `tune-*` pins | Scale drive PDOs (6077 / 606C / 60F4) for plots |
 | Presets | Per-axis JSON under `config/tuning/presets/` |
-| Semi-auto docs | `SEMI_AUTO_TUNING.md`, `SERVO_TUNING_LLM.md` |
+| Semi-auto docs | `docs/SEMI_AUTO_TUNING.md`, `docs/SERVO_TUNING_LLM.md` |
 
 **Not a plugin package.** Copy files into the machine config tree and wire INI/HAL/XML.
 
@@ -47,7 +47,7 @@ scripts/run_auto_tune.py                    # headless one-click CLI
 config/tuning/presets/                      # or start empty and SAVE from the tab
 config/logging/signals.json
 nc_files/*_tuning.ngc                       # frozen Tune Trial stimuli
-SEMI_AUTO_TUNING.md SERVO_TUNING.md SERVO_TUNING_LLM.md ONE_CLICK_TUNING.md   # optional but recommended
+docs/SEMI_AUTO_TUNING.md docs/SERVO_TUNING.md docs/SERVO_TUNING_LLM.md docs/ONE_CLICK_TUNING.md   # optional but recommended
 ```
 
 One-click auto-tune also assumes the `AXES` map (step 5) is correct — it

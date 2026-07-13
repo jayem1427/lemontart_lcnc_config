@@ -23,7 +23,7 @@ from a6_servo_tune import (
 
 LOG = logging.getLogger(__name__)
 
-LLM_PLAYBOOK_PATH = "SERVO_TUNING_LLM.md"
+LLM_PLAYBOOK_PATH = "docs/SERVO_TUNING_LLM.md"
 
 GAIN_SW_MODE_LABELS: Dict[int, str] = {
     0: "Fixed to 1st gain set",

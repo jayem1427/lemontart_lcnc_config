@@ -19,13 +19,13 @@ Stock [Probe Basic](https://github.com/kcjengr/probe_basic) is the shell; this r
 | `USER_DROS_PATH` | `probe_basic/user_dro_display/` | Custom SET Z DRO |
 | `USER_BUTTONS_PATH` | `probe_basic/user_buttons/` | Template placeholder |
 
-Required INI keys for Probe Basic compatibility: [`probe_basic/pb_required_ini_settings.ini`](probe_basic/pb_required_ini_settings.ini) — compare when merging upgrades.
+Required INI keys for Probe Basic compatibility: [`probe_basic/pb_required_ini_settings.ini`](../probe_basic/pb_required_ini_settings.ini) — compare when merging upgrades.
 
 ---
 
 ## Custom XYZA DRO — SET Z / REF ALL
 
-**Files:** [`probe_basic/user_dro_display/xyza_dros/dros_xyza.py`](probe_basic/user_dro_display/xyza_dros/dros_xyza.py), [`dros_xyza.ui`](probe_basic/user_dro_display/xyza_dros/dros_xyza.ui)
+**Files:** [`probe_basic/user_dro_display/xyza_dros/dros_xyza.py`](../probe_basic/user_dro_display/xyza_dros/dros_xyza.py), [`dros_xyza.ui`](../probe_basic/user_dro_display/xyza_dros/dros_xyza.ui)
 
 The main DRO panel includes a **SET Z** button (left) and mm entry field (right). This is a Lemontart-specific shortcut not present in upstream Probe Basic.
 
@@ -35,7 +35,7 @@ The main DRO panel includes a **SET Z** button (left) and mm entry field (right)
 
 Sets the **active work offset Z** so the current tool position equals the value you enter — without running a full probe cycle.
 
-Implementation: MDI `o<set_wco_z> call [<value>]` → [`probe_basic/subroutines/set_wco_z.ngc`](probe_basic/subroutines/set_wco_z.ngc):
+Implementation: MDI `o<set_wco_z> call [<value>]` → [`probe_basic/subroutines/set_wco_z.ngc`](../probe_basic/subroutines/set_wco_z.ngc):
 
 ```ngc
 G92.1
@@ -63,7 +63,7 @@ Press **Enter** in the field or click **SET Z**. Empty field opens a numeric dia
 
 ## Spindle RPM and load (postgui HAL)
 
-[`probe_basic/probe_basic_postgui.hal`](probe_basic/probe_basic_postgui.hal) wires:
+[`probe_basic/probe_basic_postgui.hal`](../probe_basic/probe_basic_postgui.hal) wires:
 
 ```hal
 net spindle-speed-in => qtpyvcp.spindle-encoder-rpm.in
@@ -89,7 +89,7 @@ Postgui nets `iocontrol.0.tool-change` to `qtpyvcp_manualtoolchange` (no auto-co
 
 ## User buttons
 
-[`probe_basic/user_buttons/template_user_buttons/`](probe_basic/user_buttons/template_user_buttons/) is the stock template (empty shell). Machine actions live on **Probe Basic built-in tabs** (Tool Setter, Probe, Tool Change) mapped to subroutines in `probe_basic/subroutines/`.
+[`probe_basic/user_buttons/template_user_buttons/`](../probe_basic/user_buttons/template_user_buttons/) is the stock template (empty shell). Machine actions live on **Probe Basic built-in tabs** (Tool Setter, Probe, Tool Change) mapped to subroutines in `probe_basic/subroutines/`.
 
 Key mappings (full table in [TOOLSETTER.md](TOOLSETTER.md#probe-basic-ui--which-button-does-what)):
 
