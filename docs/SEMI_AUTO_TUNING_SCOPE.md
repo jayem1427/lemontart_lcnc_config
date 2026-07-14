@@ -74,7 +74,7 @@ Removed from the UI (by design): Tune Trial / Cancel Trial, Auto Cycle Start, Lo
 - [ ] Optional metrics sidecar (peak, RMS, settle) beside the PNG
 - [ ] Headless trial runner CLI (no GUI)
 - [ ] Notch / FF / EEPROM persistence workflows
-- [ ] Inertia / rigidity Active/Locked UX
+- [x] Inertia F30 button (`INERTIA_TUNE.md`) — rigidity Active/Locked UX still open
 
 ---
 

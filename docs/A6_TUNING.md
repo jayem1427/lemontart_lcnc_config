@@ -28,6 +28,10 @@ Or skip the loop entirely: **ONE-CLICK TUNE** on the same tab runs the whole
 gain ladder per axis automatically (stimulus moves + FFT stability gate +
 auto notch + journaled revert paths) — see **`ONE_CLICK_TUNING.md`**.
 
+**INERTIA TUNE** tries the drive’s F30.10 offline inertia ID and reads
+**C00.06** — see **`INERTIA_TUNE.md`**. Run that *before* one-click when the
+load ratio is unknown or wrong.
+
 ### Clipboard → LLM
 
 Servo Tuning → **CLIPBOARD** strip:
@@ -168,6 +172,8 @@ Open **Servo Tuning** in Probe Basic (`probe_basic/user_tabs/servo_tuner/`).
 | **MM** / **PULSES** | Plot Y-axis units (pulses = raw `lcec.0.N.ferr-fb`) |
 | **TUNING PARAMETERS** | Grouped table: Current / Pending / Unit / Range |
 | **APPLY TO DRIVE** | In the parameters box — cycles motors OFF if needed, writes Pending SDOs with retry+verify, re-enables |
+| **ONE-CLICK TUNE** | Gain ladder auto-tune (`ONE_CLICK_TUNING.md`) |
+| **INERTIA TUNE** | Drive F30.10 inertia ID → C00.06 (`INERTIA_TUNE.md`) |
 
 **Not on this tab anymore:** READ button, REVERT, LOAD DEFAULT, Tune Trial / Cancel, Load Soft Baseline, Auto Cycle Start, notes field, CSV logging.
 
@@ -264,8 +270,9 @@ A6 vendor objects often lack SDO dictionary info, so **`-t uint16` / `-t uint32`
 | `probe_basic/python/a6_servo_tune.py` | SDO read/write, presets, FERR helpers |
 | `probe_basic/python/a6_auto_tune.py` | **One-click** auto-tune engine (`ONE_CLICK_TUNING.md`) |
 | `probe_basic/python/a6_auto_tune_sim.py` | Simulated axis for auto-tune tests / `--sim` |
+| `probe_basic/python/a6_inertia_tune.py` | **Inertia** F30.10 engine (`INERTIA_TUNE.md`) |
 | `scripts/run_auto_tune.py` | Headless one-click CLI (`--sim`, `--dry-run`) |
-| `probe_basic/user_tabs/servo_tuner/` | Servo Tuning GUI (incl. ONE-CLICK strip) |
+| `probe_basic/user_tabs/servo_tuner/` | Servo Tuning GUI (ONE-CLICK + INERTIA TUNE) |
 | `config/tuning/presets/` | Per-axis JSON presets — see table above; UI starts on **(none)** |
 | `config/logging/signals.json` | Logging-tab channels; default **1000 Hz** |
 | `logs/tuning/one_click/` | Auto-tune journals (gitignored) |

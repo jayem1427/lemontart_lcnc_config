@@ -92,6 +92,12 @@ from a6_auto_tune import (  # noqa: E402
     default_journal_root,
     estimate_campaign_seconds,
 )
+from a6_inertia_tune import (  # noqa: E402
+    HardwareInertiaIO,
+    InertiaTuneConfig,
+    InertiaTuner,
+    plan_inertia_tune,
+)
 
 try:
     import pyqtgraph as pg
@@ -558,9 +564,11 @@ class FerrPlotWidget(QWidget):
 
 
 class UserTab(QWidget):
-    # One-click tuner worker -> GUI thread marshalling (Qt queues these).
+    # One-click / inertia tuner workers -> GUI thread marshalling (Qt queues these).
     ocProgress = Signal(str, str)
     ocFinished = Signal(object)
+    inertiaProgress = Signal(str, str)
+    inertiaFinished = Signal(object)
 
     def __init__(self, parent=None):
         super(UserTab, self).__init__(parent)
@@ -592,8 +600,11 @@ class UserTab(QWidget):
         self._logging_active = False  # live FERR plot only (no CSV / disk writes)
         self._resonance_report = None
         self._oc_tuner: Optional[OneClickTuner] = None  # running one-click job
+        self._inertia_tuner: Optional[InertiaTuner] = None
         self.ocProgress.connect(self._on_one_click_progress)
         self.ocFinished.connect(self._on_one_click_finished)
+        self.inertiaProgress.connect(self._on_inertia_progress)
+        self.inertiaFinished.connect(self._on_inertia_finished)
 
         self._build_ui()
         # Poll HAL only while START PLOT is on (was 1 kHz from tab open — wasted CPU).
@@ -818,6 +829,19 @@ class UserTab(QWidget):
         )
         self.one_click_cancel_button.clicked.connect(self._cancel_one_click)
         layout.addWidget(self.one_click_cancel_button)
+
+        self.inertia_tune_button = QPushButton(f"INERTIA TUNE {self._axis}", bar)
+        self.inertia_tune_button.setObjectName("btnPrimary")
+        self.inertia_tune_button.setFocusPolicy(Qt.NoFocus)
+        self.inertia_tune_button.setToolTip(
+            "Run the drive's F30.10 offline inertia auto-tune for the edit "
+            "axis. Computes a safe C07.04 stroke from soft limits (not the "
+            "vendor 2-rev default), arms C07 speed/accel/torque with "
+            "conservative defaults, triggers F30.10, then reads C00.06. "
+            "THE AXIS MOVES. Journal: logs/tuning/inertia/."
+        )
+        self.inertia_tune_button.clicked.connect(self._start_inertia_tune)
+        layout.addWidget(self.inertia_tune_button)
 
         self.oc_status_label = QLabel("idle — tunes the EDIT axis", bar)
         self.oc_status_label.setObjectName("lblParamHint")
@@ -1116,8 +1140,8 @@ class UserTab(QWidget):
             spin.setToolTip(tip)
         elif key == "inertia_ratio_pct":
             spin.setToolTip(
-                "Manual load inertia ratio (%). Enter measured/estimated value — "
-                "this is not the F30 inertia auto-tune."
+                "Load inertia ratio (%). Prefer INERTIA TUNE (F30.10) over "
+                "guessing — or enter a measured/estimated value."
             )
         elif defn.get("note"):
             spin.setToolTip(str(defn["note"]))
@@ -1245,6 +1269,8 @@ class UserTab(QWidget):
         self._axis = axis
         if hasattr(self, "one_click_button") and self._oc_tuner is None:
             self.one_click_button.setText(f"ONE-CLICK TUNE {axis}")
+        if hasattr(self, "inertia_tune_button") and self._inertia_tuner is None:
+            self.inertia_tune_button.setText(f"INERTIA TUNE {axis}")
         self._refresh_unit_columns()
         self._refresh_preset_list()
         if not self._logging_active:
@@ -1659,7 +1685,7 @@ class UserTab(QWidget):
     # ------------------------------------------------------------------
 
     def _start_one_click(self) -> None:
-        if self._oc_tuner is not None:
+        if self._oc_tuner is not None or self._inertia_tuner is not None:
             return
         axis = self._axis
         profile = self.oc_profile_combo.currentText().strip().lower()
@@ -1800,6 +1826,7 @@ class UserTab(QWidget):
         """Lock everything that could fight the campaign; keep CANCEL alive."""
         for widget in (
             self.one_click_button,
+            self.inertia_tune_button,
             self.oc_profile_combo,
             self.apply_button,
             self.log_button,
@@ -1820,6 +1847,7 @@ class UserTab(QWidget):
             self.one_click_button.setText(f"TUNING {self._axis}…")
         else:
             self.one_click_button.setText(f"ONE-CLICK TUNE {self._axis}")
+            self.inertia_tune_button.setText(f"INERTIA TUNE {self._axis}")
             # suggest_notch is only meaningful after an ANALYZE.
             self.suggest_notch_button.setEnabled(
                 bool(self._resonance_report)
@@ -1828,6 +1856,193 @@ class UserTab(QWidget):
             if self.spectrum_plot is None:
                 self.btn_view_fft.setEnabled(False)
             self._sync_plot_view()
+
+    # ------------------------------------------------------------------
+    # Drive-internal inertia tune (F30.10 via a6_inertia_tune)
+    # ------------------------------------------------------------------
+
+    def _start_inertia_tune(self) -> None:
+        if self._oc_tuner is not None or self._inertia_tuner is not None:
+            return
+        axis = self._axis
+
+        if not machine_is_on():
+            QMessageBox.warning(
+                self,
+                "Inertia tune",
+                "Machine must be ON (and out of ESTOP) before inertia ID.",
+            )
+            return
+
+        try:
+            io = HardwareInertiaIO()
+        except Exception as exc:
+            QMessageBox.warning(self, "Inertia tune", str(exc))
+            return
+
+        state = io.axis_state(axis)
+        try:
+            plan = plan_inertia_tune(
+                axis,
+                position=state.get("position"),
+                min_limit=state.get("min_limit"),
+                max_limit=state.get("max_limit"),
+                homed=state.get("homed"),
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Inertia tune", str(exc))
+            return
+
+        unit = axis_unit(axis)
+        reply = QMessageBox.question(
+            self,
+            f"Inertia tune {axis}",
+            f"Run drive F30.10 inertia auto-tune on axis {axis}?\n\n"
+            f"THE AXIS WILL MOVE under drive control "
+            f"(~{plan.stroke_unit:g} {unit} / {plan.revolutions:g} rev each way).\n"
+            f"Park mid-travel — soft-limit room used: "
+            f"+{plan.room_pos:.1f} / -{plan.room_neg:.1f} {unit}.\n\n"
+            f"C07 defaults (auto travel, not vendor 2-rev):\n"
+            f"  {plan.describe()}\n\n"
+            f"What it does: snapshot C00.06 → write C07.* → widen 6065 "
+            f"temporarily → F30.10=1 → wait for result → restore 6065 → "
+            f"refresh C00.06 in this table.\n\n"
+            f"If EtherCAT cannot start F30 on this firmware, C07 is still "
+            f"armed — run F30 from the drive panel and re-read.\n\n"
+            f"Journal: logs/tuning/inertia/\nKeep a hand near ESTOP.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        cfg = InertiaTuneConfig.for_axis(axis)
+        tuner = InertiaTuner(
+            cfg,
+            io=io,
+            progress=lambda phase, msg: self.inertiaProgress.emit(phase, msg),
+        )
+        self._inertia_tuner = tuner
+        self._set_inertia_running(True)
+
+        if axis not in self._plot_axes:
+            self.axis_buttons[axis].setChecked(True)
+        self.ferr_plot.set_active_axes(list(self._plot_axes))
+        self._logging_active = True
+        self._sync_ferr_timer()
+        self._sync_log_button()
+
+        self._notify(f"Inertia tune started on {axis} ({plan.describe()}).")
+        worker = threading.Thread(
+            target=self._inertia_worker, args=(tuner,), daemon=True
+        )
+        worker.start()
+
+    def _inertia_worker(self, tuner: InertiaTuner) -> None:
+        try:
+            result = tuner.run()
+        except Exception as exc:
+            LOG.exception("inertia worker crashed")
+            result = exc
+        self.inertiaFinished.emit(result)
+
+    def _on_inertia_progress(self, phase: str, message: str) -> None:
+        text = f"{phase}: {message}"
+        self.oc_status_label.setText(text)
+        self._set_status("INERTIA", "busy")
+        LOG.info("inertia: %s", text)
+
+    def _on_inertia_finished(self, result) -> None:
+        self._inertia_tuner = None
+        self._set_inertia_running(False)
+
+        if isinstance(result, Exception):
+            QMessageBox.warning(
+                self,
+                "Inertia tune",
+                f"Worker crashed:\n{result}",
+            )
+            self.oc_status_label.setText("inertia failed — see log")
+            return
+
+        status = result.status
+        self.oc_status_label.setText(result.summary())
+        self._set_status(
+            f"INERTIA {status.upper()}",
+            "ok" if status in ("ok", "dry-run") else "warn",
+        )
+        self._notify(f"Inertia tune {result.axis}: {result.summary()}")
+
+        # Refresh the parameter table so C00.06 shows the new value.
+        if status == "ok":
+            self._read_from_drive(quiet=True)
+
+        QMessageBox.information(
+            self,
+            f"Inertia tune {result.axis}: {status}",
+            result.summary()
+            + (
+                f"\n\nJournal:\n{result.journal_dir}"
+                if result.journal_dir
+                else ""
+            ),
+        )
+
+    def _set_inertia_running(self, running: bool) -> None:
+        for widget in (
+            self.one_click_button,
+            self.inertia_tune_button,
+            self.oc_profile_combo,
+            self.apply_button,
+            self.log_button,
+            self.copy_tuning_button,
+            self.copy_plot_button,
+            self.copy_resonance_button,
+            self.analyze_resonance_button,
+            self.suggest_notch_button,
+            self.btn_view_ferr,
+            self.btn_view_fft,
+            self._presets_bar,
+            *self.axis_buttons.values(),
+        ):
+            widget.setEnabled(not running)
+        # Reuse CANCEL to abort inertia campaigns too.
+        self.one_click_cancel_button.setEnabled(running)
+        if running:
+            self._set_status("INERTIA", "busy")
+            self.inertia_tune_button.setText(f"INERTIA {self._axis}…")
+            # Point CANCEL at inertia cancel while this campaign owns it.
+            try:
+                self.one_click_cancel_button.clicked.disconnect()
+            except TypeError:
+                pass
+            self.one_click_cancel_button.clicked.connect(self._cancel_inertia_tune)
+        else:
+            self.inertia_tune_button.setText(f"INERTIA TUNE {self._axis}")
+            self.one_click_button.setText(f"ONE-CLICK TUNE {self._axis}")
+            try:
+                self.one_click_cancel_button.clicked.disconnect()
+            except TypeError:
+                pass
+            self.one_click_cancel_button.clicked.connect(self._cancel_one_click)
+            self.suggest_notch_button.setEnabled(
+                bool(self._resonance_report)
+                and bool(getattr(self._resonance_report, "suggested_notch", None))
+            )
+            if self.spectrum_plot is None:
+                self.btn_view_fft.setEnabled(False)
+            self._sync_plot_view()
+
+    def _cancel_inertia_tune(self) -> None:
+        tuner = self._inertia_tuner
+        if tuner is None:
+            return
+        tuner.cancel()
+        self.one_click_cancel_button.setEnabled(False)
+        self.oc_status_label.setText(
+            "cancelling inertia tune — clearing F30 / restoring 6065…"
+        )
+        self._set_status("CANCELLING", "busy")
 
     def _refresh_unit_columns(self) -> None:
         unit = axis_unit(self._axis)

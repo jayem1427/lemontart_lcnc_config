@@ -51,3 +51,6 @@ logs/tuning/**/*.json
 
 # One-click auto-tune journals (journal.md + json + FERR CSVs per campaign)
 logs/tuning/one_click/
+
+# Drive-internal (F30) inertia-tune journals
+logs/tuning/inertia/
