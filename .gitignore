@@ -54,3 +54,6 @@ logs/tuning/one_click/
 
 # Graphical (T=Jα) inertia-tune journals
 logs/tuning/graphical_inertia/
+
+# Local UI smoke screenshots
+logs/tuning/ui_smoke/

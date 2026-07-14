@@ -1108,14 +1108,14 @@ class UserTab(QWidget):
         layout.setSpacing(6)
 
         hint = QLabel(
-            "Yaskawa-style graphical ID: enter motor datasheet J and rated "
-            "torque, set the move, then BEGIN. We sample torque + velocity, "
-            "solve T=Jα for C00.06, write it, then switch back to GAINS for "
-            "one-click.",
+            "Enter motor J_M + rated torque and the ID move, then BEGIN. "
+            "Samples torque + velocity, solves T=Jα, writes C00.06. "
+            "Switch back to GAINS for one-click.",
             page,
         )
         hint.setObjectName("lblParamHint")
         hint.setWordWrap(True)
+        hint.setStyleSheet("color: #b8bcbe;")  # slightly brighter than default hint
         layout.addWidget(hint)
 
         form = QVBoxLayout()
