@@ -26,9 +26,13 @@ Your drives are a **cascaded position → speed → torque** loop. Map:
 
 ## Phase 1 — Inertia
 
-1. Run drive **inertia / load ratio** estimate (or auto inertia).
-2. Write the ratio down. Bad inertia estimate makes every later gain lie.
+1. Run drive **inertia / load ratio** estimate (graphical or auto inertia).
+   On this machine: Servo Tuning → panel **INERTIA** → **BEGIN INERTIA
+   AUTO-TUNE** (T=Jα from torque + velocity — see `GRAPHICAL_INERTIA_TUNE.md`).
+2. Write the ratio down (C00.06 is written automatically on success). Bad
+   inertia estimate makes every later gain lie.
 3. If ratio is huge (load >> motor), expect softer gains + more filter/notch need.
+4. Switch back to **GAINS** before Phase 3 / one-click.
 
 ---
 

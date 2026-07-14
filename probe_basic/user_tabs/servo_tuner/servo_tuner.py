@@ -92,6 +92,15 @@ from a6_auto_tune import (  # noqa: E402
     default_journal_root,
     estimate_campaign_seconds,
 )
+from a6_graphical_inertia import (  # noqa: E402
+    AxisInertiaSettings,
+    GraphicalInertiaConfig,
+    GraphicalInertiaTuner,
+    HardwareGraphicalInertiaIO,
+    default_settings_for_axis,
+    load_all_settings,
+    save_all_settings,
+)
 
 try:
     import pyqtgraph as pg
@@ -558,9 +567,11 @@ class FerrPlotWidget(QWidget):
 
 
 class UserTab(QWidget):
-    # One-click tuner worker -> GUI thread marshalling (Qt queues these).
+    # Worker -> GUI thread marshalling (Qt queues these).
     ocProgress = Signal(str, str)
     ocFinished = Signal(object)
+    giProgress = Signal(str, str)
+    giFinished = Signal(object)
 
     def __init__(self, parent=None):
         super(UserTab, self).__init__(parent)
@@ -592,8 +603,14 @@ class UserTab(QWidget):
         self._logging_active = False  # live FERR plot only (no CSV / disk writes)
         self._resonance_report = None
         self._oc_tuner: Optional[OneClickTuner] = None  # running one-click job
+        self._gi_tuner: Optional[GraphicalInertiaTuner] = None
+        self._panel_mode = "gains"  # gains | inertia
+        self._inertia_settings = load_all_settings()
+        self._inertia_spins: Dict[str, QDoubleSpinBox] = {}
         self.ocProgress.connect(self._on_one_click_progress)
         self.ocFinished.connect(self._on_one_click_finished)
+        self.giProgress.connect(self._on_gi_progress)
+        self.giFinished.connect(self._on_gi_finished)
 
         self._build_ui()
         # Poll HAL only while START PLOT is on (was 1 kHz from tab open — wasted CPU).
@@ -1000,12 +1017,49 @@ class UserTab(QWidget):
     def _build_param_table_group(self) -> QGroupBox:
         group = QGroupBox("TUNING PARAMETERS", self)
         group.setObjectName("grpParams")
+        self._params_group = group
         layout = QVBoxLayout(group)
         layout.setSpacing(4)
         layout.setContentsMargins(8, 8, 8, 8)
 
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(self._caption("PANEL"))
+        self.panel_mode_group = QButtonGroup(self)
+        self.btn_mode_gains = QPushButton("GAINS", group)
+        self.btn_mode_gains.setObjectName("btnAxis")
+        self.btn_mode_gains.setCheckable(True)
+        self.btn_mode_gains.setChecked(True)
+        self.btn_mode_gains.setFocusPolicy(Qt.NoFocus)
+        self.btn_mode_gains.setToolTip(
+            "Show C00/C01 gain parameters and APPLY / one-click gain tune."
+        )
+        self.btn_mode_inertia = QPushButton("INERTIA", group)
+        self.btn_mode_inertia.setObjectName("btnAxis")
+        self.btn_mode_inertia.setCheckable(True)
+        self.btn_mode_inertia.setFocusPolicy(Qt.NoFocus)
+        self.btn_mode_inertia.setToolTip(
+            "Graphical inertia ID (T=Jα): set motor datasheet values + move, "
+            "then BEGIN to estimate C00.06. Switch back to GAINS for one-click."
+        )
+        self.panel_mode_group.addButton(self.btn_mode_gains)
+        self.panel_mode_group.addButton(self.btn_mode_inertia)
+        self.btn_mode_gains.clicked.connect(lambda: self._set_panel_mode("gains"))
+        self.btn_mode_inertia.clicked.connect(lambda: self._set_panel_mode("inertia"))
+        mode_row.addWidget(self.btn_mode_gains)
+        mode_row.addWidget(self.btn_mode_inertia)
+        mode_row.addStretch()
+        layout.addLayout(mode_row)
+
+        self.param_stack = QStackedWidget(group)
+
+        # --- Gains page (existing table) ---
+        gains_page = QWidget(group)
+        gains_layout = QVBoxLayout(gains_page)
+        gains_layout.setContentsMargins(0, 0, 0, 0)
+        gains_layout.setSpacing(4)
+
         table_actions = QHBoxLayout()
-        self.apply_button = QPushButton("APPLY CHANGES", group)
+        self.apply_button = QPushButton("APPLY CHANGES", gains_page)
         self.apply_button.setObjectName("btnPrimary")
         self.apply_button.setFocusPolicy(Qt.NoFocus)
         self.apply_button.setToolTip(
@@ -1015,9 +1069,9 @@ class UserTab(QWidget):
         self.apply_button.clicked.connect(lambda: self._apply_to_drive())
         table_actions.addWidget(self.apply_button)
         table_actions.addStretch()
-        layout.addLayout(table_actions)
+        gains_layout.addLayout(table_actions)
 
-        self.param_table = QTableWidget(0, 5, group)
+        self.param_table = QTableWidget(0, 5, gains_page)
         self.param_table.setObjectName("paramTable")
         self.param_table.setHorizontalHeaderLabels(
             ["Parameter", "Current", "Pending", "Unit", "Range"]
@@ -1039,8 +1093,205 @@ class UserTab(QWidget):
         self.param_table.verticalHeader().setDefaultSectionSize(28)
 
         self._populate_param_table()
-        layout.addWidget(self.param_table, stretch=1)
+        gains_layout.addWidget(self.param_table, stretch=1)
+        self.param_stack.addWidget(gains_page)
+
+        # --- Inertia page ---
+        self.param_stack.addWidget(self._build_inertia_page(group))
+        layout.addWidget(self.param_stack, stretch=1)
         return group
+
+    def _build_inertia_page(self, parent: QWidget) -> QWidget:
+        page = QWidget(parent)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 4, 0, 0)
+        layout.setSpacing(6)
+
+        hint = QLabel(
+            "Yaskawa-style graphical ID: enter motor datasheet J and rated "
+            "torque, set the move, then BEGIN. We sample torque + velocity, "
+            "solve T=Jα for C00.06, write it, then switch back to GAINS for "
+            "one-click.",
+            page,
+        )
+        hint.setObjectName("lblParamHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        form = QVBoxLayout()
+        form.setSpacing(4)
+        self._inertia_spins.clear()
+
+        def add_spin(
+            key: str,
+            label: str,
+            decimals: int,
+            minimum: float,
+            maximum: float,
+            step: float,
+            suffix: str,
+            tip: str,
+        ) -> QDoubleSpinBox:
+            row = QHBoxLayout()
+            lab = QLabel(label, page)
+            lab.setMinimumWidth(150)
+            spin = QDoubleSpinBox(page)
+            spin.setDecimals(decimals)
+            spin.setRange(minimum, maximum)
+            spin.setSingleStep(step)
+            spin.setSuffix(suffix)
+            spin.setToolTip(tip)
+            spin.valueChanged.connect(self._on_inertia_setting_changed)
+            row.addWidget(lab)
+            row.addWidget(spin, stretch=1)
+            form.addLayout(row)
+            self._inertia_spins[key] = spin
+            return spin
+
+        add_spin(
+            "motor_inertia_kgm2",
+            "Motor rotor inertia",
+            8,
+            0.0,
+            1.0,
+            1e-6,
+            " kg·m²",
+            "Required datasheet / nameplate rotor inertia J_M.",
+        )
+        add_spin(
+            "rated_torque_nm",
+            "Rated torque",
+            4,
+            0.0,
+            100.0,
+            0.01,
+            " N·m",
+            "Required motor rated torque (converts 6077 % into N·m).",
+        )
+        add_spin(
+            "stroke",
+            "Stroke",
+            2,
+            0.1,
+            500.0,
+            1.0,
+            "",
+            "Relative identification stroke (mm on XYZ, deg on A).",
+        )
+        add_spin(
+            "feed",
+            "Feed (G1 F)",
+            1,
+            10.0,
+            60000.0,
+            100.0,
+            "",
+            "Target feed for the trapezoid move (unit/min).",
+        )
+        add_spin(
+            "cycles",
+            "Cycles",
+            0,
+            1.0,
+            10.0,
+            1.0,
+            "",
+            "Out-and-back repetitions (more samples, longer run).",
+        )
+        layout.addLayout(form)
+
+        btn_row = QHBoxLayout()
+        self.gi_begin_button = QPushButton("BEGIN INERTIA AUTO-TUNE", page)
+        self.gi_begin_button.setObjectName("btnPrimary")
+        self.gi_begin_button.setFocusPolicy(Qt.NoFocus)
+        self.gi_begin_button.clicked.connect(self._start_graphical_inertia)
+        btn_row.addWidget(self.gi_begin_button)
+
+        self.gi_cancel_button = QPushButton("CANCEL", page)
+        self.gi_cancel_button.setObjectName("btnDanger")
+        self.gi_cancel_button.setFocusPolicy(Qt.NoFocus)
+        self.gi_cancel_button.setEnabled(False)
+        self.gi_cancel_button.clicked.connect(self._cancel_graphical_inertia)
+        btn_row.addWidget(self.gi_cancel_button)
+        layout.addLayout(btn_row)
+
+        self.gi_result_label = QLabel(
+            "Result: —\nEnter J_M + rated torque, park mid-travel, then BEGIN.",
+            page,
+        )
+        self.gi_result_label.setObjectName("lblParamHint")
+        self.gi_result_label.setWordWrap(True)
+        layout.addWidget(self.gi_result_label)
+        layout.addStretch(1)
+
+        self._load_inertia_spins_for_axis(self._axis)
+        return page
+
+    def _set_panel_mode(self, mode: str) -> None:
+        if mode not in ("gains", "inertia"):
+            return
+        if self._gi_tuner is not None or self._oc_tuner is not None:
+            # Don't switch mid-campaign.
+            self.btn_mode_gains.setChecked(self._panel_mode == "gains")
+            self.btn_mode_inertia.setChecked(self._panel_mode == "inertia")
+            return
+        self._panel_mode = mode
+        self.btn_mode_gains.setChecked(mode == "gains")
+        self.btn_mode_inertia.setChecked(mode == "inertia")
+        self.param_stack.setCurrentIndex(0 if mode == "gains" else 1)
+        if mode == "gains":
+            self._params_group.setTitle("TUNING PARAMETERS")
+            # Refresh so C00.06 shows any inertia write.
+            if self._axis in self._live:
+                self._read_from_drive(quiet=True)
+        else:
+            self._params_group.setTitle("INERTIA AUTO-TUNE")
+            self._load_inertia_spins_for_axis(self._axis)
+            unit = axis_unit(self._axis)
+            self._inertia_spins["stroke"].setSuffix(f" {unit}")
+            self._inertia_spins["feed"].setSuffix(f" {unit}/min")
+
+    def _load_inertia_spins_for_axis(self, axis: str) -> None:
+        settings = self._inertia_settings.get(axis) or default_settings_for_axis(axis)
+        self._inertia_settings[axis] = settings
+        mapping = {
+            "motor_inertia_kgm2": settings.motor_inertia_kgm2,
+            "rated_torque_nm": settings.rated_torque_nm,
+            "stroke": settings.stroke,
+            "feed": settings.feed,
+            "cycles": float(settings.cycles),
+        }
+        for key, value in mapping.items():
+            spin = self._inertia_spins.get(key)
+            if spin is None:
+                continue
+            spin.blockSignals(True)
+            spin.setValue(float(value))
+            spin.blockSignals(False)
+        unit = axis_unit(axis)
+        if "stroke" in self._inertia_spins:
+            self._inertia_spins["stroke"].setSuffix(f" {unit}")
+        if "feed" in self._inertia_spins:
+            self._inertia_spins["feed"].setSuffix(f" {unit}/min")
+
+    def _on_inertia_setting_changed(self, *_args) -> None:
+        axis = self._axis
+        settings = self._inertia_settings.get(axis) or default_settings_for_axis(axis)
+        settings.motor_inertia_kgm2 = self._inertia_spins["motor_inertia_kgm2"].value()
+        settings.rated_torque_nm = self._inertia_spins["rated_torque_nm"].value()
+        settings.stroke = self._inertia_spins["stroke"].value()
+        settings.feed = self._inertia_spins["feed"].value()
+        settings.cycles = max(1, int(self._inertia_spins["cycles"].value()))
+        self._inertia_settings[axis] = settings
+        try:
+            save_all_settings(self._inertia_settings)
+        except Exception:
+            LOG.exception("save inertia settings failed")
+
+    def _settings_from_spins(self) -> AxisInertiaSettings:
+        self._on_inertia_setting_changed()
+        return self._inertia_settings[self._axis]
+
     def _populate_param_table(self) -> None:
         self.param_table.setRowCount(0)
         self._pending_edits.clear()
@@ -1245,6 +1496,8 @@ class UserTab(QWidget):
         self._axis = axis
         if hasattr(self, "one_click_button") and self._oc_tuner is None:
             self.one_click_button.setText(f"ONE-CLICK TUNE {axis}")
+        if self._panel_mode == "inertia":
+            self._load_inertia_spins_for_axis(axis)
         self._refresh_unit_columns()
         self._refresh_preset_list()
         if not self._logging_active:
@@ -1659,7 +1912,15 @@ class UserTab(QWidget):
     # ------------------------------------------------------------------
 
     def _start_one_click(self) -> None:
-        if self._oc_tuner is not None:
+        if self._oc_tuner is not None or self._gi_tuner is not None:
+            return
+        if self._panel_mode != "gains":
+            QMessageBox.information(
+                self,
+                "One-click tune",
+                "Switch the panel back to GAINS before running one-click "
+                "(inertia ID is a separate step).",
+            )
             return
         axis = self._axis
         profile = self.oc_profile_combo.currentText().strip().lower()
@@ -1798,7 +2059,7 @@ class UserTab(QWidget):
 
     def _set_one_click_running(self, running: bool) -> None:
         """Lock everything that could fight the campaign; keep CANCEL alive."""
-        for widget in (
+        widgets = [
             self.one_click_button,
             self.oc_profile_combo,
             self.apply_button,
@@ -1811,8 +2072,15 @@ class UserTab(QWidget):
             self.btn_view_ferr,
             self.btn_view_fft,
             self._presets_bar,
+            self.btn_mode_gains,
+            self.btn_mode_inertia,
             *self.axis_buttons.values(),
-        ):
+        ]
+        if hasattr(self, "gi_begin_button"):
+            widgets.extend(
+                [self.gi_begin_button, *self._inertia_spins.values()]
+            )
+        for widget in widgets:
             widget.setEnabled(not running)
         self.one_click_cancel_button.setEnabled(running)
         if running:
@@ -1821,6 +2089,186 @@ class UserTab(QWidget):
         else:
             self.one_click_button.setText(f"ONE-CLICK TUNE {self._axis}")
             # suggest_notch is only meaningful after an ANALYZE.
+            self.suggest_notch_button.setEnabled(
+                bool(self._resonance_report)
+                and bool(getattr(self._resonance_report, "suggested_notch", None))
+            )
+            if self.spectrum_plot is None:
+                self.btn_view_fft.setEnabled(False)
+            self._sync_plot_view()
+
+    # ------------------------------------------------------------------
+    # Graphical inertia auto-tune (T=Jα)
+    # ------------------------------------------------------------------
+
+    def _start_graphical_inertia(self) -> None:
+        if self._gi_tuner is not None or self._oc_tuner is not None:
+            return
+        axis = self._axis
+        if not machine_is_on():
+            QMessageBox.warning(
+                self,
+                "Inertia auto-tune",
+                "Machine must be ON (and out of ESTOP).",
+            )
+            return
+
+        try:
+            settings = self._settings_from_spins()
+            settings.validate()
+        except Exception as exc:
+            QMessageBox.warning(self, "Inertia auto-tune", str(exc))
+            return
+
+        unit = axis_unit(axis)
+        reply = QMessageBox.question(
+            self,
+            f"Inertia auto-tune {axis}",
+            f"Run graphical inertia ID on axis {axis}?\n\n"
+            f"THE AXIS WILL MOVE: ±{settings.stroke:g} {unit} @ "
+            f"F{settings.feed:g} × {settings.cycles} cycle(s).\n"
+            f"Park mid-travel with clearance both ways.\n\n"
+            f"Motor J_M = {settings.motor_inertia_kgm2:.6g} kg·m²\n"
+            f"Rated torque = {settings.rated_torque_nm:.4g} N·m\n\n"
+            f"We sample torque (6077) + velocity (606C), compute "
+            f"T_A/α → C00.06, and WRITE it to the drive (RAM).\n"
+            f"Then switch back to GAINS and run ONE-CLICK.\n\n"
+            f"Journal: logs/tuning/graphical_inertia/\n"
+            f"Keep a hand near ESTOP.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            io = HardwareGraphicalInertiaIO()
+        except Exception as exc:
+            QMessageBox.warning(self, "Inertia auto-tune", str(exc))
+            return
+
+        cfg = GraphicalInertiaConfig.for_axis(axis, settings)
+        tuner = GraphicalInertiaTuner(
+            cfg,
+            io=io,
+            progress=lambda phase, msg: self.giProgress.emit(phase, msg),
+        )
+        self._gi_tuner = tuner
+        self._set_gi_running(True)
+
+        if axis not in self._plot_axes:
+            self.axis_buttons[axis].setChecked(True)
+        self.ferr_plot.set_active_axes(list(self._plot_axes))
+        self._logging_active = True
+        self._sync_ferr_timer()
+        self._sync_log_button()
+
+        self._notify(f"Graphical inertia tune started on {axis}.")
+        worker = threading.Thread(
+            target=self._gi_worker, args=(tuner,), daemon=True
+        )
+        worker.start()
+
+    def _gi_worker(self, tuner: GraphicalInertiaTuner) -> None:
+        try:
+            result = tuner.run()
+        except Exception as exc:
+            LOG.exception("graphical inertia worker crashed")
+            result = exc
+        self.giFinished.emit(result)
+
+    def _cancel_graphical_inertia(self) -> None:
+        tuner = self._gi_tuner
+        if tuner is None:
+            return
+        tuner.cancel()
+        self.gi_cancel_button.setEnabled(False)
+        self.gi_result_label.setText("Cancelling…")
+        self._set_status("CANCELLING", "busy")
+
+    def _on_gi_progress(self, phase: str, message: str) -> None:
+        text = f"{phase}: {message}"
+        self.gi_result_label.setText(text)
+        self.oc_status_label.setText(
+            text if len(text) <= 110 else text[:107] + "…"
+        )
+        self._set_status("INERTIA", "busy")
+        LOG.info("graphical-inertia: %s", text)
+
+    def _on_gi_finished(self, result) -> None:
+        self._gi_tuner = None
+        self._set_gi_running(False)
+
+        if isinstance(result, BaseException):
+            self.gi_result_label.setText(f"Crashed: {result}")
+            QMessageBox.warning(self, "Inertia auto-tune", str(result))
+            return
+
+        status = result.status
+        est = result.estimate
+        lines = [result.summary()]
+        if est is not None:
+            lines.append(
+                f"T_peak={est.t_peak_pct:.1f}%  T_fric={est.t_friction_pct:.1f}%  "
+                f"α={est.alpha_rad_s2:.0f} rad/s²  quality={est.quality}"
+            )
+            if est.notes:
+                lines.append("; ".join(est.notes))
+        if result.journal_dir:
+            lines.append(f"Journal: {result.journal_dir}")
+        self.gi_result_label.setText("\n".join(lines))
+
+        ok = status == "ok"
+        self._set_status(
+            f"INERTIA {status.upper()}", "ok" if ok else "warn"
+        )
+        self._notify(f"Inertia {result.axis}: {result.summary()}")
+
+        if ok:
+            # Show the new C00.06 on the gains panel.
+            self._read_from_drive(quiet=True)
+
+        icon = QMessageBox.information if ok else QMessageBox.warning
+        icon(
+            self,
+            f"Inertia auto-tune {result.axis}: {status}",
+            "\n".join(lines)
+            + (
+                "\n\nSwitch to GAINS and run ONE-CLICK when ready."
+                if ok
+                else ""
+            ),
+        )
+
+    def _set_gi_running(self, running: bool) -> None:
+        widgets = [
+            self.one_click_button,
+            self.one_click_cancel_button,
+            self.oc_profile_combo,
+            self.apply_button,
+            self.log_button,
+            self.copy_tuning_button,
+            self.copy_plot_button,
+            self.copy_resonance_button,
+            self.analyze_resonance_button,
+            self.suggest_notch_button,
+            self.btn_view_ferr,
+            self.btn_view_fft,
+            self._presets_bar,
+            self.btn_mode_gains,
+            self.btn_mode_inertia,
+            self.gi_begin_button,
+            *self._inertia_spins.values(),
+            *self.axis_buttons.values(),
+        ]
+        for widget in widgets:
+            widget.setEnabled(not running)
+        self.gi_cancel_button.setEnabled(running)
+        if running:
+            self._set_status("INERTIA", "busy")
+            self.gi_begin_button.setText("RUNNING…")
+        else:
+            self.gi_begin_button.setText("BEGIN INERTIA AUTO-TUNE")
             self.suggest_notch_button.setEnabled(
                 bool(self._resonance_report)
                 and bool(getattr(self._resonance_report, "suggested_notch", None))

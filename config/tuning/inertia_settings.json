@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "notes": "Motor inertia / rated torque are required datasheet values (leave 0 until filled). Stroke/feed define the identification G1 move. Auto-saved from the Servo Tuning INERTIA panel.",
+  "axes": {
+    "A": {
+      "cycles": 1,
+      "feed": 3600.0,
+      "motor_inertia_kgm2": 0.0,
+      "rated_torque_nm": 0.0,
+      "settle_s": 0.3,
+      "stroke": 90.0,
+      "torque_limit_pct": 0.0,
+      "write_to_drive": true
+    },
+    "X": {
+      "cycles": 1,
+      "feed": 3000.0,
+      "motor_inertia_kgm2": 0.0,
+      "rated_torque_nm": 0.0,
+      "settle_s": 0.3,
+      "stroke": 40.0,
+      "torque_limit_pct": 0.0,
+      "write_to_drive": true
+    },
+    "Y": {
+      "cycles": 1,
+      "feed": 2000.0,
+      "motor_inertia_kgm2": 0.0,
+      "rated_torque_nm": 0.0,
+      "settle_s": 0.3,
+      "stroke": 15.0,
+      "torque_limit_pct": 0.0,
+      "write_to_drive": true
+    },
+    "Z": {
+      "cycles": 1,
+      "feed": 1500.0,
+      "motor_inertia_kgm2": 0.0,
+      "rated_torque_nm": 0.0,
+      "settle_s": 0.3,
+      "stroke": 15.0,
+      "torque_limit_pct": 0.0,
+      "write_to_drive": true
+    }
+  }
+}
