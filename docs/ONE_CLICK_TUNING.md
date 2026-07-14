@@ -116,6 +116,30 @@ The **score** is `peak + 2×RMS` (axis units; lower is better). A ladder step
 is accepted only when stable **and** the score improves by ≥3%
 (`improvement_min_pct`), so the tuner prefers *quiet + good* over *hot*.
 
+### Visual breakdown of the score
+
+Regenerate anytime with:
+
+```bash
+python3 scripts/visualize_auto_tune_scoring.py
+```
+
+Figures land in [`docs/assets/auto_tune_scoring/`](assets/auto_tune_scoring/)
+(also copied to the cloud artifacts folder when that flag is passed):
+
+| Figure | What it shows |
+|--------|----------------|
+| `01_score_formula_example_session.png` | Formula on real `config/logging/example_session.csv` FERR (X/Y/Z/A) |
+| `02_fft_gate_baseline_best_ring.png` | Time + FFT: soft → climbed → ringing, with ignored band + amp floor |
+| `03_ladder_accept_reject.png` | Score stack + ACCEPT / REJECT decision table |
+| `04_short_stroke_gate_lesson.png` | Why Y's short legs need `gate_min_hz ≈ 6/leg_time` |
+| `05_sim_campaign_score_trail.png` | Score vs gain climb until the gate trips |
+
+Demo FERR CSVs for the three FFT cases:
+`config/logging/auto_tune_scoring_demo/`. Hardware campaign journals stay
+gitignored; the committed X/Y `one_click_best_20260712` presets record the
+real scores those runs produced.
+
 **Verify measurements** use a slightly different gate: HF energy must exceed
 `max(35%, baseline_HF + 12pp)` *and* the score must not beat baseline — so
 stimulus harmonics that were acceptable during the ladder do not false-fail a
