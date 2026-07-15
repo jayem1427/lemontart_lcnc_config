@@ -1762,11 +1762,7 @@ class UserTab(QWidget):
             return
         if self._panel_mode == "inertia":
             unit = axis_unit(self._axis)
-            if self._gi_tuner is not None and self._logging_active:
-                self.log_status_label.setText(
-                    f"PLOT: inertia live · {self._axis} TQ% + {unit}/min"
-                )
-            elif self._logging_active:
+            if self._logging_active and self._gi_tuner is not None:
                 self.log_status_label.setText(
                     f"PLOT: inertia live · {self._axis} TQ% + {unit}/min"
                 )
