@@ -1,6 +1,13 @@
 # Getting started — zero to hero
 
-This repo is a **working reference config** for a Lemontart-class EtherCAT mill with Probe Basic. It is **not** a guaranteed drop-in: most of it was assembled from examples, forum posts, and trial-and-error. Treat upstream docs as authoritative; use this repo to see how one specific machine wires things together.
+Welcome. This repo is a **working reference** for a Lemontart-class EtherCAT mill
+running Probe Basic. It is not a guaranteed drop-in — most of it was assembled
+from examples, forum posts, and trial-and-error. Treat upstream LinuxCNC / Probe
+Basic docs as authoritative; use this tree to see how one specific machine wires
+things together.
+
+If you only read one other file after this: **[DEVIATIONS.md](DEVIATIONS.md)** —
+that is where “why doesn’t this match the manual?” usually lives.
 
 ## Before you copy anything
 
@@ -111,6 +118,17 @@ When XYZ motion is trustworthy:
 - Fusion post: [`linuxcnc-djr.cps`](../linuxcnc-djr.cps) — see [TOOLSETTER.md § CAM](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps)
 - Default tool change: **`T<n> M600`** (toolsetter probe), not stock `M6` motion
 
+### Stage 8 — Validate M600 and probing
+
+Before trusting CAM:
+
+1. Teach the setter (**SET TOOL TOUCH OFF POS**) and spindle nose zero (cutter loaded — not T#3014).
+2. Air-cut test: [`nc_files/m600_tool_change_test.ngc`](../nc_files/m600_tool_change_test.ngc) — each stop is at **tool-load XY** (default 270, 100), not the setter.
+3. Confirm **ABORT** on the Manual Tool Change dialog parks cleanly — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md).
+4. Optional: Laser Setter diameter smoke test — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md).
+
+**EtherCAT note:** committed INI `FERROR` values are wide for bring-up; drives also set SDO `6065`/`6066` (~1.0 mm / 250 ms). See [DEVIATIONS.md](DEVIATIONS.md) and [A6_TUNING.md](A6_TUNING.md).
+
 ## How the config fits together
 
 ```
@@ -130,7 +148,8 @@ ethercat_mill.ini
 |-----------|---------------|-----------|
 | Motion + EtherCAT | `ethercat_mill.ini`, `ethercat_mill.hal`, `ethercat-conf.xml` | [README](../README.md), [DEVIATIONS](DEVIATIONS.md) |
 | Toolsetter + touch probe | `tool_touch_off.ngc`, `m600.ngc`, HAL probe gating | [TOOLSETTER.md](TOOLSETTER.md) |
-| Probe Basic UI | `probe_basic/`, custom DRO | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
+| Laser tool setter | `laser_*.ngc`, Laser Setter tab | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
+| Probe Basic UI | `probe_basic/`, custom DRO, abort dialog | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Metrology macros | `probe_z_three_samples.ngc`, etc. | [probe_basic/subroutines/metrology/README.md](../probe_basic/subroutines/metrology/README.md) |
 | CAM | `linuxcnc-djr.cps` | [TOOLSETTER.md](TOOLSETTER.md) |
 
@@ -151,6 +170,9 @@ ethercat_mill.ini
 | Task | How |
 |------|-----|
 | Load cutter + measure length | Probe Basic **LOAD SPINDLE** or CAM `T<n> M600` |
+| Cancel mid M600 | **ABORT** on Manual Tool Change dialog |
+| Multi-tool air test | `nc_files/m600_tool_change_test.ngc` |
+| Measure diameter (laser) | Laser Setter tab — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
 | Load touch probe only | **LOAD SPINDLE** with probe tool — skips M600 |
 | Set WCO Z after shim touch-off | XYZA DRO **SET Z** field → [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Touch-off without CAM | **TOUCH OFF CURRENT TOOL** |
@@ -165,6 +187,11 @@ ethercat_mill.ini
 | Enable drops immediately | Software estop DI1, drive fault `cia402.N.drv-fault`, VFD fault code on `spindle-vfd-fault-code` |
 | Probe never trips | Wrong tool in spindle for HAL route (T99 vs cutter), DI wiring, `motion.probe-input` with `halcmd` |
 | M600 does not probe | `#5181–#5183` unset, `#3010` spindle zero unset, `TOOL_CHANGE_AT_G30=0` (expected — macro handles motion) |
+| M600 pauses at the wrong place | Tool-load XY (`270, 100`) ≠ setter — [TOOLSETTER.md](TOOLSETTER.md#tool-load-position-collet-change) |
+| Following error / drive Er47.0 | INI `FERROR` vs drive SDO 6065 — [DEVIATIONS](DEVIATIONS.md) / [A6_TUNING](A6_TUNING.md) |
+| PROBE SPINDLE NOSE crashes Z | Touch probe T#3014 was loaded — load a cutter first |
+| Pocket probe flies too fast | Local `[3017]` vs `[#3017]` typo — fixed in this tree; re-check after PB merges |
+| Laser diameter never trips | `laser-beam-broken` polarity / BEAM OFFSET — [LASER_TOOL_SETTER](LASER_TOOL_SETTER.md) |
 | Pendant Z jog blocked | Homing flags — see `xhc-whb04b-6.hal` machine.is-on tie-in |
 | Spindle runs wrong direction | `custom.hal` M3/M4 swap comment — `REVERT` line |
 | Fusion post missing M600 / 4th axis | Cached post — [TOOLSETTER.md](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps) |
@@ -184,6 +211,7 @@ ethercat slaves
 | Source | What we took |
 |--------|----------------|
 | [TooTall18T/tool_length_probe](https://github.com/TooTall18T/tool_length_probe) v5.0.2 | `tool_touch_off.ngc`, M600 flow, G30 teach |
+| [TooTall18T tool_length_probe wiki](https://github.com/TooTall18T/tool_length_probe/wiki) | M600 flow, `#5181–#5183`, parameter meanings |
 | [kcjengr/probe_basic](https://github.com/kcjengr/probe_basic) | UI shell, probe routines, `pb_required_ini_settings.ini` |
 | [linuxcnc-ethercat](https://github.com/linuxcnc-ethercat/linuxcnc-ethercat) | `lcec` + CiA402 patterns |
 | LinuxCNC stock sim configs | HAL/INI structure, `trivkins` |

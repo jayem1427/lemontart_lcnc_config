@@ -28,6 +28,13 @@ Stock references:
 | Feed override max | 100–200% | **250%** (`MAX_FEED_OVERRIDE = 2.5`) |
 | Fusion post | Stock `linuxcnc.cps`, `M6`, preload `T` | **`linuxcnc-djr.cps`**, M600 default, no preload |
 | `PROGRAM_PREFIX` | Relative to config | **Absolute path** in committed INI — change on clone |
+| Joint following error | Tight (e.g. ~2 mm) | **Relaxed** `FERROR` / `MIN_FERROR` for bench — tighten later |
+| M600 collet pause | Often same as setter / G30 | **Separate tool-load XY** (default G53 270, 100) vs taught setter `#5181–#5183` |
+| Manual Tool Change dialog | Stock QtPyVCP; Esc cancels | **Custom dialog** with **ABORT**; Esc/close ignored |
+| Drive position deviation | Drive defaults | **SDO 6065/6066** ≈ 1.0 mm / 1.0° / 250 ms — [A6_TUNING](A6_TUNING.md) |
+| Laser tool setter | (none) | Own pin `laser-beam-broken` — **not** on `motion.probe-input` — [LASER_TOOL_SETTER](LASER_TOOL_SETTER.md) |
+| Pocket probe traverse feed | `#3017` from Probe Basic | Local fix: some macros had bare `[3017]` (literal mm/min) |
+| PROBE SPINDLE NOSE ZERO | Runs on setter input | **Aborts if T#3014 loaded** — wrong HAL route |
 
 ---
 
@@ -83,6 +90,18 @@ Metric (`G21`), absolute (`G90`), **`G94`** feed per minute default. Simultaneou
 
 Probe Basic stock template uses `2.0`. Raised to **250%** for pendant and GUI override headroom.
 
+### Relaxed `FERROR` / `MIN_FERROR`
+
+```ini
+# ethercat_mill.ini [JOINT_*] — all four joints
+FERROR = 1270.0
+MIN_FERROR = 254.0
+```
+
+Intentionally wide so LinuxCNC does not fault during jog / homing / bench bring-up while EtherCAT following error is still being tuned.
+
+**For production:** tighten per axis after drive tuning. Drive-side windows (SDO 6065/6066 ≈ **1.0 mm / 1.0° / 250 ms**) are separate — see [A6_TUNING.md](A6_TUNING.md).
+
 ---
 
 ## HAL architecture
@@ -96,7 +115,8 @@ Probe Basic stock template uses `2.0`. Raised to **250%** for pendant and GUI ov
 Unlike a simple stepgen config:
 
 - Position command/feedback passes through `mult2` / `conv_float_s32` / `lcec`
-- X limit chain suppressed during X homing (`joint.0.homing` → `and2.1`)
+- X **and Y** limit chains suppressed during homing (`joint.N.homing` → `and2.1` / `and2.5`)
+- Y also has `HOME_IGNORE_LIMITS = YES` (home at negative end shares the limit DI chain)
 - NC switches inverted with `not.*`
 
 ### Bench limit gagging (`and2.0`)
@@ -116,6 +136,8 @@ Here: `halui.tool.number` compared to constant **99** (`probe-tool-num`):
 
 - Equal → touch probe `lcec.0.1.di-5`
 - Not equal → toolsetter `lcec.0.1.di-2`
+
+Laser is **not** in this mux. It uses `laser-beam-broken` only — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md).
 
 Uses `and2` + `or2`, not `mux2` (float-only). **`#3014` does not update HAL** — renumbering requires editing `setp probe-tool-num.value`.
 
@@ -164,9 +186,33 @@ TOOL_CHANGE_AT_G30 = 0
 TOOL_CHANGE_QUILL_UP = 0
 ```
 
-Stock M6 would optionally move to `[EMCIO] TOOL_CHANGE_POSITION`. Here **all motion** is in `tool_touch_off.ngc` / `go_to_g30.ngc` using taught `#5181–#5183`.
+Stock M6 would optionally move to `[EMCIO] TOOL_CHANGE_POSITION`. Here **all motion** is in `tool_touch_off.ngc` / `go_to_g30.ngc` / `abort_tool_change.ngc`.
 
 **Do not** add `REMAP=M6` for the toolsetter — conflicts with Probe Basic M6 dialog.
+
+### Tool-load position vs setter teach
+
+Stock TooTall18T / Probe Basic often pause at the same XY as the setter (`#5181–#5183`).
+
+Here M600 automatic mode uses **two G53 positions**:
+
+| Position | Coordinates | Purpose |
+|----------|-------------|---------|
+| **Tool-load** (collet change) | Default `270, 100, 0` mm — `#<tool_load_*>` | M6 OK dialog; wrench clearance |
+| **Setter** (probe) | `#5181–#5183` from **SET TOOL TOUCH OFF POS** | G38 length measure only |
+
+Flow: retract Z → tool-load XY → **M6 dialog** → retract Z → setter XY → probe. Details: [TOOLSETTER.md](TOOLSETTER.md#tool-load-position-collet-change).
+
+### M600 traverse feed override
+
+`tool_touch_off.ngc` sets `#<traverse_xy_fr> = 30000` and `#<traverse_z_fr> = 10000` mm/min for tool-change moves, **independent** of Probe Basic UI traverse `#3006`. Setter/probe feeds still come from `#3004–#3006`.
+
+### `ON_ABORT_COMMAND` vs dialog abort
+
+| Trigger | Subroutine | Motion |
+|---------|------------|--------|
+| Program **Abort** / estop while enabled | `on_abort.ngc` | **No G0/G1** — machine may be disabled |
+| **ABORT** on Manual Tool Change dialog | `abort_tool_change.ngc` | Z retract G53 Z0 → park tool-load XY |
 
 ### `TOOL_TABLE_COLUMNS = TDZR`
 
@@ -178,7 +224,14 @@ Stock Probe Basic often `TPDZR` (pocket column). Pocket column dropped for manua
 
 ### `tool_touch_off.ngc` fixes vs stock Probe Basic
 
-Documented in [TOOLSETTER.md](TOOLSETTER.md#probe--length-math-fixes-vs-stock-pb-routine): setter coords from `#5181–#5183`, length formula, abort guards, `M50 P1` before pause, etc.
+Documented in [TOOLSETTER.md](TOOLSETTER.md#probe--length-math-fixes-vs-stock-pb-routine): setter coords from `#5181–#5183`, length formula, abort guards, `M50 P1` before pause, separate tool-load XY, per-axis setter validation, etc.
+
+### Local Probe Basic subroutine patches
+
+Upstream `probe_*.ngc` in this tree include machine-specific fixes:
+
+- **Traverse feed typo** — some pocket/valley/calibration macros had `[3017]` (literal 3017 mm/min) instead of `[#3017]`. Re-check after merging new Probe Basic versions.
+- **`probe_spindle_nose.ngc`** — aborts if touch probe `T#3014` is loaded (wrong HAL route). Failed-probe recovery uses `#5422` like sibling macros.
 
 ### Optional TooTall18T M-codes **not** installed
 
@@ -202,7 +255,15 @@ Documented in [TOOLSETTER.md](TOOLSETTER.md#probe--length-math-fixes-vs-stock-pb
 
 ### `custom_config.yml`
 
-Minimal overrides (confirm exit off, backplot defaults). Most PB machine params live in `linuxcnc.var` / Probe screens.
+Minimal overrides (confirm exit off, backplot defaults) plus **custom Manual Tool Change dialog**:
+
+```yaml
+dialogs:
+  toolchange:
+    provider: toolchange_dialog:ToolChangeDialog
+```
+
+See [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md#manual-tool-change-dialog-abort-cycle). Most PB machine params still live in `linuxcnc.var` / Probe screens.
 
 ### `launch.sh`
 
@@ -230,7 +291,7 @@ Full property table: [TOOLSETTER.md](TOOLSETTER.md#cam--post-processor-linuxcnc-
 |-------|-------------|-------|
 | 0 | X + Y IO | Pos cmd/fb for X; DI1–DI5 for X/Y home/limits |
 | 1 | Y cmd + Z IO | Y position; Z home DI4; probe DI5; toolsetter DI2 |
-| 2 | Z | Z position; DI2 available (Z− limit not wired) |
+| 2 | Z + laser | Z position; laser DI5 → `laser-beam-broken`; DI2 available (Z− limit not wired) |
 | 3 | A + estop | A position; DI1 software estop |
 
 This **split** (Y command on slave 1, Z on slave 2) is wiring-specific — not a linuxcnc-ethercat default.
@@ -241,7 +302,7 @@ PDO template matches StepperOnline A6 EtherCAT module (`vid/pid` in XML). SDO `2
 
 ## Files that are intentionally local / ignored
 
-From [README.md](../README.md#what-was-left-out-of-git-but-is-helpful-to-keep-in-the-config): PDFs, pickles, `spindle_warmup.ngc`, personal notes. Clone may need fresh `linuxcnc.var` / `position.txt` from machine backup.
+Large manuals, QtPyVCP pickles, and personal scratch notes stay out of git. Keep your own `linuxcnc.var` / `position.txt` backups when you clone.
 
 ---
 
@@ -256,5 +317,8 @@ From [README.md](../README.md#what-was-left-out-of-git-but-is-helpful-to-keep-in
 | Immediate spindle at-speed | Remove `timedelay` in `custom.hal` |
 | Single probe input | Remove mux; wire one DI to `motion.probe-input` |
 | 200% feed cap | `MAX_FEED_OVERRIDE = 2.0` |
+| Tight following error | Restore smaller `FERROR` / `MIN_FERROR` per joint after tuning |
+| Stock tool-change dialog | Remove `dialogs.toolchange` override from `custom_config.yml` |
+| Single pause position | Set `#<tool_load_*>` equal to `#5181–#5183` or merge paths in `tool_touch_off.ngc` |
 
 Always re-test on air after reverting bench shortcuts.

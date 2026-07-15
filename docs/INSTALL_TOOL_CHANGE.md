@@ -10,12 +10,13 @@ This is **not** a Probe Basic UI plugin. Tool change uses **built-in** Probe Bas
 
 | Piece | Role |
 |-------|------|
-| `M600` remap | CAM entry: retract → G30 collet change → M6 OK dialog → probe setter → `G10` length |
+| `M600` remap | CAM entry: retract → **tool-load** pause → M6 OK dialog → probe setter → `G10` length |
 | `tool_touch_off.ngc` | Core change + measure routine |
+| Custom abort dialog | **ABORT** parks at tool-load — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Probe Basic buttons | LOAD SPINDLE / TOUCH OFF / SET TOOL TOUCH OFF POS (built-in panels) |
 | HAL probe routing | Touch probe vs contact toolsetter gated by spindle tool number |
 
-Built-in LinuxCNC M6 motion is **disabled**; macros own retract and G30.
+Built-in LinuxCNC M6 motion is **disabled**; macros own retract and park. Tool-load XY is separate from the taught setter — [TOOLSETTER.md](TOOLSETTER.md#tool-load-position-collet-change).
 
 ---
 

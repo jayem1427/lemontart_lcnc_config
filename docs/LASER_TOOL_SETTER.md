@@ -1,189 +1,200 @@
 # Laser tool setter (Kexin DS-5V-M)
 
-Probe Basic tab + HAL pin + NGC macros for the **Kexin DS-5V-M** U-slot laser
-tool setter on this mill.
+Measure tool **diameter** (and optionally experiment with length) using a cheap
+U-slot laser beam sensor — without messing up your contact toolsetter.
 
-**See also:** [README.md](../README.md) (short summary) · [TOOLSETTER.md](TOOLSETTER.md) (contact setter / M600) · [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md)
+**See also:** [TOOLSETTER.md](TOOLSETTER.md) (contact M600 length) ·
+[PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) · [README](../README.md)
 
-## Status
+---
 
-| Feature | State |
+## ELI5: what is this?
+
+Imagine a tiny doorway with a laser tripwire across it. When a tool sticks into
+the doorway and blocks the light, the sensor says “broken.” When the tool moves
+out of the way, it says “clear.”
+
+This mill uses that tripwire to:
+
+1. Find the **tip** (lower until the beam breaks).
+2. Sweep sideways to find the **left and right edges** of the tool.
+3. Report how wide that shadow was — a raw **diameter**.
+
+It has its **own** HAL signal (`laser-beam-broken`). It does **not** share
+LinuxCNC’s `motion.probe-input` with the touch probe / contact setter, so the
+two systems don’t fight each other.
+
+> Contact toolsetter = “how long is this tool?”  
+> Laser setter (today) = “how wide is this tool?” (raw; not beam-calibrated yet)
+
+---
+
+## What works today
+
+| Feature | Status |
 |---------|--------|
-| HAL wiring (Slave 2 DI5 → `laser-beam-broken`) | Live — **not** on `motion.probe-input` |
-| Live beam LED on tab | Live (`laser-beam-broken`) |
-| **MEASURE DIAMETER** | Live — Z0 tip-find → side pre-touch → M4 → break/clear |
-| **CALIBRATE** / **MEASURE LENGTH** | Live (experimental; length ≠ contact TLO yet) |
-| Oversize / remaining-travel abort | Live |
+| Live beam LED on the tab | Works |
+| **MEASURE DIAMETER** | Works |
+| **CALIBRATE** / **MEASURE LENGTH** | Works, experimental (not a replacement for contact TLO) |
+| Runout / broken-tool / air blast | Not built yet (roadmap only — no fake buttons) |
 
-Unimplemented features (runout, broken-tool check, air blast, TLO commit) are
-tracked in the roadmap only — no stub macros or dead UI buttons.
+---
 
-## Hardware
+## Your machine layout (important)
 
-| Item | Spec / note |
-|------|-------------|
-| Sensor | Kexin **DS-5V-M** beam-break U-slot |
-| Tool range (spec) | Ø 0.05–8 mm (larger tools may still trip; search travel limits diameter measure) |
-| Output | HCMOS **5 V push-pull** — clear ≈ 5 V, broken ≈ 0 V |
-| Select | Separate from power: **0 V = ON**, float/5 V = OFF → **tie Select to GND** (or drive later) |
-| Power | **5 V** / 0 V (do **not** feed A6 24 V into the sensor) |
-| Level shift | Required 5 V → 24 V before the A6 digital input |
+On this mill the setter sits **lengthwise along Y**. The laser beam crosses the
+slot in **X**.
 
-Factory body LED: red ON when clear, OFF when broken. The tab LED mirrors HAL
-state only (clear vs broken) — do not treat body LED colors as the UI contract.
+So for diameter:
 
-## Wiring (this mill)
+- **Y** ≈ center of the slot  
+- **X START** = a spot **clear of the beam** (beside it, not on top of it)  
+- Macro feeds **+X** toward / through the beam
 
-| Signal | Connection |
-|--------|------------|
-| Sensor signal | Slave **2** `lcec.0.2.di-5` — CN1 **DB15 pin 11** |
-| Select (enable) | Tie to **GND** |
-| Power | **5 V** / 0 V |
+The tab graphic labels the same idea:
 
-### HAL chain (`ethercat_mill.hal`)
+<img alt="Laser setter START / BEAM / MAX TRAVEL" src="../probe_basic/user_tabs/laser_setter/kexin_tool_setter.png" width="480" />
+
+| Label | Meaning |
+|-------|---------|
+| **START** | Where you CAPTURE — clear of the beam |
+| **BEAM** | Where tip-find happens (`START + BEAM OFFSET`) |
+| **MAX TRAVEL** | How far from START you’re willing to search — **stop before the far wall** |
+
+---
+
+## Measure diameter (happy path)
+
+You need: machine on, homed enough to move, a cutter in the spindle, LinuxCNC
+restarted after any HAL/tab change.
+
+1. Jog **Y** to the middle of the U-slot.  
+2. Jog **X** so the tool is **beside** the beam (clear — LED shows clear).  
+   Eyeball ~10 mm off center is fine.  
+3. Press **CAPTURE START (CLEAR OF BEAM)**.  
+4. Set:
+   - **BEAM OFFSET** — distance from START to the beam for tip-find (default `10`)
+   - **MAX TRAVEL** — max +X from START; must clear the tool but stay short of the far wall (default `20`)
+   - **Z DROP** — how far below the tip to sit for the side sweep (default `2`)
+   - **PROBE RPM** — `0` = no spin; `>0` = reverse (**M4**) during the diameter pass  
+5. Press **MEASURE DIAMETER**.  
+6. Watch the footer status. On success, **DIAMETER** updates.
+
+**Rule of thumb:** `BEAM OFFSET` must be **less than** `MAX TRAVEL`.
+
+### What the macro does (plain English)
+
+1. Goes to **G53 Z0** (safe height on this machine).  
+2. Moves over the beam (`START + BEAM OFFSET`) and slowly lowers until the beam breaks → that’s the tip.  
+3. Retracts to Z0, moves back to **START**, drops to tip − Z DROP.  
+4. Creeps +X until the beam breaks (pre-touch), backs off 2 mm in X.  
+5. Spins **M4** if you set an RPM.  
+6. Creeps +X again: break → clear → width = diameter.  
+7. Retracts to Z0 and stops the spindle.
+
+If anything fails (never sees the beam, still in the beam at START, hits MAX TRAVEL
+without clearing, etc.), it **retracts to Z0**, stops the spindle, and the footer
+says it failed. It will **not** pretend the last good diameter is still valid.
+
+---
+
+## Optional: length experiments
+
+**CALIBRATE** — jog the tip into the beam (LED = broken), press the button. Stores
+machine Z as “beam plane.”
+
+**MEASURE LENGTH** — seeks down onto the beam at `START + BEAM OFFSET` and reports
+`beam_z − tip_z`. Useful for polarity / smoke tests. **Not** a spindle-nose TLO
+replacement — keep using the contact setter + M600 for real tool lengths.
+
+---
+
+## Hardware / wiring (this mill)
+
+| Item | Note |
+|------|------|
+| Sensor | Kexin **DS-5V-M** |
+| Spec tool range | Ø 0.05–8 mm (bigger tools may still trip; MAX TRAVEL limits the sweep) |
+| Power | **5 V** only — never feed 24 V into the sensor |
+| Select | Tie to **GND** (0 V = ON) |
+| Signal | Slave **2** `lcec.0.2.di-5` — DB15 **pin 11**, level-shift 5 V → 24 V |
+
+### HAL picture
 
 ```
 lcec.0.2.di-5 → not.10 → laser-beam-broken
                               ↑
-              laser_*.ngc reads #<_hal[laser-beam-broken]>
-              tab LED polls the same pin
+                 tab LED + macros read this pin
 
-touch/toolsetter (or2.0) ──→ motion.probe-input   (unchanged, laser never OR'd in)
+contact probe / toolsetter → motion.probe-input   (laser never joins this)
 ```
 
-- `not.10` assumes DI is TRUE when the beam is **clear** (typical after high-side
-  level shift into a 24 V DI). Invert is correct when broken → pin TRUE.
-- If tip-find / diameter **never trips**, polarity is wrong: remove `not.10` and
-  net `lcec.0.2.di-5` straight to `laser-beam-broken`.
-- Laser measure macros use stepped `G1` seeks watching the HAL pin. They do
-  **not** use `G38` / `motion.probe-input`, so contact probe and toolsetter
-  cannot false-trip a laser measure (and laser cannot trip contact probing).
-- `motmod` is loaded with `num_aio=4` so results publish via
-  `M68 E0` (value) / `M68 E1` (success 0/1) → `motion.analog-out-00/01`.
+`not.10` assumes the DI is TRUE when the beam is **clear** (common after a
+high-side level shift). If measures never trip, polarity is wrong — remove
+`not.10` and net DI5 straight to `laser-beam-broken`.
 
-## Files
+Results publish with `M68 E0` (value) and `M68 E1` (1 = success).
+
+---
+
+## Files involved
 
 | Path | Role |
 |------|------|
-| `probe_basic/user_tabs/laser_setter/` | Tab UI (`.ui` / `.py` / `.qss` / PNG) |
-| `probe_basic/subroutines/laser_diameter.ngc` | Diameter sequence (HAL seek) |
-| `probe_basic/subroutines/laser_set_diam_params.ngc` | `#5507` Z-drop, `#5508` search |
-| `probe_basic/subroutines/laser_length.ngc` | Length seek (optional) |
-| `probe_basic/subroutines/laser_set_beam_z.ngc` | Store BEAM Z / approach / travel |
-| `probe_basic/subroutines/laser_set_start_xy.ngc` | `#5501–#5503` |
-| `ethercat_mill.hal` | DI5 → `laser-beam-broken`; contact → `probe-input` |
-| `ethercat_mill.ini` | `USER_TABS_PATH`, `SUBROUTINE_PATH` |
+| `probe_basic/user_tabs/laser_setter/` | Tab UI + annotated PNG |
+| `laser_diameter.ngc` | Diameter sequence |
+| `laser_length.ngc` | Length experiment |
+| `laser_set_start_xy.ngc` | START + RPM → `#5501–#5503` |
+| `laser_set_diam_params.ngc` | Z DROP / MAX TRAVEL / BEAM OFFSET |
+| `laser_set_beam_z.ngc` | BEAM Z for length |
+| `ethercat_mill.hal` | `laser-beam-broken` net |
 
-Tab loads via `USER_TABS_PATH = probe_basic/user_tabs/` under `[DISPLAY]`.
+---
 
-## Parameters
+## Parameters (reference)
 
-Laser uses **`#5501+`** so it never stomps G30 / contact toolsetter (`#5181–#5186`)
-or ATC `M66` result (`#5399`).
+Laser uses **`#5501+`** on purpose so it never overwrites G30 / contact setter
+teach (`#5181–#5186`) or ATC `M66` (`#5399`).
 
-| # | Name | Set by | Notes |
-|---|------|--------|-------|
-| `#5501` | START X | `laser_set_start_xy` / CAPTURE | Clear of beam (G53 mm), not center |
-| `#5502` | START Y | same | Usually slot center in Y |
-| `#5503` | PROBE RPM | same | `0` = no spindle; else **M4** on measure |
-| `#5504` | BEAM Z | CALIBRATE / `laser_set_beam_z` | Length only |
-| `#5505` | Approach | `laser_set_beam_z` | Length default 10 mm |
-| `#5506` | Max Z travel | `laser_set_beam_z` | Tip-find / length default 30 mm |
-| `#5507` | Z DROP | `laser_set_diam_params` | Below tip before cross-feed; default **2 mm** |
-| `#5508` | MAX TRAVEL | `laser_set_diam_params` | Max +X from START — stop looking |
-| `#5509` | BEAM OFFSET | `laser_set_diam_params` | START → tip-find/beam; default **10 mm** |
-| `#5510` | Last tip Z | diameter / length | Machine Z at tip-find |
-| `#5511` | Length | length | `beam_z − trip_z` |
-| `#5512` | Diameter | diameter | Raw \|X_clear − X_break\| |
-| `#5513` | X break | diameter | First edge |
-| `#5514` | X clear | diameter | Second edge |
-| `#5515` | Success | diameter / length | `1` = measure OK (also `M68 E1`) |
-| `#5519` | Z-touched | diameter / length | Set after successful tip-find |
-| `#3004` / `#3005` | Fast / slow probe FR | `linuxcnc.var` | Used by macros |
+| # | Name | Meaning |
+|---|------|---------|
+| `#5501` / `#5502` | START X/Y | Clear of beam (G53 mm) |
+| `#5503` | PROBE RPM | 0 = static; else M4 on measure |
+| `#5504` | BEAM Z | Length only |
+| `#5507` | Z DROP | Below tip for side sweep |
+| `#5508` | MAX TRAVEL | Max +X from START |
+| `#5509` | BEAM OFFSET | START → tip-find XY |
+| `#5512` | Diameter | Last raw width |
+| `#5515` | Success | 1 = OK (`M68 E1`) |
 
-Feeds fall back to 200 / 40 mm/min if `#3004`/`#3005` are unset.
+UI always syncs **millimeters** into these params, even if the Units combo shows inches.
 
-UI always syncs **mm** into these params even when the Units combo shows inches.
+Feeds use `#3004` / `#3005` when set; otherwise 200 / 40 mm/min.
 
-## MEASURE DIAMETER (primary)
-
-### Operator recipe
-
-1. Restart LinuxCNC after HAL / tab changes.
-2. Load a cutter; machine must allow G53 Z0 as clear/safe height.
-3. Jog **Y** to slot center; jog **X** clear of the beam (e.g. ~10 mm beside it).
-4. **CAPTURE START (CLEAR OF BEAM)**.
-5. Set **BEAM OFFSET** (START → beam / tip-find, default 10 mm),
-   **MAX TRAVEL** (START → stop looking, before far wall), **Z DROP** (default 2).
-6. Set PROBE RPM (`0` = static; &gt;0 spins **M4 reverse** for the measure pass).
-7. Press **MEASURE DIAMETER**.
-8. Read **DIAMETER** / footer status.
-
-`BEAM OFFSET` must be **&lt; MAX TRAVEL**. Tool must clear before `START + MAX TRAVEL`.
-
-### Motion sequence (`o<laser_diameter>`)
-
-1. Force `G21 G90`; spindle off; clear `#5515` / `M68 E1 Q0`.
-2. Rapid to **G53 Z0**, then tip-find XY = `(START_X + BEAM_OFFSET, START_Y)`.
-3. **Tip-find** (spindle off): slow stepped `G1 Z−` until beam breaks.
-4. Retract **G53 Z0**; rapid to **START XY** (clear of beam).
-5. Drop to `tip_z − Z_DROP`.
-6. Abort if beam already broken at START.
-7. **Pre-touch:** feed +X until break (stop at `START + MAX TRAVEL`); retract **X − 2 mm**.
-8. **M4** reverse spin-up if PROBE RPM &gt; 0.
-9. **Edge 1 / 2:** break→clear for diameter (same +X stop).
-10. Success → `M68 E0/E1`; retract Z0; `M5`.
-
-Every abort path retracts to G53 Z0 and stops the spindle.
-
-Measure axis is **+X from START**. Setter mounted lengthwise on Y → beam crossed in X.
-
-### Result quality
-
-- Value is **raw chord / shadow width**, not yet corrected for beam thickness
-  (`BEAM DIA` calibration field is unused).
-- Spinning averages flutes somewhat; static measures one orientation.
-- Step size (~0.02 mm) bounds edge resolution; slower than G38 but isolated from
-  the contact probe path.
-
-## CALIBRATE / MEASURE LENGTH (optional)
-
-Length is **not** a spindle-nose TLO yet. CALIBRATE stores machine Z with the tip
-in the beam as `#5504` (requires `laser-beam-broken` TRUE). MEASURE LENGTH seeks Z
-onto the beam and reports `beam_z − trip_z` (≈ 0 for the same tool you just
-calibrated). Use it for polarity / seek smoke tests, not as a replacement for the
-contact toolsetter.
-
-## Tab behavior (`laser_setter.py`)
-
-- Polls `laser-beam-broken` every 200 ms for the header LED.
-- No probe-mux arming (laser is not on `motion.probe-input`).
-- CAPTURE uses `actual_position` (G53); sync always writes mm.
-- Diameter / length results require `M68 E1` success; failures do not set
-  `_z_touched` or keep a stale diameter label update.
-- Footer `lblStatus` shows BLOCKED / ERROR / DONE / FAILED messages.
+---
 
 ## Troubleshooting
 
-| Symptom | Check |
-|---------|--------|
-| LED never changes | `halcmd getp lcec.0.2.di-5` and `laser-beam-broken`; Select tied to GND? 5 V power? |
-| Tip-find / diameter never trips | Polarity — remove `not.10`; watch `laser-beam-broken` while blocking the slot |
-| “beam already broken at START” | START still in the beam — jog farther clear of beam |
-| Never tripped before MAX TRAVEL | Raise MAX TRAVEL (still short of far wall) or fix BEAM OFFSET / polarity |
-| BEAM OFFSET / MAX TRAVEL error | Offset must be &gt; 0 and **&lt;** max travel |
-| Diameter label empty / FAILED | Watch footer status; DEBUG lines; `halcmd getp motion.analog-out-00/01` |
-| Contact probe / toolsetter odd | Laser is **not** on `probe-input` anymore — check contact mux only |
+| What you see | Try this |
+|--------------|----------|
+| LED never changes | `halcmd getp laser-beam-broken` and `lcec.0.2.di-5`; Select tied to GND? 5 V power? |
+| Tip-find never trips | BEAM OFFSET wrong, or polarity (`not.10`) |
+| “Beam already broken at START” | START is still in the beam — jog farther clear |
+| Never trips before MAX TRAVEL | Raise MAX TRAVEL (still short of the wall) or fix OFFSET / polarity |
+| Never clears / oversize abort | Tool bigger than the travel window, or stop too short |
+| Footer FAILED, old diameter gone | That’s correct — success is gated on `M68 E1` |
+| Contact probe acting weird | Laser is **not** on `probe-input`; check the contact mux only |
+
+---
 
 ## Roadmap
 
-1. ~~HAL + LED + diameter Z-drop cross-feed~~
-2. ~~Decouple laser from `motion.probe-input`; fix param collisions / safety bugs~~
-3. Beam-width / master-pin calibration for true diameter
-4. Optional measure axis (X vs Y)
-5. UI fields for BEAM OFFSET + MAX TRAVEL (START = clear of beam)
-6. Runout (multi-angle or spinning peak-peak)
-7. Broken-tool check vs expected diameter / tip Z
-8. Length → real TLO vs gauge line (master tool)
-9. Air blast DO
-10. Controllable Select (instead of hardwired GND)
+1. ~~HAL + LED + diameter~~  
+2. ~~Off `probe-input`; START = clear of beam; MAX TRAVEL / BEAM OFFSET~~  
+3. Beam-width / master-pin calibration (true diameter)  
+4. Optional measure axis (X vs Y)  
+5. Runout / broken-tool check  
+6. Length → real TLO vs gauge line  
+7. Air blast DO / controllable Select  
+
+PRs welcome — especially calibration and safer travel limits for other mill layouts.
