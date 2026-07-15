@@ -1089,6 +1089,14 @@ def hal_getp(pin: str) -> float:
         return float("nan")
 
 
+def hal_setp(pin: str, value: float) -> None:
+    """Write a HAL pin via ``halcmd setp`` (float). Raises on failure."""
+    subprocess.check_call(
+        ["halcmd", "setp", pin, f"{float(value):.6f}"],
+        stderr=subprocess.STDOUT,
+        stdout=subprocess.DEVNULL,
+    )
+
 def hal_getp_s32(pin: str) -> float:
     """Read an s32 HAL pin as a signed integer (encoder counts / 60F4)."""
     raw = hal_getp(pin)

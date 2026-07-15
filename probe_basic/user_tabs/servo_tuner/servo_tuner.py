@@ -71,6 +71,8 @@ from a6_servo_tune import (  # noqa: E402
     read_axis_params,
     drive_ferr_counts_halpin,
     read_drive_ferr,
+    read_drive_torque,
+    read_drive_velocity,
     save_preset,
     unit_to_counts,
 )
@@ -125,6 +127,12 @@ AXIS_PLOT_COLORS = {
     "Z": "#fcaf3e",  # orange
     "A": "#ad7fa8",  # purple
 }
+
+# Inertia live plot (T=Jα inputs): torque left, velocity right.
+INERTIA_TQ_COLOR = "#fcaf3e"  # orange — torque %
+INERTIA_VEL_COLOR = "#729fcf"  # blue — velocity
+INERTIA_WINDOW_S = 12.0
+INERTIA_SAMPLE_MS = float(FERR_SAMPLE_MS)
 
 COL_PARAM = 0
 COL_CURRENT = 1
@@ -566,6 +574,239 @@ class FerrPlotWidget(QWidget):
         painter.end()
 
 
+class InertiaLivePlotWidget(QWidget):
+    """Live torque (%) + velocity (unit/min) strip chart for graphical inertia ID.
+
+    Left axis = torque % rated (6077). Right axis = velocity unit/min (606C).
+    Shows the full buffer window (not the zoomed FERR strip) so the trapezoid
+    and torque plateau are visible during BEGIN.
+    """
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("inertiaPlot")
+        self.setMinimumHeight(320)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._sample_ms = float(INERTIA_SAMPLE_MS)
+        self._window_s = float(INERTIA_WINDOW_S)
+        self._buf_len = max(
+            1, int(self._window_s * (1000.0 / max(self._sample_ms, 1.0)))
+        )
+        self._tq: Deque[float] = collections.deque(maxlen=self._buf_len)
+        self._vel: Deque[float] = collections.deque(maxlen=self._buf_len)
+        self._vel_unit = "mm/min"
+        self._title = ""
+        self._vel_vb = None
+        self._tq_curve = None
+        self._vel_curve = None
+        self._zero_line = None
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        if pg is not None:
+            self._painter_mode = False
+            self.plot = pg.PlotWidget()
+            self.plot.setBackground(PLOT_BG)
+            self.plot.showGrid(x=True, y=True, alpha=0.35)
+            for axis_name in ("left", "bottom", "right"):
+                try:
+                    axis = self.plot.getAxis(axis_name)
+                    axis.setPen(PLOT_FG)
+                    axis.setTextPen(PLOT_FG)
+                except Exception:
+                    pass
+            self.plot.setLabel(
+                "bottom", "time (s)", color=PLOT_FG, **{"font-size": "12pt"}
+            )
+            self.plot.setLabel(
+                "left", "torque %", color=INERTIA_TQ_COLOR, **{"font-size": "12pt"}
+            )
+            self.plot.showAxis("right")
+            self.plot.setLabel(
+                "right",
+                self._vel_unit,
+                color=INERTIA_VEL_COLOR,
+                **{"font-size": "12pt"},
+            )
+            pi = self.plot.plotItem
+            self._vel_vb = pg.ViewBox()
+            pi.scene().addItem(self._vel_vb)
+            pi.getAxis("right").linkToView(self._vel_vb)
+            self._vel_vb.setXLink(pi)
+            self._zero_line = self.plot.addLine(
+                y=0, pen=pg.mkPen(color=PLOT_ZERO, width=1, style=Qt.DashLine)
+            )
+            self._tq_curve = self.plot.plot(
+                pen=pg.mkPen(color=INERTIA_TQ_COLOR, width=2.5), name="TQ%"
+            )
+            self._vel_curve = pg.PlotCurveItem(
+                pen=pg.mkPen(color=INERTIA_VEL_COLOR, width=2.0)
+            )
+            self._vel_vb.addItem(self._vel_curve)
+            try:
+                self.plot.addLegend(offset=(10, 10))
+            except Exception:
+                pass
+
+            def _sync_vel_vb():
+                try:
+                    self._vel_vb.setGeometry(pi.vb.sceneBoundingRect())
+                    self._vel_vb.linkedViewChanged(pi.vb, self._vel_vb.XAxis)
+                except Exception:
+                    pass
+
+            pi.vb.sigResized.connect(_sync_vel_vb)
+            try:
+                self.plot.enableAutoRange(x=False, y=False)
+                self.plot.setMouseEnabled(x=False, y=True)
+                self._vel_vb.setMouseEnabled(x=False, y=True)
+            except Exception:
+                pass
+            self.plot.setMinimumHeight(280)
+            root.addWidget(self.plot)
+            _sync_vel_vb()
+            self.reset_y_scale()
+        else:
+            self._painter_mode = True
+            self.plot = None
+
+    def set_vel_unit(self, unit: str) -> None:
+        self._vel_unit = str(unit or "unit/min")
+        if self.plot is not None:
+            try:
+                self.plot.setLabel(
+                    "right",
+                    self._vel_unit,
+                    color=INERTIA_VEL_COLOR,
+                    **{"font-size": "12pt"},
+                )
+            except Exception:
+                pass
+
+    def set_title(self, title: str) -> None:
+        self._title = str(title or "")
+        if self.plot is not None:
+            try:
+                self.plot.setTitle(
+                    self._title, color=PLOT_FG, **{"font-size": "12pt"}
+                )
+            except Exception:
+                pass
+
+    def clear(self) -> None:
+        self._tq.clear()
+        self._vel.clear()
+        if self._tq_curve is not None:
+            try:
+                self._tq_curve.setData([], [])
+            except Exception:
+                pass
+        if self._vel_curve is not None:
+            try:
+                self._vel_curve.setData([], [])
+            except Exception:
+                pass
+        self.reset_y_scale()
+        self.update()
+
+    def reset_y_scale(self) -> None:
+        if self.plot is None:
+            return
+        try:
+            self.plot.setYRange(-30.0, 30.0, padding=0)
+            if self._vel_vb is not None:
+                self._vel_vb.setYRange(-500.0, 500.0, padding=0)
+            self.plot.setXRange(0.0, self._window_s, padding=0)
+        except Exception:
+            pass
+
+    def push(self, torque_pct: float, vel_unit_per_min: float) -> None:
+        if torque_pct != torque_pct or vel_unit_per_min != vel_unit_per_min:
+            return
+        # Sanity gates — not FERR limits; allow full motion envelopes.
+        if abs(torque_pct) > 500.0 or abs(vel_unit_per_min) > 200_000.0:
+            return
+        self._tq.append(float(torque_pct))
+        self._vel.append(float(vel_unit_per_min))
+        self._refresh()
+
+    def _xs(self, n: int) -> List[float]:
+        dt = self._sample_ms / 1000.0
+        return [i * dt for i in range(n)]
+
+    def _refresh(self) -> None:
+        tq = list(self._tq)
+        vel = list(self._vel)
+        n = min(len(tq), len(vel))
+        if n < 1:
+            return
+        xs = self._xs(n)
+        if self._tq_curve is not None:
+            self._tq_curve.setData(xs, tq[:n])
+        if self._vel_curve is not None:
+            self._vel_curve.setData(xs, vel[:n])
+        if self.plot is not None:
+            t_peak = max(abs(min(tq[:n])), abs(max(tq[:n])), 5.0)
+            self.plot.setYRange(-(t_peak * 1.15), t_peak * 1.15, padding=0)
+            if self._vel_vb is not None and vel:
+                v_peak = max(abs(min(vel[:n])), abs(max(vel[:n])), 50.0)
+                self._vel_vb.setYRange(-(v_peak * 1.15), v_peak * 1.15, padding=0)
+            # Show the whole capture (or trailing window_s).
+            x_end = max((n - 1) * (self._sample_ms / 1000.0), self._window_s * 0.25)
+            x_start = max(0.0, x_end - self._window_s)
+            self.plot.setXRange(x_start, x_end, padding=0)
+        elif self._painter_mode:
+            self.update()
+
+    def export_png(self, path: str, title: Optional[str] = None) -> None:
+        burn = self._title if title is None else str(title)
+        os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
+        if self.plot is not None and pg is not None:
+            prev = self._title
+            if burn:
+                self.set_title(burn)
+            try:
+                from pyqtgraph.exporters import ImageExporter
+
+                ImageExporter(self.plot.plotItem).export(path)
+                if os.path.isfile(path):
+                    return
+            except Exception as exc:
+                LOG.warning("Inertia ImageExporter failed (%s)", exc)
+            finally:
+                if burn != prev:
+                    self.set_title(prev)
+        # Minimal fallback — blank with message if exporter missing.
+        image = QImage(960, 360, QImage.Format_RGB32)
+        image.fill(QColor(PLOT_BG))
+        painter = QPainter(image)
+        painter.setPen(QColor(PLOT_FG))
+        painter.setFont(QFont(PB_FONT, 12))
+        painter.drawText(
+            image.rect(),
+            Qt.AlignCenter,
+            burn or "inertia torque / velocity",
+        )
+        painter.end()
+        if not image.save(path):
+            raise RuntimeError(f"failed to write PNG: {path}")
+
+    def paintEvent(self, event):  # noqa: N802
+        if not self._painter_mode:
+            return super().paintEvent(event)
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(PLOT_BG))
+        painter.setPen(QColor(PLOT_FG))
+        painter.drawText(
+            self.rect(),
+            Qt.AlignCenter,
+            "pyqtgraph required for inertia live plot",
+        )
+        painter.end()
+
+
 class UserTab(QWidget):
     # Worker -> GUI thread marshalling (Qt queues these).
     ocProgress = Signal(str, str)
@@ -873,6 +1114,7 @@ class UserTab(QWidget):
     def _build_ferr_group(self) -> QGroupBox:
         group = QGroupBox("DRIVE FERR (CiA 60F4)", self)
         group.setObjectName("grpFerr")
+        self._plot_group = group
         layout = QVBoxLayout(group)
         layout.setSpacing(4)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -947,6 +1189,10 @@ class UserTab(QWidget):
         self.ferr_plot = FerrPlotWidget(group)
         self.ferr_plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.plot_stack.addWidget(self.ferr_plot)
+
+        self.inertia_plot = InertiaLivePlotWidget(group)
+        self.inertia_plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.plot_stack.addWidget(self.inertia_plot)
 
         self._spectrum_curve = None
         self.spectrum_plot = None
@@ -1108,9 +1354,11 @@ class UserTab(QWidget):
         layout.setSpacing(6)
 
         hint = QLabel(
-            "Enter motor J_M + rated torque and the ID move, then BEGIN. "
-            "Samples torque + velocity, solves T=Jα, writes C00.06. "
-            "Switch back to GAINS for one-click.",
+            "Enter motor J_M + rated torque, then BEGIN. Auto-lowers "
+            "MAX_ACCELERATION (~120 ms ramp), samples TQ% + velocity, solves "
+            "accel/decel T=Jα, writes C00.06 only when quality is good. "
+            "Prefer cycles=1 and F5000–F10000 on linear axes. "
+            "Leave Torque limit at 0.",
             page,
         )
         hint.setObjectName("lblParamHint")
@@ -1186,7 +1434,8 @@ class UserTab(QWidget):
             60000.0,
             100.0,
             "",
-            "Target feed for the trapezoid move (unit/min).",
+            "Target feed for the trapezoid move (unit/min). "
+            "Linear axes: F5000–F10000 for trusted T_A.",
         )
         add_spin(
             "cycles",
@@ -1196,7 +1445,19 @@ class UserTab(QWidget):
             10.0,
             1.0,
             "",
-            "Out-and-back repetitions (more samples, longer run).",
+            "Out-and-back repetitions. Use 1 unless you need more legs.",
+        )
+        add_spin(
+            "torque_limit_pct",
+            "Torque limit",
+            0,
+            0.0,
+            300.0,
+            5.0,
+            " %",
+            "0 = leave drive alone (recommended). Auto ID already lowers "
+            "MAX_ACCELERATION for an ~120 ms ramp. Only set 20–40% if that "
+            "fails and you need a torque-limited plateau.",
         )
         layout.addLayout(form)
 
@@ -1250,7 +1511,56 @@ class UserTab(QWidget):
             unit = axis_unit(self._axis)
             self._inertia_spins["stroke"].setSuffix(f" {unit}")
             self._inertia_spins["feed"].setSuffix(f" {unit}/min")
+        self._sync_plot_for_panel_mode()
 
+    def _sync_plot_for_panel_mode(self) -> None:
+        """FERR/FFT in gains mode; torque+velocity in inertia mode."""
+        if not hasattr(self, "inertia_plot") or not hasattr(self, "_plot_group"):
+            return
+        inertia = self._panel_mode == "inertia"
+        # View / unit toggles only apply to FERR.
+        for w in (
+            self.btn_view_ferr,
+            self.btn_view_fft,
+            self.btn_ferr_unit,
+            self.btn_ferr_pulses,
+            self.analyze_resonance_button,
+            self.suggest_notch_button,
+            self.resonance_label,
+        ):
+            w.setVisible(not inertia)
+        if inertia:
+            self._plot_group.setTitle("TORQUE + VELOCITY (6077 / 606C)")
+            unit = axis_unit(self._axis)
+            vel_unit = f"{unit}/min"
+            self.inertia_plot.set_vel_unit(vel_unit)
+            self.inertia_plot.set_title(f"{self._axis} inertia · TQ% + vel")
+            self.inertia_plot.clear()
+            self.plot_stack.setCurrentWidget(self.inertia_plot)
+            self._idle_inertia_readout()
+            # Auto-arm the live plot so BEGIN shows the ID traces immediately.
+            if not self._logging_active:
+                self._logging_active = True
+                self._sync_ferr_timer()
+                self._sync_log_button()
+                self._notify(
+                    f"Inertia plot ON — {self._axis} torque % + {vel_unit}"
+                )
+            else:
+                self._update_inertia_readout_live()
+        else:
+            self._plot_group.setTitle("DRIVE FERR (CiA 60F4)")
+            self.ferr_plot.set_title("")
+            if self.btn_view_fft.isChecked() and self.spectrum_plot is not None:
+                self.plot_stack.setCurrentWidget(self.spectrum_plot)
+            else:
+                self.plot_stack.setCurrentWidget(self.ferr_plot)
+            self._sync_plot_view()
+            if self._logging_active:
+                self._update_focus_ferr_readout()
+            else:
+                self._idle_ferr_readout()
+        self._update_plot_axis_hint()
     def _load_inertia_spins_for_axis(self, axis: str) -> None:
         settings = self._inertia_settings.get(axis) or default_settings_for_axis(axis)
         self._inertia_settings[axis] = settings
@@ -1260,6 +1570,7 @@ class UserTab(QWidget):
             "stroke": settings.stroke,
             "feed": settings.feed,
             "cycles": float(settings.cycles),
+            "torque_limit_pct": float(settings.torque_limit_pct),
         }
         for key, value in mapping.items():
             spin = self._inertia_spins.get(key)
@@ -1282,6 +1593,9 @@ class UserTab(QWidget):
         settings.stroke = self._inertia_spins["stroke"].value()
         settings.feed = self._inertia_spins["feed"].value()
         settings.cycles = max(1, int(self._inertia_spins["cycles"].value()))
+        settings.torque_limit_pct = float(
+            self._inertia_spins["torque_limit_pct"].value()
+        )
         self._inertia_settings[axis] = settings
         try:
             save_all_settings(self._inertia_settings)
@@ -1449,6 +1763,17 @@ class UserTab(QWidget):
         """Reflect edit/plot selection in the toolbar plot status line."""
         if not hasattr(self, "log_status_label"):
             return
+        if self._panel_mode == "inertia":
+            unit = axis_unit(self._axis)
+            if self._logging_active:
+                self.log_status_label.setText(
+                    f"PLOT: inertia live · {self._axis} TQ% + {unit}/min"
+                )
+            else:
+                self.log_status_label.setText(
+                    f"PLOT: inertia idle · {self._axis} TQ% + {unit}/min"
+                )
+            return
         plotted = " ".join(self._plot_axes) if self._plot_axes else "—"
         if self._logging_active:
             self.log_status_label.setText(
@@ -1498,10 +1823,20 @@ class UserTab(QWidget):
             self.one_click_button.setText(f"ONE-CLICK TUNE {axis}")
         if self._panel_mode == "inertia":
             self._load_inertia_spins_for_axis(axis)
+            if hasattr(self, "inertia_plot"):
+                unit = axis_unit(axis)
+                self.inertia_plot.set_vel_unit(f"{unit}/min")
+                self.inertia_plot.set_title(f"{axis} inertia · TQ% + vel")
+                self.inertia_plot.clear()
         self._refresh_unit_columns()
         self._refresh_preset_list()
         if not self._logging_active:
-            self._idle_ferr_readout()
+            if self._panel_mode == "inertia":
+                self._idle_inertia_readout()
+            else:
+                self._idle_ferr_readout()
+        elif self._panel_mode == "inertia":
+            self._update_inertia_readout_live()
         if axis in self._live:
             self._set_params_to_ui(self._live[axis])
             self._update_value_readouts()
@@ -1572,6 +1907,10 @@ class UserTab(QWidget):
 
     def _sync_plot_view(self) -> None:
         """Show FERR or FFT exclusively — stacked so they never fight for space."""
+        if self._panel_mode == "inertia":
+            if hasattr(self, "inertia_plot"):
+                self.plot_stack.setCurrentWidget(self.inertia_plot)
+            return
         want_fft = bool(self.btn_view_fft.isChecked()) and self.spectrum_plot is not None
         if want_fft:
             self.plot_stack.setCurrentWidget(self.spectrum_plot)
@@ -1585,6 +1924,8 @@ class UserTab(QWidget):
     def _show_fft_view(self) -> None:
         if self.spectrum_plot is None:
             return
+        if self._panel_mode == "inertia":
+            return
         self.btn_view_fft.blockSignals(True)
         self.btn_view_ferr.blockSignals(True)
         self.btn_view_fft.setChecked(True)
@@ -1596,6 +1937,14 @@ class UserTab(QWidget):
     def _clear_ferr_plot(self) -> None:
         self._ferr_peak_pulses = {a: 0.0 for a in AXIS_ORDER}
         self._ferr_peak_unit = {a: 0.0 for a in AXIS_ORDER}
+        if self._panel_mode == "inertia" and hasattr(self, "inertia_plot"):
+            self.inertia_plot.clear()
+            self.ferr_peak_label.setText("PEAK: —")
+            if self._logging_active:
+                self._update_inertia_readout_live()
+            else:
+                self._idle_inertia_readout()
+            return
         self.ferr_plot.clear()
         self.ferr_peak_label.setText("PEAK: —")
 
@@ -1607,6 +1956,9 @@ class UserTab(QWidget):
 
     def _poll_ferr(self) -> None:
         if not self._logging_active or not self.isVisible():
+            return
+        if self._panel_mode == "inertia":
+            self._poll_inertia_plot()
             return
 
         # Live readout follows the edit-focus axis (only while plotting).
@@ -1642,6 +1994,59 @@ class UserTab(QWidget):
 
         self._refresh_peak_label()
 
+    def _poll_inertia_plot(self) -> None:
+        """Sample 6077 torque % + 606C velocity for the edit axis."""
+        axis = self._axis
+        try:
+            tq = float(read_drive_torque(axis))
+            vel = float(read_drive_velocity(axis))
+        except Exception:
+            return
+        if hasattr(self, "inertia_plot"):
+            self.inertia_plot.push(tq, vel)
+        self._update_inertia_readout_values(tq, vel)
+
+    def _update_inertia_readout_values(self, tq: float, vel: float) -> None:
+        axis = self._axis
+        unit = axis_unit(axis)
+        if tq == tq:
+            self.ferr_pulses_label.setText(f"{axis} TQ: {tq:.1f}%")
+        else:
+            self.ferr_pulses_label.setText(f"{axis} TQ: —")
+        if vel == vel:
+            self.ferr_unit_value_label.setText(f"{axis} VEL: {vel:.0f} {unit}/min")
+        else:
+            self.ferr_unit_value_label.setText(f"{axis} VEL: —")
+        peak_tq = max((abs(v) for v in getattr(self.inertia_plot, "_tq", [])), default=0.0)
+        peak_vel = max((abs(v) for v in getattr(self.inertia_plot, "_vel", [])), default=0.0)
+        self.ferr_peak_label.setText(
+            f"PEAK: TQ {peak_tq:.1f}% · VEL {peak_vel:.0f} {unit}/min"
+            if peak_tq or peak_vel
+            else "PEAK: —"
+        )
+        self.ferr_scale_label.setText(
+            f"lcec torque-fb / vel-fb · T=Jα inputs ({axis})"
+        )
+
+    def _update_inertia_readout_live(self) -> None:
+        axis = self._axis
+        try:
+            tq = float(read_drive_torque(axis))
+            vel = float(read_drive_velocity(axis))
+        except Exception:
+            self._idle_inertia_readout()
+            return
+        self._update_inertia_readout_values(tq, vel)
+
+    def _idle_inertia_readout(self) -> None:
+        axis = self._axis
+        unit = axis_unit(axis)
+        self.ferr_pulses_label.setText(f"{axis} TQ: —")
+        self.ferr_unit_value_label.setText(f"{axis} VEL: —")
+        self.ferr_peak_label.setText("PEAK: —")
+        self.ferr_scale_label.setText(
+            f"torque % + {unit}/min (plot off) — START PLOT or BEGIN"
+        )
     def _update_focus_ferr_readout(self) -> None:
         axis = self._axis
         try:
@@ -1704,29 +2109,45 @@ class UserTab(QWidget):
                 self._ferr_timer.stop()
 
     def _toggle_logging(self) -> None:
-        """Start/stop live FERR plot only — no CSV, nothing written to disk."""
+        """Start/stop live plot only — no CSV, nothing written to disk."""
         want_on = self.log_button.isChecked()
         if want_on:
-            if not self._plot_axes:
-                self.log_button.blockSignals(True)
-                self.log_button.setChecked(False)
-                self.log_button.blockSignals(False)
-                QMessageBox.information(
-                    self,
-                    "Start plot",
-                    "Check at least one axis button (X/Y/Z/A) to plot.",
+            if self._panel_mode == "inertia":
+                if hasattr(self, "inertia_plot"):
+                    self.inertia_plot.clear()
+                    unit = axis_unit(self._axis)
+                    self.inertia_plot.set_vel_unit(f"{unit}/min")
+                    self.inertia_plot.set_title(
+                        f"{self._axis} inertia · TQ% + vel"
+                    )
+                self._logging_active = True
+                self._notify(
+                    f"Plot ON — {self._axis} torque % + velocity"
                 )
-                self._sync_log_button()
-                return
-            self._clear_ferr_plot()
-            self.ferr_plot.set_active_axes(list(self._plot_axes))
-            self._logging_active = True
-            self._notify(
-                "Plot ON — live FERR for: " + " ".join(self._plot_axes)
-            )
+            else:
+                if not self._plot_axes:
+                    self.log_button.blockSignals(True)
+                    self.log_button.setChecked(False)
+                    self.log_button.blockSignals(False)
+                    QMessageBox.information(
+                        self,
+                        "Start plot",
+                        "Check at least one axis button (X/Y/Z/A) to plot.",
+                    )
+                    self._sync_log_button()
+                    return
+                self._clear_ferr_plot()
+                self.ferr_plot.set_active_axes(list(self._plot_axes))
+                self._logging_active = True
+                self._notify(
+                    "Plot ON — live FERR for: " + " ".join(self._plot_axes)
+                )
         else:
             self._logging_active = False
-            self._idle_ferr_readout()
+            if self._panel_mode == "inertia":
+                self._idle_inertia_readout()
+            else:
+                self._idle_ferr_readout()
             self._notify("Plot stopped / frozen.")
         self._sync_ferr_timer()
         self._update_value_readouts()
@@ -1792,7 +2213,16 @@ class UserTab(QWidget):
             QMessageBox.warning(self, "Clipboard", str(exc))
 
     def _copy_plot(self) -> None:
-        """Copy the current FERR plot image to the clipboard."""
+        """Copy the current live plot image to the clipboard."""
+        if self._panel_mode == "inertia" and hasattr(self, "inertia_plot"):
+            title = f"{self._axis} inertia · torque % + velocity"
+            try:
+                path = copy_plot_widget_to_clipboard(self.inertia_plot, title=title)
+                self._notify(f"COPY PLOT — inertia image on clipboard ({path}).")
+            except Exception as exc:
+                LOG.exception("copy inertia plot failed")
+                QMessageBox.warning(self, "Clipboard", str(exc))
+            return
         title = (
             f"{self._axis} FERR · plotting "
             + (" ".join(self._plot_axes) if self._plot_axes else "—")
@@ -2159,6 +2589,12 @@ class UserTab(QWidget):
         if axis not in self._plot_axes:
             self.axis_buttons[axis].setChecked(True)
         self.ferr_plot.set_active_axes(list(self._plot_axes))
+        if hasattr(self, "inertia_plot"):
+            unit = axis_unit(axis)
+            self.inertia_plot.set_vel_unit(f"{unit}/min")
+            self.inertia_plot.set_title(f"{axis} inertia · TQ% + vel")
+            self.inertia_plot.clear()
+            self.plot_stack.setCurrentWidget(self.inertia_plot)
         self._logging_active = True
         self._sync_ferr_timer()
         self._sync_log_button()

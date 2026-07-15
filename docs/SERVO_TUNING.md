@@ -29,6 +29,9 @@ Your drives are a **cascaded position → speed → torque** loop. Map:
 1. Run drive **inertia / load ratio** estimate (graphical or auto inertia).
    On this machine: Servo Tuning → panel **INERTIA** → **BEGIN INERTIA
    AUTO-TUNE** (T=Jα from torque + velocity — see `GRAPHICAL_INERTIA_TUNE.md`).
+   Use F5000–F10000 on linear axes; C00.06 writes only when quality is **good**.
+   Alternate: drive-internal F30.10 on branch `cursor/internal-inertia-tune-f9d7`
+   (`INERTIA_TUNE.md`).
 2. Write the ratio down (C00.06 is written automatically on success). Bad
    inertia estimate makes every later gain lie.
 3. If ratio is huge (load >> motor), expect softer gains + more filter/notch need.
