@@ -28,6 +28,12 @@ Stock references:
 | Feed override max | 100–200% | **250%** (`MAX_FEED_OVERRIDE = 2.5`) |
 | Fusion post | Stock `linuxcnc.cps`, `M6`, preload `T` | **`linuxcnc-djr.cps`**, M600 default, no preload |
 | `PROGRAM_PREFIX` | Relative to config | **Absolute path** in committed INI — change on clone |
+| Joint following error | Tight (e.g. 2 mm / 1 mm) | **Relaxed** `FERROR = 1270`, `MIN_FERROR = 254` (bench — tune for production) |
+| M600 collet pause position | Often same as G30 / setter | **Separate tool-load XY** (G53 270, 100) vs taught setter `#5181–#5183` |
+| Manual Tool Change dialog | Stock QtPyVCP; Esc cancels | **Custom dialog** with **ABORT**; Esc/close ignored — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
+| Drive position deviation | Drive defaults | **SDO 6065/6066** in `ethercat-conf.xml` (0.3 mm / 0.3° limit, 100 ms) |
+| Pocket probe traverse feed | `#3017` from Probe Basic | **Local fix** — several `probe_*.ngc` had bare `[3017]` (3017 mm/min literal) |
+| PROBE SPINDLE NOSE ZERO | Runs on setter input | **Aborts if T#3014 loaded** — HAL routes touch probe only when that tool is in spindle |
 
 ---
 
@@ -71,6 +77,18 @@ Metric (`G21`), absolute (`G90`), **`G94`** feed per minute default. Simultaneou
 
 Probe Basic stock template uses `2.0`. Raised to **250%** for pendant and GUI override headroom.
 
+### Relaxed `FERROR` / `MIN_FERROR`
+
+```ini
+# ethercat_mill.ini [JOINT_*] — all four joints
+FERROR = 1270.0
+MIN_FERROR = 254.0
+```
+
+Stock servo configs often use ~2 mm / 1 mm. These values are **intentionally wide** so LinuxCNC does not fault during jog, homing, or bench bring-up while EtherCAT following error is still being tuned.
+
+**Revert for production:** tighten per-axis after drive tuning and confirm no false trips under cutting loads. See [CiA 402 following error](https://linuxcnc.org/docs/html/config/ini-config.html#sub:joint-section) and drive manual for SDO `6065` (position deviation limit).
+
 ---
 
 ## HAL architecture
@@ -84,7 +102,8 @@ Probe Basic stock template uses `2.0`. Raised to **250%** for pendant and GUI ov
 Unlike a simple stepgen config:
 
 - Position command/feedback passes through `mult2` / `conv_float_s32` / `lcec`
-- X limit chain suppressed during X homing (`joint.0.homing` → `and2.1`)
+- X **and Y** limit chains suppressed during homing (`joint.N.homing` → `and2.1` / `and2.5`)
+- Y also has `HOME_IGNORE_LIMITS = YES` in the INI (home at negative end shares limit DI chain)
 - NC switches inverted with `not.*`
 
 ### Bench limit gagging (`and2.0`)
@@ -131,6 +150,17 @@ Physical master estop cuts mains. Software NC estop on Slave 3 DI1 gates `iocont
 | Critical faults | Modbus fault reg `0x000A` codes 64 / 92 → `halui.estop.activate` |
 | `or2.1` reserved | Do not load another `or2` with `names=` — conflicts with probe `or2.0` |
 
+### EtherCAT drive SDOs (`ethercat-conf.xml`)
+
+Each A6 slave sets CiA 402 objects not present in generic linuxcnc-ethercat examples:
+
+| SDO | Linear slaves (0–2) | A slave (3) | Purpose |
+|-----|---------------------|-------------|---------|
+| `6065` | `0x0F5C` (3932 counts ≈ **0.3 mm** @ 13107.2 counts/mm) | `0x6D` (109 counts ≈ **0.3°**) | Max position deviation before Er47.0 |
+| `6066` | `0x64` (100 ms) | same | How long deviation must persist |
+
+Counts assume `SCALE` in `ethercat_mill.ini`. Recompute if you change ball screw or encoder resolution. StepperOnline A6 EtherCAT manual: search **6065** / **6066** / **Er47.0**.
+
 ### Pendant homed-gate override
 
 ```hal
@@ -156,6 +186,32 @@ Stock M6 would optionally move to `[EMCIO] TOOL_CHANGE_POSITION`. Here **all mot
 
 **Do not** add `REMAP=M6` for the toolsetter — conflicts with Probe Basic M6 dialog.
 
+### Tool-load position vs setter teach
+
+Stock TooTall18T / Probe Basic often pause at the same XY as the setter (`#5181–#5183`).
+
+Here M600 automatic mode uses **two G53 positions**:
+
+| Position | Coordinates | Purpose |
+|----------|-------------|---------|
+| **Tool-load** (collet change) | `270, 100, 0` mm — `#<tool_load_*>` in `tool_touch_off.ngc`, `go_to_g30.ngc` | M6 OK dialog; wrench clearance |
+| **Setter** (probe) | `#5181–#5183` from **SET TOOL TOUCH OFF POS** | G38 length measure only |
+
+Flow: retract Z → tool-load XY → **M6 dialog** → retract Z → setter XY → probe. Edit `#<tool_load_*>` if your bench layout differs.
+
+### M600 traverse feed override
+
+`tool_touch_off.ngc` sets `#<traverse_xy_fr> = 30000` and `#<traverse_z_fr> = 10000` mm/min for tool-change moves, **independent** of Probe Basic UI traverse `#3006`. Setter/probe feeds still come from `#3004–#3006`.
+
+### `ON_ABORT_COMMAND` vs dialog abort
+
+| Trigger | Subroutine | Motion |
+|---------|------------|--------|
+| Program **Abort** / estop while enabled | `on_abort.ngc` | **No G0/G1** — machine may be disabled |
+| **ABORT** on Manual Tool Change dialog | `abort_tool_change.ngc` (via `toolchange_dialog.py`) | Z retract G53 Z0 → park tool-load XY |
+
+Global abort must not move axes when LinuxCNC is disabled; dialog abort runs while still enabled after `program.abort()`.
+
 ### `TOOL_TABLE_COLUMNS = TDZR`
 
 Stock Probe Basic often `TPDZR` (pocket column). Pocket column dropped for manual collet (`P` still in file but not displayed).
@@ -166,7 +222,14 @@ Stock Probe Basic often `TPDZR` (pocket column). Pocket column dropped for manua
 
 ### `tool_touch_off.ngc` fixes vs stock Probe Basic
 
-Documented in [TOOLSETTER.md](TOOLSETTER.md#probe--length-math-fixes-vs-stock-pb-routine): setter coords from `#5181–#5183`, length formula, abort guards, `M50 P1` before pause, etc.
+Documented in [TOOLSETTER.md](TOOLSETTER.md#probe--length-math-fixes-vs-stock-pb-routine): setter coords from `#5181–#5183`, length formula, abort guards, `M50 P1` before pause, separate tool-load XY, per-axis setter validation, etc.
+
+### Local Probe Basic subroutine patches
+
+Upstream `probe_*.ngc` in this tree include **machine-specific fixes** not in stock Probe Basic:
+
+- **Traverse feed typo** — pocket/valley/calibration macros passed `[3017]` (literal 3017 mm/min) instead of `[#3017]` (Probe Basic traverse param). Fixed in this repo; re-check after merging new PB versions.
+- **`probe_spindle_nose.ngc`** — aborts if touch probe `T#3014` is loaded (HAL would listen to wrong sensor). Failed-probe recovery uses `#<z> = #5422` like sibling macros.
 
 ### Optional TooTall18T M-codes **not** installed
 
@@ -190,7 +253,17 @@ Documented in [TOOLSETTER.md](TOOLSETTER.md#probe--length-math-fixes-vs-stock-pb
 
 ### `custom_config.yml`
 
-Minimal overrides (confirm exit off, backplot defaults). Most PB machine params live in `linuxcnc.var` / Probe screens.
+Minimal overrides (confirm exit off, backplot defaults) plus **custom Manual Tool Change dialog**:
+
+```yaml
+dialogs:
+  toolchange:
+    provider: toolchange_dialog:ToolChangeDialog
+```
+
+Replaces stock QtPyVCP dialog with **ABORT CYCLE** button. See [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md#manual-tool-change-dialog-abort-cycle).
+
+Most PB machine params still live in `linuxcnc.var` / Probe screens.
 
 ### `launch.sh`
 
@@ -244,5 +317,8 @@ From [README.md](README.md#what-was-left-out-of-git-but-is-helpful-to-keep-in-th
 | Immediate spindle at-speed | Remove `timedelay` in `custom.hal` |
 | Single probe input | Remove mux; wire one DI to `motion.probe-input` |
 | 200% feed cap | `MAX_FEED_OVERRIDE = 2.0` |
+| Tight following error | Restore `FERROR` / `MIN_FERROR` per joint after tuning |
+| Stock tool-change dialog | Remove `dialogs.toolchange` override from `custom_config.yml` |
+| Single pause position | Set `#<tool_load_*>` equal to `#5181–#5183` or merge paths in `tool_touch_off.ngc` |
 
 Always re-test on air after reverting bench shortcuts.

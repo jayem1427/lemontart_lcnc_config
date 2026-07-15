@@ -75,12 +75,32 @@ Stock hallib also loops `probe-in` through QtPyVCP for simulation. This config *
 
 ---
 
-## Manual tool change dialog
+## Manual tool change dialog (ABORT CYCLE)
 
-Postgui nets `iocontrol.0.tool-change` to `qtpyvcp_manualtoolchange` (no auto-confirm). Used by:
+Stock Probe Basic uses the QtPyVCP `ToolChangeDialog`. This repo **replaces** it via [`probe_basic/custom_config.yml`](probe_basic/custom_config.yml):
 
-- `M6` from CAM (manual OK mode) or **M6 G43** buttons
-- `M600` flow after G30 positioning (`tool_touch_off.ngc`)
+```yaml
+dialogs:
+  toolchange:
+    provider: toolchange_dialog:ToolChangeDialog
+    kwargs:
+      ui_file: {{ file.dir }}/toolchange_dialog_pb.ui
+```
+
+**Files:** [`probe_basic/toolchange_dialog.py`](probe_basic/toolchange_dialog.py), [`toolchange_dialog_pb.ui`](probe_basic/toolchange_dialog_pb.ui)
+
+### Behavior vs stock
+
+| | Stock PB | This machine |
+|---|----------|--------------|
+| Resume | OK / change button | **ONCE TOOL IS LOADED - PRESS TO RESUME** |
+| Cancel mid-change | Often Esc / window close | **ABORT** button only — Esc and close are **ignored** |
+| After ABORT | Interpreter stuck or ambiguous | `program.abort()` → MDI `o<abort_tool_change> call` → G53 Z0 → tool-load XY (270, 100) |
+| After estop during dialog | — | Park skipped (machine disabled); `on_abort.ngc` handles spindle/coolant only |
+
+HAL contract is unchanged: same `qtpyvcp_manualtoolchange` pins (`change`, `changed`, `number`). Postgui wiring in [`probe_basic_postgui.hal`](probe_basic_postgui.hal) is stock.
+
+Used by `M6` (manual OK mode), **M6 G43**, and **M600** collet pause in `tool_touch_off.ngc`. Full flow: [TOOLSETTER.md](TOOLSETTER.md#abort--cancel-during-m600).
 
 ---
 

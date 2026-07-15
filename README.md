@@ -53,8 +53,8 @@ Full staged path (sim → EtherCAT → Probe Basic → CAM): **[GETTING_STARTED.
 | `custom.hal` | Modbus spindle mux, extras |
 | `h100.mb2hal` | Modbus register map for VFD |
 | `xhc-whb04b-6.hal` | Pendant |
-| `probe_basic/` | Probe Basic YAML, postgui HAL, DROs, macros, `tool.tbl` |
-| `nc_files/` | Default program search path |
+| `probe_basic/` | Probe Basic YAML, postgui HAL, DROs, macros, `tool.tbl`, custom tool-change dialog |
+| `nc_files/` | Default program search path (includes `m600_tool_change_test.ngc`) |
 | `linuxcnc-djr.cps` | Fusion 360 post (M600, XYZA, G93) |
 | `GETTING_STARTED.md` | Learning path and troubleshooting |
 | `DEVIATIONS.md` | Differences vs stock LinuxCNC / Probe Basic |
@@ -68,6 +68,7 @@ Many of these files are connected to each other. Using a tool like Cursor or Cla
 |--------|--------|
 | SET WCO Z (shim / manual touch-off) | XYZA DRO **SET Z** — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Load cutter + probe length | **LOAD SPINDLE** or CAM `T<n> M600` — [TOOLSETTER.md](TOOLSETTER.md) |
+| Cancel tool change mid-job | **ABORT** on Manual Tool Change dialog — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Z repeatability tests | MDI metrology macros — [metrology README](probe_basic/subroutines/metrology/README.md) |
 
 Feed override runs to **250%** (`MAX_FEED_OVERRIDE = 2.5`); pendant WHB knob uses the same limit.
@@ -103,6 +104,8 @@ Default probe tool is **T99**; `#3014`, `tool.tbl`, and HAL must all match. See 
 ## Current machine behavior (captured config)
 
 - Built-in M6 tool-change motion is **disabled** (`TOOL_CHANGE_AT_G30=0`, `TOOL_CHANGE_QUILL_UP=0`); retract and G30 are handled by `tool_touch_off.ngc` / `M600`.
+- **M600 collet pause** is at a fixed **tool-load** position (G53 **270, 100**), not the taught setter — see [TOOLSETTER.md](TOOLSETTER.md#tool-load-position-collet-change).
+- Custom **Manual Tool Change** dialog with **ABORT** — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md#manual-tool-change-dialog-abort-cycle).
 - Home/limit inputs below are wired active-low NC and inverted in HAL (`not.*`).
 - Touch probe (Slave 1 DI5) and contact toolsetter (Slave 1 DI2 / DB15 pin 9) are NC and **gated** to `motion.probe-input` by spindle tool (T99 → probe, else → toolsetter). See **Touch probe vs toolsetter routing** above.
 - Software E-stop is wired NC on Slave 3 DI1 / DB15 pin 10 and gates `iocontrol.0.emc-enable-in`.

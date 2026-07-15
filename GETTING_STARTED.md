@@ -111,6 +111,17 @@ When XYZ motion is trustworthy:
 - Fusion post: [`linuxcnc-djr.cps`](linuxcnc-djr.cps) — see [TOOLSETTER.md § CAM](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps)
 - Default tool change: **`T<n> M600`** (toolsetter probe), not stock `M6` motion
 
+### Stage 8 — Validate M600 and probing
+
+Before trusting CAM:
+
+1. Teach setter (**SET TOOL TOUCH OFF POS**) and spindle zero (**PROBE SPINDLE NOSE ZERO**) — unload touch probe first; see [TOOLSETTER.md](TOOLSETTER.md#teach-before-first-use).
+2. Air-cut test program: [`nc_files/m600_tool_change_test.ngc`](nc_files/m600_tool_change_test.ngc) — `T3 M600`, jog, `T9`/`T10 M600`. Each stop is at **tool-load XY** (270, 100), not the setter.
+3. MDI metrology: `o<probe_z_repeat_stats> call [10]` — [metrology README](probe_basic/subroutines/metrology/README.md).
+4. Confirm HAL routing: `halcmd show pin halui.tool.number` and trip each sensor.
+
+**EtherCAT tuning note:** committed `FERROR` values are wide (1270 / 254 mm) and drives set SDO `6065` to ~0.3 mm deviation. Tighten both after motion is stable — details in [DEVIATIONS.md](DEVIATIONS.md#relaxed-ferror--min_ferror).
+
 ## How the config fits together
 
 ```
@@ -156,6 +167,8 @@ ethercat_mill.ini
 | Touch-off without CAM | **TOUCH OFF CURRENT TOOL** |
 | WCS probing | Probe tab routines (requires T99 / `#3014` aligned) |
 | Repeatability check | `o<probe_z_repeat_stats> call [10]` — [metrology README](probe_basic/subroutines/metrology/README.md) |
+| Cancel mid M600 | **ABORT** on Manual Tool Change dialog — parks at tool-load XY |
+| Multi-tool air test | Load [`m600_tool_change_test.ngc`](nc_files/m600_tool_change_test.ngc) in AUTO |
 
 ## Troubleshooting
 
@@ -169,6 +182,10 @@ ethercat_mill.ini
 | Spindle runs wrong direction | `custom.hal` M3/M4 swap comment — `REVERT` line |
 | Fusion post missing M600 / 4th axis | Cached post — [TOOLSETTER.md](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps) |
 | Probe Basic spindle RPM blank | `probe_basic_postgui.hal` must net `spindle-speed-in` (already done here; stock hallib uses `scale_to_rpm` from sim) |
+| Following error / drive Er47.0 | Wide `FERROR` in INI + SDO `6065` in XML — [DEVIATIONS.md](DEVIATIONS.md#relaxed-ferror--min_ferror) |
+| PROBE SPINDLE NOSE crashes Z | Touch probe T#3014 still loaded — unload cutter first; macro aborts if `#3014` in spindle |
+| Pocket probe moves insanely fast | Upstream `[3017]` typo — fixed locally; verify after PB upgrade |
+| M600 pauses wrong place | Tool-load XY (`270,100`) ≠ setter teach — edit `#<tool_load_*>` in `tool_touch_off.ngc` |
 
 **Useful commands**
 
@@ -186,6 +203,7 @@ ethercat slaves
 | [TooTall18T/tool_length_probe](https://github.com/TooTall18T/tool_length_probe) v5.0.2 | `tool_touch_off.ngc`, M600 flow, G30 teach |
 | [kcjengr/probe_basic](https://github.com/kcjengr/probe_basic) | UI shell, probe routines, `pb_required_ini_settings.ini` |
 | [linuxcnc-ethercat](https://github.com/linuxcnc-ethercat/linuxcnc-ethercat) | `lcec` + CiA402 patterns |
+| [TooTall18T tool_length_probe wiki](https://github.com/TooTall18T/tool_length_probe/wiki) | M600 flow, `#5181–#5183`, parameter meanings |
 | LinuxCNC stock sim configs | HAL/INI structure, `trivkins` |
 | Forum / Discord snippets | WHB pendant filter, VFD at-speed delay, probe input mux |
 
