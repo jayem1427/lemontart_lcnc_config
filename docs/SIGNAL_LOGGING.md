@@ -27,7 +27,7 @@ Open the **Logging** tab (`probe_basic/user_tabs/signal_monitor/`). The tab uses
 | **LOG NEXT PROGRAM** | Arms logging; starts when the next program runs in **AUTO**, stops when the cycle ends |
 | **START LIVE** / **STOP** | Continuous logging while jogging or testing (no G-code required) |
 | **AXIS** (X Y Z A) | Checkable toggles — multi-select which axes appear on the plot |
-| **SIGNAL** | Exclusive — **DRIVE** (CiA 60F4), **TORQUE** (6077), **VEL** (606C), **POS** (actual joint position). Default **DRIVE**. Host `joint.N.f-error` is not plotted. |
+| **SIGNAL** | Exclusive — **DRIVE** (CiA 60F4), **TORQUE** (6077), **VEL** (606C), **POS** (actual joint position), **SPINDLE** (H100 VFD). Default **DRIVE**. Host `joint.N.f-error` is not plotted. |
 | **Y SCALE** | Auto, Symmetric, Fixed ±0.25 (mm ferr), Fixed ±60 (deg ferr), Fixed ±100% (torque) |
 | **RATE** | Sample rate: 25 / 50 / 100 / **200** / 500 / 1000 Hz (default **200** — 1000 Hz is still available but heavy on the GUI) |
 
@@ -35,6 +35,7 @@ Open the **Logging** tab (`probe_basic/user_tabs/signal_monitor/`). The tab uses
 | **TORQUE** | Drive CiA 6077 via raw ``lcec.0.N.torque-fb`` × 0.1 — **% rated** |
 | **VEL** | Drive CiA 606C counts/s ÷ joint ``SCALE`` × 60 — **mm/min** (XYZ) / **deg/min** (A) |
 | **POS** | Actual joint position via ``linuxcnc.stat.joint_actual_position`` (``joint.N.pos-fb``) — **mm** / **deg** |
+| **SPINDLE** | H100 VFD via mb2hal / ``spindle.0.*`` — toggles become **CMD** / **FB** / **A** / **RDY** (RPM cmd, RPM feedback, amps, at-speed). Fault code + raw VFD freq (0.1 Hz) always go to the CSV even if not plotted. |
 
 ### Sample rate and Nyquist
 
@@ -73,9 +74,11 @@ The legend panel on the right of the LOGGING box always shows all four axes for 
 - **Selected** axes: white text + white swatch border
 - **Unselected** axes: dimmed gray text
 
-The legend title updates with the signal family: `DRIVE FERR`, `TORQUE`, `VELOCITY`, or `POSITION`.
+The legend title updates with the signal family: `DRIVE FERR`, `TORQUE`, `VELOCITY`, `POSITION`, or `SPINDLE / VFD`.
 
-Y scale auto-suggests when you change axis or signal (e.g. DRIVE with only A → Fixed ±60; linear axes → Fixed ±0.25).
+Y scale auto-suggests when you change axis or signal (e.g. DRIVE with only A → Fixed ±60; linear axes → Fixed ±0.25; SPINDLE → Auto).
+
+In **SPINDLE** mode, default plot is commanded + feedback RPM (same units). Toggle **A** for amps alone or with RPM (mixed Y units — prefer one family at a time).
 
 ---
 
@@ -112,6 +115,17 @@ lcec.0.N.vel-fb (606C, drive units)
 
 lcec.0.N.ferr-fb (60F4, encoder counts)
   → conv-s32-float → div2 (÷ joint SCALE) → tune-drive-ferr.N.out  (mm or deg)
+```
+
+**Spindle / H100 VFD** (also `custom.hal` + `h100.mb2hal`):
+
+```
+spindle.0.speed-out-abs          → commanded RPM
+mb2hal.freq_fb.00 → ×6 → spindle.0.speed-in   → feedback RPM
+mb2hal.freq_fb.02 → ×0.01 → mult2.6.out         → output current (A)
+spindle.0.at-speed               → at-speed (0/1)
+mb2hal.vfd_fault.00.float        → current fault code
+mb2hal.freq_set.00 / freq_fb.00  → VFD freq cmd/fb (0.1 Hz register units)
 ```
 
 Drive **60F4** is the primary metric for loop tuning: computed inside the A6 at its servo rate (internal demand vs encoder), not inflated by host cmd−fb lag. Plot it as **DRIVE** on the Logging tab.

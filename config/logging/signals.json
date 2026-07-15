@@ -1,6 +1,6 @@
 {
   "name": "signals",
-  "description": "HAL telemetry — drive FERR/torque/velocity, actual joint position",
+  "description": "HAL telemetry — drive FERR/torque/velocity, joint position, H100 VFD spindle",
   "rate_hz": 100,
   "live_buffer": 1000,
   "log_subdir": "signals",
@@ -25,7 +25,14 @@
     {"id": "x_pos", "pin": "joint.0.pos-fb", "label": "X Pos", "units": "mm", "color": "#f39c12", "group": "position"},
     {"id": "y_pos", "pin": "joint.1.pos-fb", "label": "Y Pos", "units": "mm", "color": "#e67e22", "group": "position"},
     {"id": "z_pos", "pin": "joint.2.pos-fb", "label": "Z Pos", "units": "mm", "color": "#d35400", "group": "position"},
-    {"id": "a_pos", "pin": "joint.3.pos-fb", "label": "A Pos", "units": "deg", "color": "#c0392b", "group": "position"}
+    {"id": "a_pos", "pin": "joint.3.pos-fb", "label": "A Pos", "units": "deg", "color": "#c0392b", "group": "position"},
+    {"id": "spindle_rpm_cmd", "pin": "spindle.0.speed-out-abs", "label": "S RPM cmd", "units": "rpm", "color": "#e74c3c", "group": "spindle"},
+    {"id": "spindle_rpm_fb", "pin": "spindle.0.speed-in", "label": "S RPM fb", "units": "rpm", "color": "#3498db", "group": "spindle"},
+    {"id": "spindle_amps", "pin": "mult2.6.out", "label": "S Amps", "units": "A", "color": "#f1c40f", "group": "spindle"},
+    {"id": "spindle_at_speed", "pin": "spindle.0.at-speed", "label": "S at-speed", "units": "0/1", "color": "#2ecc71", "group": "spindle"},
+    {"id": "spindle_vfd_fault", "pin": "mb2hal.vfd_fault.00.float", "label": "VFD fault", "units": "code", "color": "#e67e22", "group": "spindle"},
+    {"id": "spindle_freq_cmd", "pin": "mb2hal.freq_set.00.float", "label": "VFD freq cmd", "units": "0.1Hz", "color": "#9b59b6", "group": "spindle"},
+    {"id": "spindle_freq_fb", "pin": "mb2hal.freq_fb.00.float", "label": "VFD freq fb", "units": "0.1Hz", "color": "#1abc9c", "group": "spindle"}
   ],
   "plot_groups": [
     {
@@ -69,6 +76,24 @@
       "title": "Actual position (joint.pos-fb)",
       "y_mode": "auto",
       "channels": ["x_pos", "y_pos", "z_pos", "a_pos"]
+    },
+    {
+      "id": "spindle_rpm",
+      "title": "Spindle RPM (cmd vs feedback)",
+      "y_mode": "auto",
+      "channels": ["spindle_rpm_cmd", "spindle_rpm_fb"]
+    },
+    {
+      "id": "spindle_load",
+      "title": "Spindle load / VFD status",
+      "y_mode": "auto",
+      "channels": ["spindle_amps", "spindle_at_speed", "spindle_vfd_fault"]
+    },
+    {
+      "id": "spindle_freq",
+      "title": "VFD frequency command / feedback (0.1 Hz units)",
+      "y_mode": "auto",
+      "channels": ["spindle_freq_cmd", "spindle_freq_fb"]
     }
   ]
 }

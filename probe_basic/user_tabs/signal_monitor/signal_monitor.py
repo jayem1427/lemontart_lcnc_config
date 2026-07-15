@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+from typing import Optional
 
 from qtpy import uic
 from qtpy.QtCore import Qt
@@ -44,11 +45,32 @@ AXIS_SIGNALS = {
     "A": {"DRIVE": "a_ferr_drive", "TORQUE": "a_torque", "VEL": "a_vel", "POS": "a_pos"},
 }
 
+# SPINDLE mode reuses the four toggle slots as VFD channel picks (not machine axes).
+SPINDLE_SIGNALS = {
+    "X": "spindle_rpm_cmd",
+    "Y": "spindle_rpm_fb",
+    "Z": "spindle_amps",
+    "A": "spindle_at_speed",
+}
+SPINDLE_BUTTON_LABELS = {
+    "X": "CMD",
+    "Y": "FB",
+    "Z": "A",
+    "A": "RDY",
+}
+SPINDLE_BUTTON_TIPS = {
+    "X": "Commanded spindle RPM (spindle.0.speed-out-abs)",
+    "Y": "VFD speed feedback → spindle.0.speed-in (RPM)",
+    "Z": "VFD output current (mult2.6.out, amps)",
+    "A": "At-speed flag (spindle.0.at-speed)",
+}
+
 SIGNAL_Y_DEFAULTS = {
     "DRIVE": "Fixed ±0.25",
     "TORQUE": "Fixed ±100%",
     "VEL": "Symmetric",
     "POS": "Auto",
+    "SPINDLE": "Auto",
 }
 
 SIGNAL_UNITS = {
@@ -56,9 +78,11 @@ SIGNAL_UNITS = {
     "TORQUE": "%",
     "VEL": "mm/min",
     "POS": "mm",
+    "SPINDLE": "rpm",
 }
 
 AXIS_ORDER = ("X", "Y", "Z", "A")
+AXIS_BUTTON_DEFAULTS = {axis: axis for axis in AXIS_ORDER}
 RATE_HZ_OPTIONS = (25, 50, 100, 200, 500, 1000)
 # HAL reads must run on the UI thread (same as Servo Tuning). Keep the timer
 # fast enough to catch the sample rate; plot redraw stays slower.
@@ -228,6 +252,7 @@ class UserTab(QWidget):
             ("TORQUE", "TORQUE %"),
             ("VEL", "VEL mm/min"),
             ("POS", "POS mm"),
+            ("SPINDLE", "SPINDLE"),
         ):
             btn = QPushButton(label, panel)
             btn.setObjectName("btnSignal")
@@ -248,6 +273,11 @@ class UserTab(QWidget):
                 btn.setToolTip(
                     "Actual joint position (joint.N.pos-fb) — mm on XYZ, deg on A"
                 )
+            elif signal == "SPINDLE":
+                btn.setToolTip(
+                    "H100 VFD: commanded RPM, feedback RPM, output amps, at-speed. "
+                    "Toggles become CMD / FB / A / RDY. Fault + raw freq also go to CSV."
+                )
             self.signal_group.addButton(btn)
             btn.toggled.connect(
                 lambda checked, sig=signal: self._on_signal_toggled(sig, checked)
@@ -259,6 +289,7 @@ class UserTab(QWidget):
         self.axis_buttons["X"].setChecked(True)
         self.signal_buttons["DRIVE"].setChecked(True)
         self._syncing_selection = False
+        self._sync_axis_button_labels()
 
         row_view.addSpacing(16)
         row_view.addWidget(self._caption_label("Y SCALE", panel))
@@ -342,6 +373,22 @@ class UserTab(QWidget):
         layout.addStretch()
         return box
 
+    def _sync_axis_button_labels(self) -> None:
+        """Axis toggles become VFD channel picks in SPINDLE mode."""
+        spindle = self._current_signal == "SPINDLE"
+        for axis, btn in self.axis_buttons.items():
+            if spindle:
+                btn.setText(SPINDLE_BUTTON_LABELS[axis])
+                btn.setToolTip(SPINDLE_BUTTON_TIPS[axis])
+            else:
+                btn.setText(AXIS_BUTTON_DEFAULTS[axis])
+                btn.setToolTip("Click to toggle this axis on the plot")
+
+    def _channel_id_for_toggle(self, axis: str) -> Optional[str]:
+        if self._current_signal == "SPINDLE":
+            return SPINDLE_SIGNALS.get(axis)
+        return AXIS_SIGNALS[axis].get(self._current_signal)
+
     def _update_fixed_legend(self) -> None:
         if not hasattr(self, "_legend_rows"):
             return
@@ -351,15 +398,21 @@ class UserTab(QWidget):
             "TORQUE": "TORQUE (% rated)",
             "VEL": "VELOCITY (mm/min / deg/min)",
             "POS": "POSITION (mm / deg)",
+            "SPINDLE": "SPINDLE / VFD",
         }
         self.legend_title.setText(titles.get(self._current_signal, "LEGEND"))
 
         channels = self.logger.channel_by_id()
         for axis in AXIS_ORDER:
             swatch, text = self._legend_rows[axis]
-            channel_id = AXIS_SIGNALS[axis][self._current_signal]
-            channel = channels.get(channel_id)
+            channel_id = self._channel_id_for_toggle(axis)
+            channel = channels.get(channel_id) if channel_id else None
             if channel is None:
+                swatch.setStyleSheet(
+                    "background-color: #555; border: 1px solid #8a8484; "
+                    "border-radius: 2px;"
+                )
+                text.setText(axis)
                 continue
 
             unit = f"  {channel.units}" if channel.units else ""
@@ -375,6 +428,17 @@ class UserTab(QWidget):
             text.style().unpolish(text)
             text.style().polish(text)
 
+    def _active_channel_ids(self) -> set:
+        axes = self._selected_axes()
+        if not axes:
+            return set()
+        out = set()
+        for axis in axes:
+            cid = self._channel_id_for_toggle(axis)
+            if cid:
+                out.add(cid)
+        return out
+
     def _rebuild_plot(self) -> None:
         while self.plot_layout.count():
             item = self.plot_layout.takeAt(0)
@@ -387,12 +451,6 @@ class UserTab(QWidget):
 
     def _selected_axes(self) -> set:
         return {axis for axis, btn in self.axis_buttons.items() if btn.isChecked()}
-
-    def _active_channel_ids(self) -> set:
-        axes = self._selected_axes()
-        if not axes:
-            return set()
-        return {AXIS_SIGNALS[axis][self._current_signal] for axis in axes}
 
     def _apply_plot_view(self) -> None:
         if self.plot_widget is None:
@@ -419,6 +477,9 @@ class UserTab(QWidget):
         return " / ".join(units)
 
     def _suggested_scale(self) -> str:
+        if self._current_signal == "SPINDLE":
+            # Prefer Auto — RPM and amps do not share a fixed scale.
+            return "Auto"
         axes = self._selected_axes()
         if self._current_signal == "DRIVE":
             if axes == {"A"}:
@@ -444,7 +505,22 @@ class UserTab(QWidget):
     def _on_signal_toggled(self, signal: str, checked: bool) -> None:
         if self._syncing_selection or not checked:
             return
+        prev = self._current_signal
         self._current_signal = signal
+        self._sync_axis_button_labels()
+        # Entering SPINDLE: default to cmd+fb RPM (not amps on the same Y scale).
+        if signal == "SPINDLE" and prev != "SPINDLE":
+            self._syncing_selection = True
+            self.axis_buttons["X"].setChecked(True)
+            self.axis_buttons["Y"].setChecked(True)
+            self.axis_buttons["Z"].setChecked(False)
+            self.axis_buttons["A"].setChecked(False)
+            self._syncing_selection = False
+        elif signal != "SPINDLE" and prev == "SPINDLE":
+            self._syncing_selection = True
+            for axis, btn in self.axis_buttons.items():
+                btn.setChecked(axis == "X")
+            self._syncing_selection = False
         self._update_fixed_legend()
         self._maybe_update_scale()
 
