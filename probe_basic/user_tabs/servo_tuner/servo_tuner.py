@@ -1538,17 +1538,13 @@ class UserTab(QWidget):
             self.inertia_plot.set_title(f"{self._axis} inertia · TQ% + vel")
             self.inertia_plot.clear()
             self.plot_stack.setCurrentWidget(self.inertia_plot)
-            self._idle_inertia_readout()
-            # Auto-arm the live plot so BEGIN shows the ID traces immediately.
-            if not self._logging_active:
-                self._logging_active = True
+            # Plot only during BEGIN…finish — no idle arming (keeps t=0 aligned
+            # with the campaign so the window isn't half-filled with pre-move junk).
+            if self._gi_tuner is None and self._logging_active:
+                self._logging_active = False
                 self._sync_ferr_timer()
-                self._sync_log_button()
-                self._notify(
-                    f"Inertia plot ON — {self._axis} torque % + {vel_unit}"
-                )
-            else:
-                self._update_inertia_readout_live()
+            self._idle_inertia_readout()
+            self._sync_log_button()
         else:
             self._plot_group.setTitle("DRIVE FERR (CiA 60F4)")
             self.ferr_plot.set_title("")
@@ -1766,13 +1762,17 @@ class UserTab(QWidget):
             return
         if self._panel_mode == "inertia":
             unit = axis_unit(self._axis)
-            if self._logging_active:
+            if self._gi_tuner is not None and self._logging_active:
+                self.log_status_label.setText(
+                    f"PLOT: inertia live · {self._axis} TQ% + {unit}/min"
+                )
+            elif self._logging_active:
                 self.log_status_label.setText(
                     f"PLOT: inertia live · {self._axis} TQ% + {unit}/min"
                 )
             else:
                 self.log_status_label.setText(
-                    f"PLOT: inertia idle · {self._axis} TQ% + {unit}/min"
+                    f"PLOT: idle until BEGIN · {self._axis} TQ% + {unit}/min"
                 )
             return
         plotted = " ".join(self._plot_axes) if self._plot_axes else "—"
@@ -1959,6 +1959,9 @@ class UserTab(QWidget):
         if not self._logging_active or not self.isVisible():
             return
         if self._panel_mode == "inertia":
+            # Live TQ/vel strip is campaign-scoped only (see BEGIN / finish).
+            if self._gi_tuner is None:
+                return
             self._poll_inertia_plot()
             return
 
@@ -2046,7 +2049,7 @@ class UserTab(QWidget):
         self.ferr_unit_value_label.setText(f"{axis} VEL: —")
         self.ferr_peak_label.setText("PEAK: —")
         self.ferr_scale_label.setText(
-            f"torque % + {unit}/min (plot off) — START PLOT or BEGIN"
+            f"torque % + {unit}/min — plot arms on BEGIN only"
         )
     def _update_focus_ferr_readout(self) -> None:
         axis = self._axis
@@ -2114,35 +2117,37 @@ class UserTab(QWidget):
         want_on = self.log_button.isChecked()
         if want_on:
             if self._panel_mode == "inertia":
-                if hasattr(self, "inertia_plot"):
-                    self.inertia_plot.clear()
-                    unit = axis_unit(self._axis)
-                    self.inertia_plot.set_vel_unit(f"{unit}/min")
-                    self.inertia_plot.set_title(
-                        f"{self._axis} inertia · TQ% + vel"
-                    )
-                self._logging_active = True
-                self._notify(
-                    f"Plot ON — {self._axis} torque % + velocity"
+                # Inertia strip chart is owned by the BEGIN campaign so t=0 is
+                # always the start of the ID move — no free-running buffer.
+                self.log_button.blockSignals(True)
+                self.log_button.setChecked(False)
+                self.log_button.blockSignals(False)
+                QMessageBox.information(
+                    self,
+                    "Inertia plot",
+                    "Torque/velocity plotting starts automatically when you "
+                    "press BEGIN INERTIA AUTO-TUNE and stops when it finishes.\n\n"
+                    "That keeps the plot window aligned with the measurement.",
                 )
-            else:
-                if not self._plot_axes:
-                    self.log_button.blockSignals(True)
-                    self.log_button.setChecked(False)
-                    self.log_button.blockSignals(False)
-                    QMessageBox.information(
-                        self,
-                        "Start plot",
-                        "Check at least one axis button (X/Y/Z/A) to plot.",
-                    )
-                    self._sync_log_button()
-                    return
-                self._clear_ferr_plot()
-                self.ferr_plot.set_active_axes(list(self._plot_axes))
-                self._logging_active = True
-                self._notify(
-                    "Plot ON — live FERR for: " + " ".join(self._plot_axes)
+                self._sync_log_button()
+                return
+            if not self._plot_axes:
+                self.log_button.blockSignals(True)
+                self.log_button.setChecked(False)
+                self.log_button.blockSignals(False)
+                QMessageBox.information(
+                    self,
+                    "Start plot",
+                    "Check at least one axis button (X/Y/Z/A) to plot.",
                 )
+                self._sync_log_button()
+                return
+            self._clear_ferr_plot()
+            self.ferr_plot.set_active_axes(list(self._plot_axes))
+            self._logging_active = True
+            self._notify(
+                "Plot ON — live FERR for: " + " ".join(self._plot_axes)
+            )
         else:
             self._logging_active = False
             if self._panel_mode == "inertia":
@@ -2161,12 +2166,23 @@ class UserTab(QWidget):
         self.log_button.blockSignals(True)
         self.log_button.setChecked(active)
         self.log_button.blockSignals(False)
-        if active:
+        if self._panel_mode == "inertia" and self._gi_tuner is None:
+            # Campaign owns the strip chart; button is a no-op reminder.
+            self.log_button.setText("PLOT ON BEGIN")
+            self.log_button.setObjectName("btnLog")
+            self.log_button.setEnabled(True)
+            self.log_button.setToolTip(
+                "Inertia torque/velocity plot arms automatically on BEGIN "
+                "and freezes when the campaign finishes."
+            )
+        elif active:
             self.log_button.setText("STOP PLOT")
             self.log_button.setObjectName("btnDanger")
+            self.log_button.setToolTip("")
         else:
             self.log_button.setText("START PLOT")
             self.log_button.setObjectName("btnLog")
+            self.log_button.setToolTip("")
         self.log_button.style().unpolish(self.log_button)
         self.log_button.style().polish(self.log_button)
         self._update_plot_axis_hint()
@@ -2600,8 +2616,8 @@ class UserTab(QWidget):
         self._logging_active = True
         self._sync_ferr_timer()
         self._sync_log_button()
+        self._notify(f"Inertia plot armed @ BEGIN — tune started on {axis}.")
 
-        self._notify(f"Graphical inertia tune started on {axis}.")
         worker = threading.Thread(
             target=self._gi_worker, args=(tuner,), daemon=True
         )
@@ -2636,6 +2652,10 @@ class UserTab(QWidget):
     def _on_gi_finished(self, result) -> None:
         self._gi_tuner = None
         self._set_gi_running(False)
+        # Freeze the campaign trace — stop polling, keep buffer visible.
+        self._logging_active = False
+        self._sync_ferr_timer()
+        self._sync_log_button()
 
         if isinstance(result, BaseException):
             self.gi_result_label.setText(f"Crashed: {result}")

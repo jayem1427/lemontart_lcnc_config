@@ -139,7 +139,7 @@ torque CV is high, re-run with limit ≈ 90% of probe \(T_p\) (above \(T_f\)).
 | quality `bad` / analysis fails, ~20 ms ramp | Accel stretch did not apply | Confirm LinuxCNC running; check journal `accel` events |
 | quality `marginal`, “not flat” | Spiky accel torque | Let auto-flatten run, or set Torque limit just below peak |
 | quality `marginal`, ratio ≫200%, low feed | \(T_a\) SNR too low | Raise feed to F5000–F10000 |
-| Live plot flat | Wrong panel / HAL pins | Stay on INERTIA panel; plot auto-arms |
+| Live plot flat / empty before BEGIN | Plot arms only during the campaign | Press BEGIN — strip starts at t=0 with the move |
 | C00.06 unchanged after “ok” | Estimate was marginal | Gate skipped write — read status line / journal |
 
 ---
