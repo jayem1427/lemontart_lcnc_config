@@ -11,7 +11,7 @@ tool setter on this mill.
 |---------|--------|
 | HAL wiring (Slave 2 DI5 → `laser-beam-broken`) | Live — **not** on `motion.probe-input` |
 | Live beam LED on tab | Live (`laser-beam-broken`) |
-| **MEASURE DIAMETER** (tip-find → Z-drop → +X break/clear) | Live (HAL step-seek) |
+| **MEASURE DIAMETER** | Live — Z0 tip-find → side pre-touch → M4 → break/clear |
 | **CALIBRATE** / **MEASURE LENGTH** | Live (experimental; length ≠ contact TLO yet) |
 | Oversize / remaining-travel abort | Live |
 
@@ -109,10 +109,10 @@ UI always syncs **mm** into these params even when the Units combo shows inches.
 ### Operator recipe
 
 1. Restart LinuxCNC after HAL / tab changes.
-2. Load a cutter; jog to a **safe Z** above the beam (tip clear).
+2. Load a cutter; machine must allow G53 Z0 as clear/safe height.
 3. CAPTURE START X/Y over the **slot center**; set **Z DROP** (default 2 mm).
-4. Set PROBE RPM (`0` = static; >0 spins during tip-find and cross-feed).
-5. Press **MEASURE DIAMETER**.
+4. Set PROBE RPM (`0` = static diameter; &gt;0 spins **M4 reverse** for the measure pass).
+5. Press **MEASURE DIAMETER** (macro goes to Z0 itself — no need to pre-jog safe Z).
 6. Read **DIAMETER** on the Results column (raw break→clear width). Footer shows
    success or failure text.
 
@@ -120,22 +120,24 @@ Tool **radius must be &lt; search** (default 10 mm → tools under ~Ø20 mm with
 
 ### Motion sequence (`o<laser_diameter>`)
 
-1. Force `G21 G90`; clear `#5515` / `M68 E1 Q0`.
-2. Retract to approach Z (`#<_abs_z>`), then rapid to START XY.
-3. Optional `M3` if RPM > 0.
-4. **Tip-find:** stepped `G1 Z−` until `laser-beam-broken` (coarse 0.2 → fine 0.02).
-5. Retract to approach Z; rapid to `START X − search`, same Y.
-6. Drop to `tip_z − Z_DROP`.
-7. Abort if beam already broken at X start.
-8. **Edge 1:** stepped `G1 X+` until break → `#5513`.
-9. Abort if remaining travel to `x_right` &lt; 0.5 mm (oversize / crash risk).
-10. **Edge 2:** stepped `G1 X+` until clear → `#5514`.
-11. `#5512 = |X_clear − X_break|`; reject if diameter &gt; `2×search − 0.5`.
-12. `#5515 = 1`; `M68 E0 Q#5512`; `M68 E1 Q1`; retract; `M5`.
+1. Force `G21 G90`; spindle off; clear `#5515` / `M68 E1 Q0`.
+2. Rapid to **G53 Z0**, then START XY (slot center).
+3. **Tip-find** (spindle off): slow stepped `G1 Z−` until `laser-beam-broken`
+   (coarse 0.2 → fine 0.02). Store tip Z in `#5510`.
+4. Retract to **G53 Z0**; rapid to `START X − search` (clear side), same Y.
+5. Drop to `tip_z − Z_DROP` (default 2 mm below first trigger).
+6. Abort if beam already broken at X start.
+7. **Pre-touch:** feed +X until break; retract **X − 2 mm**; abort if still in beam.
+8. **M4** reverse spin-up if PROBE RPM &gt; 0 (`G4 P1`).
+9. **Edge 1:** feed +X until break → `#5513`.
+10. Abort if remaining travel to `x_right` &lt; 0.5 mm (oversize / crash risk).
+11. **Edge 2:** feed +X until clear → `#5514`.
+12. `#5512 = |X_clear − X_break|`; reject if diameter &gt; `2×search − 0.5`.
+13. `#5515 = 1`; `M68 E0 Q#5512`; `M68 E1 Q1`; retract to Z0; `M5`.
 
-Every abort path retracts to approach Z and stops the spindle.
+Every abort path retracts to G53 Z0 and stops the spindle.
 
-Measure axis is **+X through START X**. Y-oriented slots would need a later axis option.
+Operator no longer needs to pre-jog a “safe Z” — the macro always uses **Z0** as clear height.
 
 ### Result quality
 

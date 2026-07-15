@@ -355,9 +355,11 @@ class UserTab(QWidget):
             "(DB15 pin 11) via level shift.\n"
             "2. LASER LED follows HAL laser-beam-broken (clear vs tool in beam).\n"
             "3. CAPTURE START X/Y over the slot center; set Z DROP (default 2 mm).\n"
-            "4. Jog to a safe Z above the beam → MEASURE DIAMETER:\n"
-            "   tip-find → side start → drop Z → cross +X (break→clear) → diameter.\n"
-            "5. Optional: CALIBRATE / MEASURE LENGTH for length experiments.\n"
+            "4. Set PROBE RPM (0 = static; >0 = M4 reverse during diameter pass).\n"
+            "5. MEASURE DIAMETER:\n"
+            "   Z0 → tip-find → Z0 → side XY → tip−ZDROP → pre-touch → "
+            "X−2mm → M4 → break→clear diameter.\n"
+            "6. Optional: CALIBRATE / MEASURE LENGTH for length experiments.\n"
             "Laser measure does NOT use motion.probe-input (contact path stays clean).",
         )
 
