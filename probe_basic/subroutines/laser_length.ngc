@@ -18,6 +18,7 @@ o<laser_length> sub
     #<beam_z> = #5504
     #<approach> = #5505
     #<max_travel> = #5506
+    #<beam_offset> = #5509
     #<fast_fr> = #3004
     #<slow_fr> = #3005
     #<step_z_coarse> = 0.20
@@ -29,6 +30,9 @@ o<laser_length> sub
     o<len_travel> if [#<max_travel> LE 0]
       #<max_travel> = 30
     o<len_travel> endif
+    o<len_off> if [#<beam_offset> LE 0]
+      #<beam_offset> = 10
+    o<len_off> endif
     o<len_feeds> if [#<fast_fr> LE 0]
       #<fast_fr> = 200
       #<slow_fr> = 40
@@ -44,12 +48,13 @@ o<laser_length> sub
       o<laser_length> return
     o<len_check_beam> endif
 
+    #<tip_x> = [#<start_x> + #<beam_offset>]
     #<z_approach> = [#<beam_z> + #<approach>]
     #<z_limit> = [#<beam_z> - #<max_travel>]
 
-    (DEBUG, LASER LENGTH: seek via laser-beam-broken)
+    (DEBUG, LASER LENGTH: seek at tip_x = START + BEAM OFFSET)
     G53 G0 Z#<z_approach>
-    G53 G0 X#<start_x> Y#<start_y>
+    G53 G0 X#<tip_x> Y#<start_y>
 
     o<len_spin> if [#<probe_rpm> GT 0]
       M3 S#<probe_rpm>

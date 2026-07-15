@@ -1,14 +1,19 @@
 (author: jayem)
 (date: 2026)
 (Store diameter-measure params.)
-(#1 = Z drop below tip mm, #2 = half-search travel from START XY mm)
+(#1 = Z drop below tip mm)
+(#2 = max horizontal travel from START toward +X mm — stop looking)
+(#3 = beam offset from START toward +X mm — tip-find XY)
 
 o<laser_set_diam_params> sub
     #5507 = #1
-    o<sdp_search> if [#2 GT 0]
+    o<sdp_trav> if [#2 GT 0]
       #5508 = #2
-    o<sdp_search> endif
-    (DEBUG, LASER: Z-drop=#5507 search=#5508)
+    o<sdp_trav> endif
+    o<sdp_off> if [#3 GT 0]
+      #5509 = #3
+    o<sdp_off> endif
+    (DEBUG, LASER: Z-drop=#5507 max-travel=#5508 beam-offset=#5509)
 o<laser_set_diam_params> endsub
 
 M2

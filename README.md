@@ -293,9 +293,9 @@ Dedicated Probe Basic tab for the **Kexin DS-5V-M** laser tool setter.
 ### Quick start (diameter)
 
 1. Restart LinuxCNC after HAL / tab changes.
-2. CAPTURE START X/Y over the slot center; set **Z DROP** (default 2 mm).
-3. **MEASURE DIAMETER** (macro uses G53 Z0 as clear height).
-4. If tip-find never trips, invert polarity (`not.10` in `ethercat_mill.hal`) — see the doc.
+2. Jog clear of the beam (Y on center) → **CAPTURE START**.
+3. Set **BEAM OFFSET**, **MAX TRAVEL**, **Z DROP** → **MEASURE DIAMETER**.
+4. If tip-find never trips, check BEAM OFFSET / polarity (`not.10`) — see the doc.
 
 ### Wiring (this mill)
 
@@ -310,9 +310,11 @@ Dedicated Probe Basic tab for the **Kexin DS-5V-M** laser tool setter.
 
 | UI field | NGC | Notes |
 |----------|-----|-------|
-| START X/Y | `#5501` / `#5502` | Slot center (G53 mm; not G30 `#5181–#5183`) |
-| PROBE RPM | `#5503` | 0 = no spin |
+| START X/Y | `#5501` / `#5502` | Clear of beam (G53 mm); Y usually slot center |
+| PROBE RPM | `#5503` | 0 = no spin; else M4 on diameter pass |
 | Z DROP | `#5507` | Default 2 mm below tip |
+| MAX TRAVEL | `#5508` | Max +X from START (stop looking) |
+| BEAM OFFSET | `#5509` | START → tip-find/beam (default 10 mm) |
 | BEAM Z | `#5504` | CALIBRATE (length only) |
 
 | Button | Macro |

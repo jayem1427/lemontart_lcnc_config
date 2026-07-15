@@ -218,7 +218,7 @@
           <item row="3" column="1">
            <widget class="QLineEdit" name="leZDrop">
             <property name="text"><string>2.0000</string></property>
-            <property name="toolTip"><string>After tip-find, lower this far into the tool before diameter cross-feed</string></property>
+            <property name="toolTip"><string>Below tip-find Z before diameter cross-feed</string></property>
             <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
             <property name="minimumHeight"><number>28</number></property>
            </widget>
@@ -228,12 +228,51 @@
             <property name="text"><string>mm</string></property>
            </widget>
           </item>
+
+          <item row="4" column="0">
+           <widget class="QLabel" name="lblBeamOffsetCap">
+            <property name="text"><string>BEAM OFFSET</string></property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QLineEdit" name="leBeamOffset">
+            <property name="text"><string>10.0000</string></property>
+            <property name="toolTip"><string>Distance from START toward +X to the beam (tip-find XY)</string></property>
+            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+            <property name="minimumHeight"><number>28</number></property>
+           </widget>
+          </item>
+          <item row="4" column="2">
+           <widget class="QLabel" name="lblBeamOffsetUnit">
+            <property name="text"><string>mm</string></property>
+           </widget>
+          </item>
+
+          <item row="5" column="0">
+           <widget class="QLabel" name="lblMaxTravelCap">
+            <property name="text"><string>MAX TRAVEL</string></property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QLineEdit" name="leMaxTravel">
+            <property name="text"><string>20.0000</string></property>
+            <property name="toolTip"><string>Max +X distance from START — stop looking before the far wall</string></property>
+            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+            <property name="minimumHeight"><number>28</number></property>
+           </widget>
+          </item>
+          <item row="5" column="2">
+           <widget class="QLabel" name="lblMaxTravelUnit">
+            <property name="text"><string>mm</string></property>
+           </widget>
+          </item>
          </layout>
         </item>
 
         <item>
          <widget class="QPushButton" name="btnGetStartPos">
-          <property name="text"><string>CAPTURE CURRENT X/Y</string></property>
+          <property name="text"><string>CAPTURE START (CLEAR OF BEAM)</string></property>
+          <property name="toolTip"><string>Capture machine XY beside the beam — not over the beam center</string></property>
           <property name="minimumHeight"><number>40</number></property>
          </widget>
         </item>

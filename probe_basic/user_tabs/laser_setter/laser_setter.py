@@ -3,7 +3,8 @@ Laser Tool Setter — user tab for Probe Basic.
 
 DS-5V-M on Slave 2 DI5 (DB15 pin 11). Live LASER LED mirrors HAL
 laser-beam-broken (clear vs tool in beam). MEASURE DIAMETER tip-finds Z,
-drops by user Z DROP, then cross-feeds +X for break→clear width.
+drops by user Z DROP, then cross-feeds +X from START (clear of beam)
+through the beam up to MAX TRAVEL.
 
 Measure macros read #<_hal[laser-beam-broken]> directly — they do NOT use
 motion.probe-input / G38, so contact probe and toolsetter stay isolated.
@@ -108,6 +109,8 @@ LINEAR_UNIT_WIDGETS = (
     'lblStartXUnit',
     'lblStartYUnit',
     'lblZDropUnit',
+    'lblBeamOffsetUnit',
+    'lblMaxTravelUnit',
 )
 
 SETUP_SYNC_BUTTONS = {
@@ -354,12 +357,15 @@ class UserTab(QWidget):
             "1. Hardwire DS-5V-M Select to GND; 5 V power; signal → Slave 2 DI5 "
             "(DB15 pin 11) via level shift.\n"
             "2. LASER LED follows HAL laser-beam-broken (clear vs tool in beam).\n"
-            "3. CAPTURE START X/Y over the slot center; set Z DROP (default 2 mm).\n"
-            "4. Set PROBE RPM (0 = static; >0 = M4 reverse during diameter pass).\n"
-            "5. MEASURE DIAMETER:\n"
-            "   Z0 → tip-find → Z0 → side XY → tip−ZDROP → pre-touch → "
-            "X−2mm → M4 → break→clear diameter.\n"
-            "6. Optional: CALIBRATE / MEASURE LENGTH for length experiments.\n"
+            "3. Jog clear of the beam (e.g. ~10 mm in X), Y on slot center → "
+            "CAPTURE START.\n"
+            "4. Set BEAM OFFSET (START→beam for tip-find), MAX TRAVEL "
+            "(START→stop, before far wall), Z DROP.\n"
+            "5. PROBE RPM: 0 = static; >0 = M4 reverse on diameter pass.\n"
+            "6. MEASURE DIAMETER:\n"
+            "   Z0 → tip-find at START+offset → Z0 → START → tip−ZDROP → "
+            "pre-touch → X−2mm → M4 → break→clear (stop at START+max travel).\n"
+            "7. Optional: CALIBRATE / MEASURE LENGTH for length experiments.\n"
             "Laser measure does NOT use motion.probe-input (contact path stays clean).",
         )
 
@@ -404,6 +410,8 @@ class UserTab(QWidget):
         self._convert_numeric_widget('leStartX', factor)
         self._convert_numeric_widget('leStartY', factor)
         self._convert_numeric_widget('leZDrop', factor)
+        self._convert_numeric_widget('leBeamOffset', factor)
+        self._convert_numeric_widget('leMaxTravel', factor)
         for widget_name in LINEAR_VALUE_WIDGETS:
             self._convert_numeric_widget(widget_name, factor)
 
@@ -436,6 +444,24 @@ class UserTab(QWidget):
         if z_drop <= 0:
             return None
         return z_drop
+
+    def _parse_beam_offset_mm(self):
+        try:
+            offset = self._ui_to_mm(float(self.leBeamOffset.text().strip()))
+        except (AttributeError, ValueError):
+            return None
+        if offset <= 0:
+            return None
+        return offset
+
+    def _parse_max_travel_mm(self):
+        try:
+            travel = self._ui_to_mm(float(self.leMaxTravel.text().strip()))
+        except (AttributeError, ValueError):
+            return None
+        if travel <= 0:
+            return None
+        return travel
 
     def _sync_setup_params(self):
         setup = self._parse_setup_fields_mm()
@@ -474,21 +500,30 @@ class UserTab(QWidget):
             return False
 
     def _sync_diam_params(self) -> bool:
-        """Push Z DROP (+ default search) into #5507/#5508 before diameter."""
+        """Push Z DROP, MAX TRAVEL, BEAM OFFSET into #5507-#5509."""
         z_drop = self._parse_z_drop_mm()
         if z_drop is None:
             self._set_status("ERROR: invalid Z DROP (must be > 0)")
             return False
+        max_travel = self._parse_max_travel_mm()
+        if max_travel is None:
+            self._set_status("ERROR: invalid MAX TRAVEL (must be > 0)")
+            return False
+        beam_offset = self._parse_beam_offset_mm()
+        if beam_offset is None:
+            self._set_status("ERROR: invalid BEAM OFFSET (must be > 0)")
+            return False
+        if beam_offset >= max_travel:
+            self._set_status("ERROR: BEAM OFFSET must be < MAX TRAVEL")
+            return False
         if self._cmd is None:
             return False
-        # Half-travel from START XY; must exceed expected tool radius.
-        search = 10.0
         try:
             self._cmd.mode(linuxcnc.MODE_MDI)
             self._cmd.wait_complete()
             self._cmd.mdi(
-                "o<laser_set_diam_params> call [{:.6f}] [{:.6f}]".format(
-                    z_drop, search
+                "o<laser_set_diam_params> call [{:.6f}] [{:.6f}] [{:.6f}]".format(
+                    z_drop, max_travel, beam_offset
                 )
             )
             self._cmd.wait_complete()
