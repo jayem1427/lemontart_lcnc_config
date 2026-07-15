@@ -49,10 +49,15 @@ logs/tuning/**/*.json
 !logs/**/.gitkeep
 !logs/tuning/.gitkeep
 
-# One-click auto-tune journals (journal.md + json + FERR CSVs per campaign)
-logs/tuning/one_click/
+# One-click campaign journals + FERR CSVs (tracked for offline review)
+!logs/tuning/one_click/
+!logs/tuning/one_click/**/
+!logs/tuning/one_click/**/*.csv
+!logs/tuning/one_click/**/*.json
+!logs/tuning/one_click/**/*.md
+!logs/tuning/one_click/**/*.txt
 
-# Graphical (T=Jα) inertia-tune journals
+# Graphical (T=Jα) inertia-tune journals (still local-only)
 logs/tuning/graphical_inertia/
 
 # Local UI smoke screenshots
