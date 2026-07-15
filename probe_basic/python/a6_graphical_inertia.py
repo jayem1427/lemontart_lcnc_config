@@ -1,15 +1,21 @@
-"""Graphical inertia identification (Yaskawa-style T=Jα) for A6-EC.
+"""Graphical inertia identification (Yaskawa Sigma II Graphical Analysis) for A6-EC.
 
 Runs a trapezoidal move under LinuxCNC CSP, samples drive torque (6077) and
 velocity (606C), then estimates load/motor inertia ratio for C00.06.
 
-Primary estimator (v0.4): accel/decel friction cancel with measured α
+Primary estimator (v0.5) matches the Sigma II Parameter Calculator worksheet:
 
-    T_A   = |T_acc − T_dec| / 2     (directed mid-band torque on each edge)
-    α     = Δω / Δt                 (rest→cruise wall-clock endpoints)
-    J_tot = T_A / α
-    J_L   = J_tot - J_M
-    ratio% = 100 * J_L / J_M
+    T_a = T_p − T_f                 (accel peak − cruise friction)
+    α   = Δω / Δt                   (inside the constant-torque accel window)
+    J_L = T_a / α − J_M
+    ratio% = 100 * J_L / J_M        (→ C00.06, like Pn103)
+
+When there is no usable cruise (triangle profile), friction falls back to the
+workbook's signed mean of accel+decel torque — algebraically the same as
+|T_acc − T_dec|/2 for inertial torque.
+
+Optional two-pass auto-flatten mirrors Pn402: probe unconstrained peak, then
+re-run with a CiA torque limit so accel torque is flat.
 
 C00.06 is written only when quality is ``good``. See
 docs/GRAPHICAL_INERTIA_TUNE.md. Separate from F30.10 and one-click gains.
@@ -55,16 +61,17 @@ except ImportError:  # pragma: no cover
     linuxcnc = None  # type: ignore
 
 LOG = logging.getLogger(__name__)
-ENGINE_VERSION = "0.4.0"
+ENGINE_VERSION = "0.5.0"
 
-# Accel/decel edges shorter than this are unusable for measured α.
+# Accel windows shorter than this are unusable for measured α on A6 (606C
+# stepping). The Sigma II example used ~3 ms; we keep a longer floor here.
 MIN_ACCEL_S = 0.080
 MIN_DECEL_S = 0.070
+MIN_CRUISE_S = 0.040
 # Target ramp length for ID moves (ini max_acceleration stretch).
 PREFERRED_ACCEL_S = 0.120
 MIN_ID_ACCEL_UNIT_S2 = 80.0
-# Soft clamp — very high F still works with accel/decel cancel, but PDO
-# stepping gets worse; keep ID feeds in a sane band.
+# Soft clamp — very high F still works, but PDO stepping gets worse.
 MAX_ID_FEED = 10000.0
 # Below this on linear axes, inertial torque is often < ~4% rated on a
 # 120 ms ramp and the estimate becomes noise-dominated.
@@ -75,6 +82,11 @@ MIN_TA_PCT = 4.0
 # Sanity band for a "good" write (outside → marginal, no C00.06 write).
 MIN_RATIO_GOOD = 30.0
 MAX_RATIO_GOOD = 500.0
+# Accel torque relative spread above this → try Pn402-style flatten pass.
+FLATNESS_CV_MAX = 0.18
+# Auto-flatten sets limit to this fraction of unconstrained peak (above Tf).
+AUTO_FLATTEN_FRAC = 0.90
+AUTO_FLATTEN_MIN_MARGIN_PCT = 6.0
 
 # Ballscrew / rotary geometry on this machine (matches INI SCALE comments).
 MM_PER_MOTOR_REV = 10.0
@@ -114,6 +126,39 @@ def rpm_to_rad_s(rpm: float) -> float:
     return float(rpm) * (2.0 * math.pi / 60.0)
 
 
+def yaskawa_worksheet_ratio(
+    *,
+    tp_pct: float,
+    tf_pct: float,
+    delta_v_rpm: float,
+    delta_t_ms: float,
+    rated_torque_nm: float,
+    motor_inertia_kgm2: float,
+) -> Dict[str, float]:
+    """Exact Sigma II Parameter Calculator Inertia-sheet formulas.
+
+    Matches BIFF formulas:
+      Ta_Nm = (Tp% − Tf%) / 100 * Trated
+      α     = ΔV_rpm * 2π / 60 / (Δt_ms / 1000)
+      JL    = Ta_Nm / α − JM
+      Pn103 = 100 * JL / JM
+    """
+    ta_nm = ((float(tp_pct) - float(tf_pct)) / 100.0) * float(rated_torque_nm)
+    alpha = rpm_to_rad_s(float(delta_v_rpm)) / (float(delta_t_ms) / 1000.0)
+    if alpha <= 0:
+        raise GraphicalInertiaError("Δt/ΔV produce non-positive α")
+    j_total = abs(ta_nm) / alpha
+    j_load = j_total - float(motor_inertia_kgm2)
+    ratio = 100.0 * j_load / float(motor_inertia_kgm2)
+    return {
+        "ta_nm": float(ta_nm),
+        "alpha_rad_s2": float(alpha),
+        "j_load_kgm2": float(j_load),
+        "j_total_kgm2": float(j_total),
+        "ratio_pct": float(ratio),  # Pn103
+    }
+
+
 @dataclass
 class AxisInertiaSettings:
     """Per-axis knobs shown on the INERTIA panel."""
@@ -124,9 +169,11 @@ class AxisInertiaSettings:
     feed: float = 8000.0  # unit/min (G1 F)
     cycles: int = 1
     settle_s: float = 0.3
-    # Optional: write CiA 6072/60E0/60E1 for the move (0 = leave drive alone).
-    # Prefer the automatic MAX_ACCELERATION stretch; torque limit is a fallback.
+    # Fixed CiA torque clamp for the ID move (0 = none). When 0 and
+    # auto_flatten is on, a probe pass may choose a Pn402-style limit.
     torque_limit_pct: float = 0.0
+    # Two-pass flatten when accel torque is spiky (Sigma II Techniques).
+    auto_flatten: bool = True
     write_to_drive: bool = True
     # Temporarily lower LinuxCNC ini.*.max_acceleration so the ID ramp is
     # long enough for T=Jα (0 = auto from feed → ~PREFERRED_ACCEL_S).
@@ -141,6 +188,7 @@ class AxisInertiaSettings:
             "cycles": self.cycles,
             "settle_s": self.settle_s,
             "torque_limit_pct": self.torque_limit_pct,
+            "auto_flatten": self.auto_flatten,
             "write_to_drive": self.write_to_drive,
             "id_accel_unit_s2": self.id_accel_unit_s2,
         }
@@ -155,6 +203,7 @@ class AxisInertiaSettings:
             cycles=max(1, int(data.get("cycles", 1))),
             settle_s=float(data.get("settle_s", 0.3)),
             torque_limit_pct=float(data.get("torque_limit_pct", 0.0)),
+            auto_flatten=bool(data.get("auto_flatten", True)),
             write_to_drive=bool(data.get("write_to_drive", True)),
             id_accel_unit_s2=float(data.get("id_accel_unit_s2", 0.0)),
         )
@@ -210,9 +259,11 @@ def save_all_settings(
     payload = {
         "version": 1,
         "notes": (
+            "Yaskawa Sigma II Graphical Analysis (Tp−Tf). "
             "Motor inertia / rated torque are required datasheet values. "
             "Stroke/feed define the identification move (G1). "
-            "Linear axes: prefer F5000–F10000, cycles=1, torque limit 0."
+            "Linear axes: prefer F5000–F10000, cycles=1. "
+            "auto_flatten runs a Pn402-style second pass when accel torque is spiky."
         ),
         "axes": {a: settings[a].to_dict() for a in sorted(settings)},
     }
@@ -411,73 +462,170 @@ def _midband_indices(
     return band
 
 
-def _directed_edge_torque(
+def _mean_proj_torque(
+    tq: Sequence[float], indices: Sequence[int], sign: int
+) -> float:
+    if not indices:
+        return float("nan")
+    return _mean([float(tq[i]) * float(sign) for i in indices])
+
+
+def _stdev(values: Sequence[float]) -> float:
+    if len(values) < 2:
+        return 0.0
+    mu = _mean(values)
+    return math.sqrt(_mean([(v - mu) ** 2 for v in values]))
+
+
+def _constant_torque_window(
     tq: Sequence[float],
     rpm: Sequence[float],
     i0: int,
     i1: int,
     peak_rpm: float,
     sign: int,
-    role: str,
-    frac: float = 0.25,
-) -> float:
-    """Torque on an edge with friction-aware direction.
+    *,
+    rel_tol: float = 0.15,
+) -> Tuple[List[int], float, float]:
+    """Indices inside accel where projected torque is near the plateau.
 
-    Projects torque onto the motion axis (``tq * sign``). Accel uses the
-    upper quartile (torque with motion); decel uses the lower quartile
-    (braking). Rolling-median of raw torque under-reads when CSP braking
-    is soft — directed quartiles recover T_A closer to the physical Jα.
+    Sigma II Techniques: place vertical cursors only while torque is constant.
+    Returns (indices, plateau_torque_proj, coeff_of_variation).
     """
     band = _midband_indices(rpm, i0, i1, peak_rpm)
-    proj = sorted(float(tq[i]) * float(sign) for i in band)
-    n = max(1, int(len(proj) * frac))
-    if role == "acc":
-        return float(sign) * _mean(proj[-n:])
-    return float(sign) * _mean(proj[:n])
+    if not band:
+        raise GraphicalInertiaError("no mid-band samples on accel edge")
+    proj = [float(tq[i]) * float(sign) for i in band]
+    # Upper half of mid-band samples ≈ peak plateau (rejects soft start).
+    ordered = sorted(proj)
+    n_hi = max(2, len(ordered) // 2)
+    plateau = _mean(ordered[-n_hi:])
+    if plateau <= 0:
+        raise GraphicalInertiaError("accel plateau torque ≤ 0 after projection")
+    kept = [
+        i
+        for i, p in zip(band, proj)
+        if abs(p - plateau) <= rel_tol * max(abs(plateau), 1.0)
+    ]
+    if len(kept) < 4:
+        kept = band
+        plateau = _mean(proj)
+    cv = _stdev([float(tq[i]) * float(sign) for i in kept]) / max(abs(plateau), 1e-6)
+    return kept, float(plateau), float(cv)
 
 
-def _estimate_pair(
+def _cruise_friction_pct(
+    tq: Sequence[float],
+    rpm: Sequence[float],
+    a1: int,
+    d0: int,
+    peak_rpm: float,
+    sign: int,
+    dt: float,
+) -> Optional[float]:
+    """Trapezoid cruise Tf: mean projected torque while near peak speed."""
+    lo = a1
+    hi = d0
+    if hi <= lo + 2:
+        return None
+    cruise = [
+        i
+        for i in range(lo, hi + 1)
+        if abs(rpm[i]) >= 0.85 * peak_rpm
+    ]
+    if len(cruise) * dt < MIN_CRUISE_S:
+        return None
+    # Drop first/last 10% to avoid accel/decel bleed.
+    trim = max(1, len(cruise) // 10)
+    core = cruise[trim:-trim] if len(cruise) > 2 * trim + 2 else cruise
+    return _mean_proj_torque(tq, core, sign)
+
+
+def _triangle_friction_pct(t_acc: float, t_dec: float) -> float:
+    """Sigma II note: Tf = (T_acc + T_dec) / 2 (signed; decel may be negative)."""
+    return 0.5 * (float(t_acc) + float(t_dec))
+
+
+def _estimate_leg(
     tq: Sequence[float],
     rpm: Sequence[float],
     acc: Tuple[int, int, int],
-    dec: Tuple[int, int, int],
+    dec: Optional[Tuple[int, int, int]],
     peak_rpm: float,
     dt: float,
     motor_inertia_kgm2: float,
     rated_torque_nm: float,
+    *,
+    torque_limit_pct: Optional[float] = None,
 ) -> InertiaEstimate:
-    """Friction-cancelling pair: J = |T_acc − T_dec| / (2α)."""
+    """Yaskawa worksheet: Ta = Tp − Tf, α from constant-torque accel window."""
     a0, a1, sign = acc
-    d0, d1, _dsign = dec
-    delta_t_acc = max(abs(a1 - a0) * dt, dt)
-    delta_t_dec = max(abs(d1 - d0) * dt, dt)
-    delta_rpm = abs(rpm[a1] - rpm[a0])
-    if delta_t_acc < MIN_ACCEL_S:
-        raise GraphicalInertiaError(
-            f"accel edge only {delta_t_acc * 1000:.0f} ms — need "
-            f"≥{MIN_ACCEL_S * 1000:.0f} ms (ID should auto-stretch "
-            f"MAX_ACCELERATION)"
-        )
-    if delta_t_dec < MIN_DECEL_S:
-        raise GraphicalInertiaError(
-            f"decel edge only {delta_t_dec * 1000:.0f} ms — need "
-            f"≥{MIN_DECEL_S * 1000:.0f} ms"
-        )
-    if delta_rpm < 5.0:
-        raise GraphicalInertiaError("accel Δrpm too small")
+    plateau_idx, t_acc_proj, flat_cv = _constant_torque_window(
+        tq, rpm, a0, a1, peak_rpm, sign
+    )
+    # Techniques: "The torque limit IS the peak torque" when Pn402 is used.
+    if torque_limit_pct is not None and torque_limit_pct > 0:
+        t_peak = float(torque_limit_pct)
+        notes_peak = f"Tp={t_peak:.1f}% (torque limit)"
+    else:
+        t_peak = float(t_acc_proj)
+        notes_peak = f"Tp={t_peak:.1f}% (accel plateau)"
 
-    # Measured average α over the accel edge — trustworthy once the ramp
-    # is long. Commanded/trajectory α overstates when the axis cannot track.
-    alpha = rpm_to_rad_s(delta_rpm) / delta_t_acc
-    t_acc = _directed_edge_torque(tq, rpm, a0, a1, peak_rpm, sign, "acc")
-    t_dec = _directed_edge_torque(tq, rpm, d0, d1, peak_rpm, sign, "dec")
-    t_inertial_pct = abs(t_acc - t_dec) / 2.0
+    t_dec_proj = float("nan")
+    if dec is not None:
+        d0, d1, _ = dec
+        try:
+            _dec_idx, t_dec_proj, _ = _constant_torque_window(
+                tq, rpm, d0, d1, peak_rpm, sign
+            )
+        except GraphicalInertiaError:
+            # Soft CSP braking — fall back to directed lower-quartile feel.
+            band = _midband_indices(rpm, d0, d1, peak_rpm)
+            proj = sorted(float(tq[i]) * float(sign) for i in band)
+            n = max(1, len(proj) // 4)
+            t_dec_proj = _mean(proj[:n])
+
+    tf_cruise = None
+    if dec is not None:
+        tf_cruise = _cruise_friction_pct(
+            tq, rpm, a1, dec[0], peak_rpm, sign, dt
+        )
+
+    method = "trapezoid"
+    if tf_cruise is not None:
+        t_friction = float(tf_cruise)
+        method = "trapezoid cruise Tf"
+    elif t_dec_proj == t_dec_proj:  # not NaN
+        t_friction = _triangle_friction_pct(t_peak, t_dec_proj)
+        method = "triangle Tf=(Tacc+Tdec)/2"
+    else:
+        raise GraphicalInertiaError(
+            "need cruise friction or a decel edge for Tf (Sigma II trapezoid/triangle)"
+        )
+
+    t_inertial_pct = t_peak - t_friction
     if t_inertial_pct < MIN_TA_PCT:
         raise GraphicalInertiaError(
-            f"inertial torque too small ({t_inertial_pct:.1f}% rated) after "
-            f"accel/decel cancel — raise feed (prefer F{MIN_ID_FEED_LINEAR:.0f}"
-            f"–F{MAX_ID_FEED:.0f} on linear) so T_A ≥ {MIN_TA_PCT:.0f}%"
+            f"inertial torque too small (Ta={t_inertial_pct:.1f}% = "
+            f"Tp {t_peak:.1f} − Tf {t_friction:.1f}) — raise feed "
+            f"(prefer F{MIN_ID_FEED_LINEAR:.0f}–F{MAX_ID_FEED:.0f} on linear) "
+            f"so Ta ≥ {MIN_TA_PCT:.0f}%"
         )
+
+    # α only inside the constant-torque window (vertical cursors).
+    i_lo, i_hi = plateau_idx[0], plateau_idx[-1]
+    delta_t = max((i_hi - i_lo) * dt, dt)
+    delta_rpm = abs(rpm[i_hi] - rpm[i_lo])
+    if delta_t < MIN_ACCEL_S:
+        raise GraphicalInertiaError(
+            f"constant-torque accel window only {delta_t * 1000:.0f} ms — need "
+            f"≥{MIN_ACCEL_S * 1000:.0f} ms (ID should auto-stretch "
+            f"MAX_ACCELERATION / flatten torque)"
+        )
+    if delta_rpm < 5.0:
+        raise GraphicalInertiaError("accel Δrpm too small inside torque plateau")
+
+    alpha = rpm_to_rad_s(delta_rpm) / delta_t
     t_accel_nm = (t_inertial_pct / 100.0) * float(rated_torque_nm)
     j_total = abs(t_accel_nm) / alpha
     j_load = j_total - float(motor_inertia_kgm2)
@@ -487,15 +635,25 @@ def _estimate_pair(
         )
     ratio_pct = 100.0 * j_load / float(motor_inertia_kgm2)
     notes = [
-        f"accel/decel cancel (T_acc={t_acc:.1f}% T_dec={t_dec:.1f}%)",
-        f"measured α={alpha:.0f} rad/s² over {delta_t_acc * 1000:.0f} ms",
+        f"Yaskawa {method}",
+        notes_peak,
+        f"Tf={t_friction:.1f}% Ta={t_inertial_pct:.1f}%",
+        f"α={alpha:.0f} rad/s² over {delta_t * 1000:.0f} ms "
+        f"(ΔV={delta_rpm:.0f} rpm in flat-torque window)",
     ]
     quality = "good"
-    if delta_t_acc < 0.85 * PREFERRED_ACCEL_S:
-        # Soft note only — rest→cruise detection ends at ~90% of peak, so a
-        # true 120 ms ramp often measures ~100 ms. Hard floor is MIN_ACCEL_S.
+    if flat_cv > FLATNESS_CV_MAX and not (
+        torque_limit_pct is not None and torque_limit_pct > 0
+    ):
+        quality = "marginal"
         notes.append(
-            f"ramp {delta_t_acc * 1000:.0f} ms (target ~{PREFERRED_ACCEL_S * 1000:.0f} ms)"
+            f"accel torque not flat (CV={flat_cv:.2f}) — enable auto-flatten "
+            f"or set a torque limit (Sigma II Pn402 step)"
+        )
+    if delta_t < 0.85 * PREFERRED_ACCEL_S:
+        notes.append(
+            f"ramp window {delta_t * 1000:.0f} ms "
+            f"(target ~{PREFERRED_ACCEL_S * 1000:.0f} ms)"
         )
     if peak_rpm < 400.0:
         quality = "marginal"
@@ -516,12 +674,12 @@ def _estimate_pair(
         ratio_pct=float(ratio_pct),
         j_load_kgm2=float(j_load),
         j_total_kgm2=float(j_total),
-        t_peak_pct=float(t_acc),
-        t_friction_pct=float(t_dec),  # decel directed torque (not cruise friction)
+        t_peak_pct=float(t_peak),
+        t_friction_pct=float(t_friction),
         t_accel_nm=float(t_accel_nm),
         alpha_rad_s2=float(alpha),
         delta_rpm=float(delta_rpm),
-        delta_t_s=float(delta_t_acc),
+        delta_t_s=float(delta_t),
         quality=quality,
         notes=notes,
     )
@@ -535,14 +693,15 @@ def analyze_torque_velocity(
     motor_inertia_kgm2: float,
     rated_torque_nm: float,
     commanded_alpha_rad_s2: Optional[float] = None,
+    *,
+    torque_limit_pct: Optional[float] = None,
 ) -> InertiaEstimate:
-    """Inertia ratio via accel/decel friction cancel + measured α.
+    """Inertia ratio via Sigma II Graphical Analysis (Tp − Tf).
 
-    ``commanded_alpha_rad_s2`` is accepted for journaling/compat but the ratio
-    uses measured endpoint α on ramps ≥ MIN_ACCEL_S (commanded α overstates
-    when the axis cannot track the lowered ini accel).
+    ``commanded_alpha_rad_s2`` is accepted for journaling/compat; the ratio
+    uses measured α inside the constant-torque accel window.
     """
-    del commanded_alpha_rad_s2  # measured α is authoritative for long ramps
+    del commanded_alpha_rad_s2
     n = min(len(torque_pct), len(vel_unit_per_min))
     if n < 20:
         raise GraphicalInertiaError("not enough samples for inertia analysis")
@@ -565,10 +724,10 @@ def analyze_torque_velocity(
 
     acc_legs = _find_rest_to_cruise_legs(rpm, peak_rpm, dt)
     dec_legs = _find_cruise_to_rest_legs(rpm, peak_rpm, dt)
-    if not acc_legs or not dec_legs:
+    if not acc_legs:
         raise GraphicalInertiaError(
-            "need both accel and decel edges — use cycles≥1 with a clear "
-            "trapezoid (stroke long enough for cruise)."
+            "need at least one accel edge — use a trapezoid/triangle with "
+            "clear speed change."
         )
 
     estimates: List[InertiaEstimate] = []
@@ -579,12 +738,10 @@ def analyze_torque_velocity(
             for d0, d1, dsign in dec_legs
             if dsign == asign and d0 >= a1
         ]
-        if not candidates:
-            continue
-        dec = candidates[0]
+        dec = candidates[0] if candidates else None
         try:
             estimates.append(
-                _estimate_pair(
+                _estimate_leg(
                     tq,
                     rpm,
                     (a0, a1, asign),
@@ -593,6 +750,7 @@ def analyze_torque_velocity(
                     dt,
                     motor_inertia_kgm2,
                     rated_torque_nm,
+                    torque_limit_pct=torque_limit_pct,
                 )
             )
         except GraphicalInertiaError as exc:
@@ -602,11 +760,11 @@ def analyze_torque_velocity(
     if not usable:
         usable = estimates
     if not usable:
-        detail = "; ".join(errors[:3]) if errors else "no valid accel/decel pairs"
+        detail = "; ".join(errors[:3]) if errors else "no valid accel legs"
         raise GraphicalInertiaError(
             detail
-            + f" — use F{MIN_ID_FEED_LINEAR:.0f}–F{MAX_ID_FEED:.0f}, torque "
-            f"limit 0, stroke with real cruise, let ID stretch accel."
+            + f" — use F{MIN_ID_FEED_LINEAR:.0f}–F{MAX_ID_FEED:.0f}, "
+            f"stroke with cruise, let ID stretch accel / auto-flatten."
         )
 
     ratios = sorted(e.ratio_pct for e in usable)
@@ -619,12 +777,12 @@ def analyze_torque_velocity(
     if len(usable) > 1:
         span = (ratios[-1] - ratios[0]) / max(abs(mid_ratio), 1.0)
         best.notes.append(
-            f"median of {len(usable)} pairs (range {ratios[0]:.0f}–{ratios[-1]:.0f}%)"
+            f"median of {len(usable)} legs (range {ratios[0]:.0f}–{ratios[-1]:.0f}%)"
         )
         if span > MAX_LEG_RATIO_SPAN:
             best.quality = "marginal"
             best.notes.append(
-                f"pair spread {span * 100:.0f}% > {MAX_LEG_RATIO_SPAN * 100:.0f}% "
+                f"leg spread {span * 100:.0f}% > {MAX_LEG_RATIO_SPAN * 100:.0f}% "
                 f"— re-run (F{MIN_ID_FEED_LINEAR:.0f}–F{MAX_ID_FEED:.0f}, cycles=1)"
             )
     order = {"good": 0, "marginal": 1, "bad": 2}
@@ -645,6 +803,26 @@ def analyze_torque_velocity(
     if mid_ratio > 12000 and "ratio > 12000%" not in " ".join(best.notes):
         best.notes.append("ratio > 12000% (C00.06 max) — will clamp on write")
     return best
+
+
+def suggest_flatten_limit_pct(estimate: InertiaEstimate) -> Optional[float]:
+    """Pn402-style limit from a probe estimate: below Tp, above Tf + margin."""
+    tp = float(estimate.t_peak_pct)
+    tf = float(estimate.t_friction_pct)
+    if tp <= tf + AUTO_FLATTEN_MIN_MARGIN_PCT:
+        return None
+    # Techniques: as high as possible while still flat; higher → more accurate.
+    candidate = AUTO_FLATTEN_FRAC * tp
+    floor = tf + AUTO_FLATTEN_MIN_MARGIN_PCT
+    limit = max(floor, min(candidate, tp - 1.0))
+    if limit <= tf + 1.0:
+        return None
+    return float(limit)
+
+
+def probe_needs_flatten(estimate: InertiaEstimate) -> bool:
+    """True when accel torque was spiky (Sigma II step 2 would clamp Pn402)."""
+    return "not flat" in " ".join(estimate.notes).lower()
 
 
 def _pct_to_cia_torque_raw(pct: float) -> int:
@@ -1168,8 +1346,14 @@ class GraphicalInertiaTuner:
                         )
                         torque_prev = None
 
+            active_limit: Optional[float] = (
+                float(settings.torque_limit_pct)
+                if settings.torque_limit_pct > 0
+                else None
+            )
+
             try:
-                self._progress("move", "sampling torque + velocity…")
+                self._progress("move", "sampling torque + velocity (probe)…")
                 torque, velocity, meta = self.io.run_move_and_sample(
                     axis,
                     signed,
@@ -1179,6 +1363,167 @@ class GraphicalInertiaTuner:
                     settings.settle_s,
                     self._cancel,
                 )
+                journal.save_csv(torque, velocity, self.cfg.sample_hz)
+                journal.event(
+                    "move",
+                    "done",
+                    f"samples={len(torque)} aborted={meta.get('aborted')}",
+                    meta=meta,
+                )
+                if meta.get("aborted"):
+                    raise GraphicalInertiaError(
+                        f"move aborted: {meta.get('abort_reason')}"
+                    )
+                if self._cancel.is_set():
+                    raise GraphicalInertiaCancelled("cancelled")
+
+                pairs = [
+                    (t, v)
+                    for t, v in zip(torque, velocity)
+                    if t == t and v == v
+                ]
+                if len(pairs) < 20:
+                    raise GraphicalInertiaError(
+                        "too few valid torque/velocity samples"
+                    )
+                tq = [p[0] for p in pairs]
+                vel = [p[1] for p in pairs]
+
+                self._progress("analyze", "Yaskawa Tp−Tf (probe)…")
+                estimate = analyze_torque_velocity(
+                    axis,
+                    tq,
+                    vel,
+                    self.cfg.sample_hz,
+                    settings.motor_inertia_kgm2,
+                    settings.rated_torque_nm,
+                    commanded_alpha_rad_s2=commanded_alpha,
+                    torque_limit_pct=active_limit,
+                )
+                journal.event(
+                    "analyze",
+                    "probe",
+                    f"ratio={estimate.ratio_pct:.1f}% quality={estimate.quality}",
+                    estimate=estimate.to_dict(),
+                    commanded_alpha=commanded_alpha,
+                    torque_limit_pct=active_limit,
+                )
+
+                # Sigma II Steps 1→2: if accel torque is spiky and no fixed
+                # limit was set, re-run with Pn402-style clamp for a flat Tp.
+                if (
+                    active_limit is None
+                    and settings.auto_flatten
+                    and probe_needs_flatten(estimate)
+                ):
+                    limit = suggest_flatten_limit_pct(estimate)
+                    apply_fn = getattr(self.io, "apply_torque_limit", None)
+                    if limit is None or apply_fn is None:
+                        journal.event(
+                            "torque_limit",
+                            "skipped",
+                            "auto-flatten needed but no usable limit/IO",
+                            suggested=limit,
+                        )
+                    else:
+                        self._check_cancel()
+                        self._progress(
+                            "torque_limit",
+                            f"auto-flatten pass @ {limit:.0f}% (Pn402-style)…",
+                        )
+                        try:
+                            torque_prev, written = apply_fn(axis, limit)
+                            if written:
+                                active_limit = limit
+                                journal.event(
+                                    "torque_limit",
+                                    "auto_flatten",
+                                    f"probe Tp={estimate.t_peak_pct:.1f}% → "
+                                    f"limit {limit:.0f}%",
+                                    previous=torque_prev,
+                                    written=written,
+                                    limit_pct=limit,
+                                )
+                                self._progress(
+                                    "move",
+                                    "sampling torque + velocity (flattened)…",
+                                )
+                                torque, velocity, meta = self.io.run_move_and_sample(
+                                    axis,
+                                    signed,
+                                    feed,
+                                    settings.cycles,
+                                    self.cfg.sample_hz,
+                                    settings.settle_s,
+                                    self._cancel,
+                                )
+                                journal.save_csv(
+                                    torque, velocity, self.cfg.sample_hz
+                                )
+                                journal.event(
+                                    "move",
+                                    "done",
+                                    f"flatten samples={len(torque)} "
+                                    f"aborted={meta.get('aborted')}",
+                                    meta=meta,
+                                )
+                                if meta.get("aborted"):
+                                    raise GraphicalInertiaError(
+                                        f"flatten move aborted: "
+                                        f"{meta.get('abort_reason')}"
+                                    )
+                                if self._cancel.is_set():
+                                    raise GraphicalInertiaCancelled("cancelled")
+                                pairs = [
+                                    (t, v)
+                                    for t, v in zip(torque, velocity)
+                                    if t == t and v == v
+                                ]
+                                if len(pairs) < 20:
+                                    raise GraphicalInertiaError(
+                                        "too few samples on flatten pass"
+                                    )
+                                tq = [p[0] for p in pairs]
+                                vel = [p[1] for p in pairs]
+                                self._progress(
+                                    "analyze", "Yaskawa Tp−Tf (flattened)…"
+                                )
+                                estimate = analyze_torque_velocity(
+                                    axis,
+                                    tq,
+                                    vel,
+                                    self.cfg.sample_hz,
+                                    settings.motor_inertia_kgm2,
+                                    settings.rated_torque_nm,
+                                    commanded_alpha_rad_s2=commanded_alpha,
+                                    torque_limit_pct=active_limit,
+                                )
+                                journal.event(
+                                    "analyze",
+                                    "flatten",
+                                    f"ratio={estimate.ratio_pct:.1f}% "
+                                    f"quality={estimate.quality}",
+                                    estimate=estimate.to_dict(),
+                                    torque_limit_pct=active_limit,
+                                )
+                            else:
+                                journal.event(
+                                    "torque_limit",
+                                    "warning",
+                                    "auto-flatten: no CiA torque-limit objects "
+                                    "writable",
+                                )
+                                torque_prev = None
+                        except GraphicalInertiaCancelled:
+                            raise
+                        except GraphicalInertiaError:
+                            raise
+                        except Exception as exc:
+                            journal.event(
+                                "torque_limit",
+                                "warning",
+                                f"auto-flatten failed: {exc}",
+                            )
             finally:
                 restore_fn = getattr(self.io, "restore_torque_limit", None)
                 if torque_prev is not None and restore_fn is not None:
@@ -1209,50 +1554,10 @@ class GraphicalInertiaTuner:
                         journal.event(
                             "accel",
                             "warning",
-                            f"accel restore failed: {exc} — check ini.*.max_acceleration",
+                            f"accel restore failed: {exc} — check "
+                            f"ini.*.max_acceleration",
                         )
 
-            journal.save_csv(torque, velocity, self.cfg.sample_hz)
-            journal.event(
-                "move",
-                "done",
-                f"samples={len(torque)} aborted={meta.get('aborted')}",
-                meta=meta,
-            )
-            if meta.get("aborted"):
-                raise GraphicalInertiaError(
-                    f"move aborted: {meta.get('abort_reason')}"
-                )
-            if self._cancel.is_set():
-                raise GraphicalInertiaCancelled("cancelled")
-
-            self._progress("analyze", "computing J from T=Jα…")
-            # Drop NaNs
-            pairs = [
-                (t, v)
-                for t, v in zip(torque, velocity)
-                if t == t and v == v
-            ]
-            if len(pairs) < 20:
-                raise GraphicalInertiaError("too few valid torque/velocity samples")
-            tq = [p[0] for p in pairs]
-            vel = [p[1] for p in pairs]
-            estimate = analyze_torque_velocity(
-                axis,
-                tq,
-                vel,
-                self.cfg.sample_hz,
-                settings.motor_inertia_kgm2,
-                settings.rated_torque_nm,
-                commanded_alpha_rad_s2=commanded_alpha,
-            )
-            journal.event(
-                "analyze",
-                "estimate",
-                f"ratio={estimate.ratio_pct:.1f}% quality={estimate.quality}",
-                estimate=estimate.to_dict(),
-                commanded_alpha=commanded_alpha,
-            )
             if estimate.quality == "bad":
                 raise GraphicalInertiaError(
                     "measurement quality bad — "
@@ -1277,15 +1582,17 @@ class GraphicalInertiaTuner:
                     quality=estimate.quality,
                 )
             else:
-                journal.event("write", "skipped", "write_to_drive=False")
+                journal.event(
+                    "write",
+                    "skipped",
+                    "write_to_drive=false",
+                    estimate_ratio_pct=estimate.ratio_pct,
+                )
 
             reason = (
-                f"estimated {estimate.ratio_pct:.0f}% "
-                f"(T_A={estimate.t_accel_nm:.3f} N·m, α={estimate.alpha_rad_s2:.0f} rad/s²"
-                f", {estimate.quality})"
+                f"Yaskawa graphical analysis ratio "
+                f"{estimate.ratio_pct:.0f}% ({estimate.quality})"
             )
-            if written is None and settings.write_to_drive:
-                reason += " — not written (quality gate)"
             journal.finalize(
                 "ok",
                 {
@@ -1294,7 +1601,6 @@ class GraphicalInertiaTuner:
                     "baseline_ratio_pct": baseline,
                 },
             )
-            self._progress("done", reason)
             return GraphicalInertiaResult(
                 axis=axis,
                 status="ok",
@@ -1305,29 +1611,20 @@ class GraphicalInertiaTuner:
                 journal_dir=journal.dir,
             )
         except GraphicalInertiaCancelled as exc:
+            journal.event("cancel", "abort", str(exc))
             journal.finalize("cancelled", {"reason": str(exc)})
             return GraphicalInertiaResult(
                 axis=axis,
                 status="cancelled",
-                reason=str(exc) or "cancelled",
-                journal_dir=journal.dir,
-            )
-        except GraphicalInertiaError as exc:
-            LOG.warning("graphical inertia failed: %s", exc)
-            journal.event("error", "failed", str(exc))
-            journal.finalize("failed", {"reason": str(exc)})
-            return GraphicalInertiaResult(
-                axis=axis,
-                status="failed",
                 reason=str(exc),
                 journal_dir=journal.dir,
             )
         except Exception as exc:
-            LOG.exception("graphical inertia crashed")
+            LOG.exception("graphical inertia failed")
             journal.event(
                 "error",
-                "exception",
-                f"{type(exc).__name__}: {exc}",
+                "fail",
+                str(exc),
                 traceback=traceback.format_exc(),
             )
             journal.finalize("failed", {"reason": str(exc)})
@@ -1338,29 +1635,9 @@ class GraphicalInertiaTuner:
                 journal_dir=journal.dir,
             )
 
-    def _pick_stroke(self, stroke: float, state: Dict[str, Any]) -> float:
-        stroke = abs(float(stroke))
-        pos = state.get("position")
-        lo = state.get("min_limit")
-        hi = state.get("max_limit")
-        homed = state.get("homed")
-        if homed and pos is not None and lo is not None and hi is not None:
-            room_pos = float(hi) - float(pos)
-            room_neg = float(pos) - float(lo)
-            # Prefer the direction with more room; require full stroke clearance.
-            if room_pos >= stroke and room_pos >= room_neg:
-                return stroke
-            if room_neg >= stroke:
-                return -stroke
-            raise GraphicalInertiaError(
-                f"need {stroke:g} {axis_unit(self.cfg.axis)} clearance; "
-                f"room +{room_pos:.1f} / -{room_neg:.1f}. Park mid-travel."
-            )
-        # Unhomed: go positive and rely on operator clearance confirm.
-        return stroke
-
     def _fail(self, reason: str) -> GraphicalInertiaResult:
         if self._journal:
+            self._journal.event("preflight", "fail", reason)
             self._journal.finalize("failed", {"reason": reason})
         return GraphicalInertiaResult(
             axis=self.cfg.axis,
@@ -1369,13 +1646,39 @@ class GraphicalInertiaTuner:
             journal_dir=self._journal.dir if self._journal else None,
         )
 
+    def _progress(self, phase: str, message: str) -> None:
+        if self._journal:
+            self._journal.event(phase, "progress", message)
+        if self._progress_fn is not None:
+            try:
+                self._progress_fn(phase, message)
+            except Exception:
+                LOG.debug("progress callback failed", exc_info=True)
+
     def _check_cancel(self) -> None:
         if self._cancel.is_set():
             raise GraphicalInertiaCancelled("cancelled")
 
-    def _progress(self, phase: str, message: str) -> None:
-        if self._progress_fn:
-            try:
-                self._progress_fn(phase, message)
-            except Exception:
-                LOG.exception("progress callback failed")
+    def _pick_stroke(self, stroke: float, state: Dict[str, Any]) -> float:
+        """Choose +/− stroke that fits soft limits when homed."""
+        mag = abs(float(stroke))
+        if not state.get("homed"):
+            return mag
+        pos = float(state.get("position", 0.0))
+        lo = float(state.get("min_limit", pos - mag))
+        hi = float(state.get("max_limit", pos + mag))
+        # Prefer the direction with more room; require clearance both ways for
+        # out-and-back when cycles≥1 (return uses opposite sign).
+        room_pos = hi - pos
+        room_neg = pos - lo
+        margin = 2.0 * mag + 1.0
+        if room_pos >= margin and room_neg >= margin:
+            return mag
+        if room_pos >= margin:
+            return mag
+        if room_neg >= margin:
+            return -mag
+        raise GraphicalInertiaError(
+            f"stroke {mag:g} does not fit soft limits at {pos:g} "
+            f"(min={lo:g}, max={hi:g}) — park mid-travel or shorten stroke"
+        )

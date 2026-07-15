@@ -45,6 +45,6 @@
       "write_to_drive": true
     }
   },
-  "notes": "Motor inertia / rated torque are required datasheet values. Stroke/feed define the identification move (G1). Linear axes: prefer F5000\u2013F10000, cycles=1, torque limit 0.",
+  "notes": "Yaskawa Sigma II Graphical Analysis (Tp-Tf). Motor inertia / rated torque required. Linear: F5000-F10000, cycles=1. auto_flatten may run a Pn402-style 2nd pass.",
   "version": 1
 }

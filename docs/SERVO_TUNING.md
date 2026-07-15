@@ -28,7 +28,7 @@ Your drives are a **cascaded position → speed → torque** loop. Map:
 
 1. Run drive **inertia / load ratio** estimate (graphical or auto inertia).
    On this machine: Servo Tuning → panel **INERTIA** → **BEGIN INERTIA
-   AUTO-TUNE** (T=Jα from torque + velocity — see `GRAPHICAL_INERTIA_TUNE.md`).
+   AUTO-TUNE** (Yaskawa Sigma II Tp−Tf — see `GRAPHICAL_INERTIA_TUNE.md`).
    Use F5000–F10000 on linear axes; C00.06 writes only when quality is **good**.
    Alternate: drive-internal F30.10 on branch `cursor/internal-inertia-tune-f9d7`
    (`INERTIA_TUNE.md`).

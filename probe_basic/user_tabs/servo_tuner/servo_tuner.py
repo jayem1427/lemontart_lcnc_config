@@ -1354,11 +1354,12 @@ class UserTab(QWidget):
         layout.setSpacing(6)
 
         hint = QLabel(
+            "Yaskawa Sigma II Graphical Analysis (Tp−Tf → C00.06). "
             "Enter motor J_M + rated torque, then BEGIN. Auto-lowers "
-            "MAX_ACCELERATION (~120 ms ramp), samples TQ% + velocity, solves "
-            "accel/decel T=Jα, writes C00.06 only when quality is good. "
-            "Prefer cycles=1 and F5000–F10000 on linear axes. "
-            "Leave Torque limit at 0.",
+            "MAX_ACCELERATION (~120 ms ramp); if accel torque is spiky, "
+            "auto-flatten runs a Pn402-style second pass. Writes C00.06 "
+            "only when quality is good. Prefer cycles=1 and F5000–F10000 "
+            "on linear axes.",
             page,
         )
         hint.setObjectName("lblParamHint")
@@ -1455,9 +1456,9 @@ class UserTab(QWidget):
             300.0,
             5.0,
             " %",
-            "0 = leave drive alone (recommended). Auto ID already lowers "
-            "MAX_ACCELERATION for an ~120 ms ramp. Only set 20–40% if that "
-            "fails and you need a torque-limited plateau.",
+            "0 = auto-flatten may apply a Pn402-style clamp on a 2nd pass if "
+            "accel torque is spiky (Sigma II). Set explicitly to force that "
+            "limit as Tp (workbook: torque limit IS peak torque).",
         )
         layout.addLayout(form)
 
@@ -2561,7 +2562,8 @@ class UserTab(QWidget):
             f"Motor J_M = {settings.motor_inertia_kgm2:.6g} kg·m²\n"
             f"Rated torque = {settings.rated_torque_nm:.4g} N·m\n\n"
             f"We sample torque (6077) + velocity (606C), compute "
-            f"T_A/α → C00.06, and WRITE it to the drive (RAM).\n"
+            f"Yaskawa Tp−Tf → C00.06, and WRITE it to the drive (RAM).\n"
+            f"Spiky accel torque may trigger an auto-flatten second pass.\n"
             f"Then switch back to GAINS and run ONE-CLICK.\n\n"
             f"Journal: logs/tuning/graphical_inertia/\n"
             f"Keep a hand near ESTOP.",

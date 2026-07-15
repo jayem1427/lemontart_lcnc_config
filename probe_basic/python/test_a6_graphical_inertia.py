@@ -23,6 +23,7 @@ from a6_graphical_inertia import (  # noqa: E402
     target_id_accel,
     unit_accel_to_alpha,
     unit_per_min_to_rpm,
+    yaskawa_worksheet_ratio,
 )
 
 
@@ -125,6 +126,22 @@ def _stepped_accel_trace(
 def test_unit_rpm() -> None:
     assert abs(unit_per_min_to_rpm("X", 3000.0) - 300.0) < 1e-9
     assert abs(unit_per_min_to_rpm("A", 3600.0) - 10.0) < 1e-9
+
+
+def test_sigma_ii_worksheet_example() -> None:
+    """Exact numbers from Sigma II Parameter Calculator Rev 2.42 Inertia sheet."""
+    out = yaskawa_worksheet_ratio(
+        tp_pct=90.0,
+        tf_pct=4.5,
+        delta_v_rpm=1000.0,
+        delta_t_ms=3.34,
+        rated_torque_nm=0.318,
+        motor_inertia_kgm2=3.64e-6,
+    )
+    assert abs(out["ta_nm"] - 0.27189) < 1e-9
+    assert abs(out["alpha_rad_s2"] - 31353.22009570652) < 1e-6
+    assert abs(out["j_load_kgm2"] - 5.0318365504419865e-6) < 1e-15
+    assert abs(out["ratio_pct"] - 138.23726786928535) < 1e-9
 
 
 def test_target_id_accel() -> None:
@@ -269,6 +286,7 @@ def test_tuner_writes_when_good(tmp: str) -> None:
         feed=8000.0,
         write_to_drive=True,
         id_accel_unit_s2=1111.0,
+        auto_flatten=False,
     )
     io = _FakeIO(tq, vel)
     cfg = GraphicalInertiaConfig.for_axis("X", settings, sample_hz=1000.0)
@@ -299,6 +317,7 @@ def test_tuner_clamps_feed(tmp: str) -> None:
         feed=50000.0,
         write_to_drive=False,
         id_accel_unit_s2=1111.0,
+        auto_flatten=False,
     )
     io = _FakeIO(tq, vel)
     cfg = GraphicalInertiaConfig.for_axis("X", settings, sample_hz=1000.0)
@@ -391,6 +410,7 @@ if __name__ == "__main__":
     failed = 0
     cases = [
         ("rpm", test_unit_rpm, False),
+        ("sigma_ii_worksheet", test_sigma_ii_worksheet_example, False),
         ("target_accel", test_target_id_accel, False),
         ("analyze", test_analyze_ideal_trace, False),
         ("short_stepped", test_analyze_short_stepped_rejected, False),
