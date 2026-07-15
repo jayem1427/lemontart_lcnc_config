@@ -43,7 +43,10 @@ This machine’s servo thread is **1 kHz** (`SERVO_PERIOD = 1000000` ns in `ethe
 
 **You do not need to sample at 2 kHz.**
 
-Nyquist says: to reconstruct a *continuous* signal that may contain energy up to frequency \(F\), sample faster than \(2F\). That applies to an analog front-end before digitization. Here the Logging tab is a **userspace poller** reading HAL pins that are already discrete-time at the servo rate:
+Nyquist says: to reconstruct a continuous signal that may contain energy up to
+frequency F, sample faster than 2F. That applies to an analog front-end before
+digitization. Here the Logging tab is a **userspace poller** reading HAL pins
+that are already discrete-time at the servo rate:
 
 | Idea | Reality on this stack |
 |------|------------------------|
@@ -65,14 +68,14 @@ The Servo Tuning tab’s live FERR strip chart is separate (START PLOT / STOP PL
 
 ---
 
-## Workflow
+## Legend
 
-The legend panel on the right of the LOGGING box always shows all four axes for the current signal type:
+The legend panel on the right of the LOGGING box shows the four toggles for the current signal type:
 
 - Color swatch matches the plot line (from `signals.json`)
-- Channel label and units (e.g. `X FErr (mm)`)
-- **Selected** axes: white text + white swatch border
-- **Unselected** axes: dimmed gray text
+- Channel label and units (e.g. `X FErr (mm)` or `S RPM CMD`)
+- **Selected**: white text + white swatch border
+- **Unselected**: dimmed gray text
 
 The legend title updates with the signal family: `DRIVE FERR`, `TORQUE`, `VELOCITY`, `POSITION`, or `SPINDLE / VFD`.
 
@@ -195,20 +198,120 @@ so programs in the config `nc_files/` directory are found alongside the system p
 
 ---
 
-## Config
+---
 
-Edit `config/logging/signals.json` to add or remove HAL pins.
+## Config — add / remove signals for your hardware
 
-Default channels (1000 Hz):
+**Single source of truth:** `config/logging/signals.json`
 
-| Group | Pins | Units |
-|-------|------|-------|
-| Following error (LinuxCNC) | `joint.0..3.f-error` | mm / deg |
-| Following error (drive 60F4) | `tune-drive-ferr.0..3.out` | mm / deg |
-| Torque | `tune-torque.0..3.out` | % rated |
-| Velocity | `lcec.0.N.vel-fb` (Logging) | mm/min / deg/min |
+Everything in that file is sampled into the CSV on every session. The Logging tab only *plots* a subset (per SIGNAL button + AXIS/CMD toggles). Missing HAL pins become empty/`nan` columns — they do **not** crash the logger — but you should still prune channels you do not have so CSVs stay clean.
 
-Context columns in each CSV row: `line`, `feed`, `enabled`.
+### Channel entry shape
+
+```json
+{
+  "id": "spindle_amps",
+  "pin": "mult2.6.out",
+  "label": "S Amps",
+  "units": "A",
+  "color": "#f1c40f",
+  "group": "spindle"
+}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `id` | CSV column name + plot key (unique, snake_case) |
+| `pin` | HAL **pin** name (`halcmd getp …`), or `joint.N.f-error` / `joint.N.pos-fb` (read via `linuxcnc.stat`) |
+| `label` | Legend / human name |
+| `units` | Shown on plot / summary (`mm`, `rpm`, `A`, …) |
+| `color` | Hex color for the live trace |
+| `group` | Logical family (`ferr_drive`, `torque`, `spindle`, …) — for organization / plot_groups |
+
+Optional `scale` (default `1.0`) multiplies the raw pin value if you need a unit conversion in the logger instead of HAL.
+
+### Plot groups
+
+`plot_groups` only describe suggested Y-scale families for docs/tools. The Probe Basic Logging tab wires plot visibility from its SIGNAL buttons (see below), not by iterating `plot_groups` alone. Keep `plot_groups` in sync when you add channels so headless/docs stay honest.
+
+### What this mill ships with
+
+| Hardware | Channels (examples) | Requires |
+|----------|---------------------|----------|
+| A6 EtherCAT axes | `tune-drive-ferr.*`, `tune-torque.*`, `tune-velocity.*`, `joint.*.pos-fb` | `ethercat-conf.xml` PDOs + `custom.hal` `tune-*` chain |
+| LinuxCNC joints | `joint.*.f-error` | Always present (CSV only; tab does not plot host FERR) |
+| H100 VFD (mb2hal) | `spindle_*` RPM/amps/at-speed/fault/freq | `h100.mb2hal` + spindle nets in `custom.hal` |
+
+Default sample rate in JSON is **100 Hz**; the UI default/preferred for interactive use is **200 Hz**.
+
+### Add a signal (checklist)
+
+1. **Confirm the pin exists** while LinuxCNC is running:
+   ```bash
+   halcmd show pin | grep -i spindle
+   halcmd getp mult2.6.out
+   halcmd getp spindle.0.speed-out-abs
+   ```
+2. **Prefer a float pin** already in engineering units (amps, RPM, mm). If you only have raw counts, either:
+   - add a HAL `scale` / `mult2` in `custom.hal`, **or**
+   - set `"scale": …` on the channel in JSON.
+3. **Append a channel** to `channels` in `signals.json` with a unique `id`.
+4. **Optionally** add it to a `plot_groups` list.
+5. **UI plot (optional):**
+   - Axis family (DRIVE/TORQUE/VEL/POS): edit `AXIS_SIGNALS` in `probe_basic/user_tabs/signal_monitor/signal_monitor.py`.
+   - Spindle family: edit `SPINDLE_SIGNALS` / button labels in the same file (toggles are CMD/FB/A/RDY, not machine axes).
+   - New SIGNAL button: add a button in `_build_controls` plus legend title / Y-default entries.
+6. Restart Probe Basic (or reload the tab) so it reloads JSON.
+
+Example — log a hypothetical coolant pressure pin:
+
+```json
+{
+  "id": "coolant_psi",
+  "pin": "analog-in.0.value",
+  "label": "Coolant",
+  "units": "psi",
+  "color": "#00bcd4",
+  "group": "aux"
+}
+```
+
+That alone puts it in every CSV. Plotting it needs a UI mapping (or use the CSV / external plotter).
+
+### Remove a signal
+
+1. Delete (or comment out by removing) the channel object from `channels`.
+2. Remove its `id` from any `plot_groups[].channels` lists.
+3. If the Logging tab referenced it in `AXIS_SIGNALS` / `SPINDLE_SIGNALS`, remove that mapping or the legend row will skip it.
+4. Restart Probe Basic.
+
+**No VFD / different spindle?** Delete all `"group": "spindle"` channels (and the `spindle_*` plot groups). The **SPINDLE** button can stay; plotted lines will simply be empty until you remap pins — or hide the button in `signal_monitor.py`.
+
+**No A axis?** Remove `a_*` channels and drop `"A"` from `AXIS_ORDER` / axis buttons if you want a cleaner UI.
+
+**Different VFD (not H100 mb2hal)?** Keep the channel `id`s if you like the UI labels, but change each `"pin"` to whatever your HAL exports (e.g. `vfdspeed.0.current`, `spindle.0.speed-in`). Re-check units/scale.
+
+### Discover pins on an unknown machine
+
+```bash
+halcmd show pin
+halcmd show sig
+halcmd show pin mb2hal
+halcmd show pin spindle
+halcmd show pin lcec.0.0
+```
+
+Match names carefully: nets (`spindle-current`) are not always readable as pins — use the writer pin (`mult2.6.out`) or a pin connected to that net.
+
+### CSV vs live plot
+
+| | CSV | Logging tab plot |
+|--|-----|------------------|
+| Source | Every `channels[]` entry | SIGNAL mode + toggles only |
+| Missing pin | Column of `nan` / blanks | Line stays flat / empty |
+| After JSON edit | New session picks it up | Restart / reopen tab |
+
+Context columns on every row: `line`, `feed`, `enabled`.
 
 ---
 
@@ -218,12 +321,13 @@ Context columns in each CSV row: `line`, `feed`, `enabled`.
 |------|------|
 | `probe_basic/python/hal_signal_logger.py` | Poll HAL, write CSV, live buffers |
 | `probe_basic/python/signal_plot_widget.py` | Live plot widget |
-| `probe_basic/user_tabs/signal_monitor/` | Logging tab (`.py`, `.ui`, `.qss`) |
-| `config/logging/signals.json` | Channel definitions |
-| `custom.hal` | Torque/velocity/drive-ferr conversion → `tune-*` pins |
+| `probe_basic/user_tabs/signal_monitor/` | Logging tab (`.py`, `.ui`, `.qss`) — SIGNAL button ↔ channel maps |
+| `config/logging/signals.json` | **Channel definitions (edit this for hardware)** |
+| `custom.hal` | Torque/velocity/drive-ferr + H100 spindle scaling → pins |
+| `h100.mb2hal` | Modbus map for this mill’s VFD (omit/replace on other hardware) |
 | `A6_TUNING.md` | A6 SDO gain defaults + Servo Tuning GUI / revert |
 | `INSTALL_SERVO_TUNING.md` | How to install Servo Tuning + Logging on another machine |
-| `ethercat-conf.xml` | PDO 606C/6077/60F4 + SDO 6065/6066 + loop gains |
+| `ethercat-conf.xml` | PDO 606C/6077/60F4 + SDO 6065/6066 |
 | `nc_files/x_tuning.ngc` | Example axis tuning program |
 | `scripts/run_signal_logger.py` | Headless CLI logger (optional) |
 
@@ -234,18 +338,20 @@ Context columns in each CSV row: `line`, `feed`, `enabled`.
 | Phase | Verify |
 |-------|--------|
 | **0 — Setup** | LinuxCNC starts without HAL loadrt errors; [smoke test](PYTHON_PACKAGES.md#smoke-test) passes |
-| **1 — HAL** | `tune-torque.*`, `tune-velocity.*`, `joint.*.f-error` respond to jog |
-| **2 — Tab** | Logging tab loads; axis toggles, signal buttons, legend, and plot update |
+| **1 — HAL** | `tune-torque.*`, `tune-velocity.*`, `joint.*.f-error` respond to jog; spindle pins if configured |
+| **2 — Tab** | Logging tab loads; axis/SPINDLE toggles, signal buttons, legend, and plot update |
 | **3 — Program log** | Arm → run `x_tuning.ngc` in AUTO → CSV created, dialog on finish |
-| **4 — Live log** | Start/stop live → CSV written while jogging |
+| **4 — Live log** | Start/stop live → CSV written while jogging / spindle on |
 | **5 — Rate** | Change rate dropdown; CSV row spacing matches selection |
-| **6 — CSV content** | One file, all channel columns populated |
+| **6 — CSV content** | One file; expected channel columns present (no surprise empty hardware) |
 | **7 — Integration** | No motion regression; e-stop safe |
 
 ```bash
-# HAL pins
+# HAL pins (axis + spindle examples)
 halcmd getp tune-torque.0.out
 halcmd getp joint.0.f-error
+halcmd getp spindle.0.speed-out-abs
+halcmd getp mult2.6.out
 
 # Headless live log (Ctrl+C to stop)
 python3 scripts/run_signal_logger.py --live
@@ -260,15 +366,17 @@ ls -lt logs/signals/
 |---------|-----|
 | HAL error mixing `count=` and `names=` | See `custom.hal` — use separate `loadrt count=` for extra conv/mult instances |
 | `lcec.0.N.torque-fb` not found | Confirm PDO entries 606C + 6077 in `ethercat-conf.xml` for each slave |
-| Empty CSV columns | `halcmd show pin <name>` — check pin name in `signals.json` |
+| Empty CSV columns | `halcmd show pin <name>` — fix or remove the pin in `signals.json` |
+| SPINDLE lines empty | No mb2hal / wrong pin names — remap or delete `spindle_*` channels |
 | Never starts on program | Must be AUTO; program must be running (`MODE_AUTO` + interpreter not idle) |
 | No dialog on save | Check status line; look in `logs/signals/` |
 | No plots | `sudo apt install python3-pyqtgraph` |
 | Drive Er47.0 on fast moves | Tight 6065h limit — increase counts or 6066h delay in `ethercat-conf.xml` |
 | Legend colors wrong | Edit `color` fields in `signals.json` |
+| Mixed RPM + amps on one Y axis | In SPINDLE mode plot one unit family at a time (CMD/FB **or** A) |
 
 ---
 
-## Branch
+## Related
 
-Development branch: `servo-tuning-gui`. See also **[A6_TUNING.md](A6_TUNING.md)**.
+Servo Tuning + Logging install: **[INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md)**. Drive tuning: **[A6_TUNING.md](A6_TUNING.md)**.
