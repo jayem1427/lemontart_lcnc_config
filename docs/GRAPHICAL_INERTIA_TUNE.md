@@ -95,6 +95,12 @@ torque CV is high, re-run with limit ≈ 90% of probe \(T_p\) (above \(T_f\)).
 | Speed or position amp with soft-start | LinuxCNC **CSP** G1 trapezoid |
 | Tuning sheet → Pn100/101/102 from rigidity | **Not** done here — use one-click / hand tune after C00.06 |
 
+**Back pocket (not implemented):** Sigma II Techniques also offer two
+alternate \(T_f\) measurements if cruise-from-trace is untrustworthy —
+(1) cumulative load while jogging at ~½ application speed, (2) torque-limit
+walk (won’t-move vs just-reaches-top-speed, then average). Worth revisiting
+if graphical cruise \(T_f\) proves noisy on hardware.
+
 ---
 
 ## Why these defaults
