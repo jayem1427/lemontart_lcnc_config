@@ -1,0 +1,13 @@
+(author: jayem)
+(date: 2026)
+(SKELETON - NO LOGIC YET)
+(Future: length, then diameter, in one shot)
+
+o<laser_full_tool> sub
+    o100 if [#5399 NE 1]
+        o<laser_touch_z> call
+    o100 endif
+    (DEBUG, LASER: measure full tool length+diameter - SKELETON, no logic yet)
+o<laser_full_tool> endsub
+
+M2

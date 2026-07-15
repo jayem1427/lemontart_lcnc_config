@@ -1,0 +1,553 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>LASER_SETTER</class>
+ <widget class="QWidget" name="LASER_SETTER">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1645</width>
+    <height>619</height>
+   </rect>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>1645</width>
+    <height>619</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>LASER SETTER</string>
+  </property>
+  <property name="sidebar" stdset="0">
+   <bool>false</bool>
+  </property>
+  <layout class="QVBoxLayout" name="rootLayout">
+   <property name="spacing">
+    <number>10</number>
+   </property>
+   <property name="leftMargin">
+    <number>14</number>
+   </property>
+   <property name="topMargin">
+    <number>12</number>
+   </property>
+   <property name="rightMargin">
+    <number>6</number>
+   </property>
+   <property name="bottomMargin">
+    <number>12</number>
+   </property>
+
+   <!-- ============== HEADER BAR ============== -->
+   <item>
+    <widget class="QFrame" name="headerBar">
+     <property name="minimumSize">
+      <size><width>0</width><height>56</height></size>
+     </property>
+     <property name="maximumSize">
+      <size><width>16777215</width><height>56</height></size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <layout class="QHBoxLayout" name="headerLayout">
+      <property name="leftMargin"><number>16</number></property>
+      <property name="topMargin"><number>6</number></property>
+      <property name="rightMargin"><number>16</number></property>
+      <property name="bottomMargin"><number>6</number></property>
+      <property name="spacing"><number>14</number></property>
+
+      <item>
+       <widget class="QLabel" name="lblTitle">
+        <property name="text"><string>LASER TOOL SETTER</string></property>
+       </widget>
+      </item>
+
+      <item>
+       <spacer name="headerSpacer">
+        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+       </spacer>
+      </item>
+
+      <item>
+       <widget class="QLabel" name="ledLaserHealthy">
+        <property name="minimumSize"><size><width>18</width><height>18</height></size></property>
+        <property name="maximumSize"><size><width>18</width><height>18</height></size></property>
+        <property name="text"><string/></property>
+        <property name="toolTip"><string>Laser sensor healthy (placeholder, no HAL wired yet)</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lblLedLaser">
+        <property name="text"><string>LASER</string></property>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QFrame" name="headerDivider1">
+        <property name="frameShape"><enum>QFrame::VLine</enum></property>
+        <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QLabel" name="ledAirBlast">
+        <property name="minimumSize"><size><width>18</width><height>18</height></size></property>
+        <property name="maximumSize"><size><width>18</width><height>18</height></size></property>
+        <property name="text"><string/></property>
+        <property name="toolTip"><string>Air blast (placeholder)</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lblLedAir">
+        <property name="text"><string>AIR</string></property>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QFrame" name="headerDivider3">
+        <property name="frameShape"><enum>QFrame::VLine</enum></property>
+        <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QLabel" name="lblActiveTool">
+        <property name="text"><string>TOOL: --</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="headerDivider4">
+        <property name="frameShape"><enum>QFrame::VLine</enum></property>
+        <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lblUnitsCap">
+        <property name="text"><string>UNITS</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="cmbUnits">
+        <item>
+         <property name="text"><string>mm</string></property>
+        </item>
+        <item>
+         <property name="text"><string>in</string></property>
+        </item>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnHelp">
+        <property name="minimumSize">
+         <size><width>36</width><height>36</height></size>
+        </property>
+        <property name="maximumSize">
+         <size><width>36</width><height>36</height></size>
+        </property>
+        <property name="text"><string>?</string></property>
+        <property name="toolTip"><string>Laser tool setter help (coming soon)</string></property>
+        <property name="focusPolicy"><enum>Qt::NoFocus</enum></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- ============== BODY: THREE COLUMNS ============== -->
+   <item>
+    <layout class="QHBoxLayout" name="bodyLayout">
+     <property name="spacing"><number>14</number></property>
+
+     <!-- ===== MEASURE COLUMN ===== -->
+     <item>
+      <widget class="QGroupBox" name="grpMeasure">
+       <property name="title"><string>MEASURE</string></property>
+       <layout class="QVBoxLayout" name="measureLayout">
+        <property name="leftMargin"><number>14</number></property>
+        <property name="topMargin"><number>20</number></property>
+        <property name="rightMargin"><number>14</number></property>
+        <property name="bottomMargin"><number>14</number></property>
+        <property name="spacing"><number>10</number></property>
+
+        <item>
+         <layout class="QGridLayout" name="setupLayout">
+          <property name="horizontalSpacing"><number>10</number></property>
+          <property name="verticalSpacing"><number>8</number></property>
+
+          <item row="0" column="0">
+           <widget class="QLabel" name="lblStartXCap">
+            <property name="text"><string>START X</string></property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QLineEdit" name="leStartX">
+            <property name="text"><string>0.0000</string></property>
+            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+            <property name="minimumHeight"><number>28</number></property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QLabel" name="lblStartXUnit">
+            <property name="text"><string>mm</string></property>
+           </widget>
+          </item>
+
+          <item row="1" column="0">
+           <widget class="QLabel" name="lblStartYCap">
+            <property name="text"><string>START Y</string></property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="leStartY">
+            <property name="text"><string>0.0000</string></property>
+            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+            <property name="minimumHeight"><number>28</number></property>
+           </widget>
+          </item>
+          <item row="1" column="2">
+           <widget class="QLabel" name="lblStartYUnit">
+            <property name="text"><string>mm</string></property>
+           </widget>
+          </item>
+
+          <item row="2" column="0">
+           <widget class="QLabel" name="lblProbeRpmCap">
+            <property name="text"><string>PROBE RPM</string></property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLineEdit" name="leProbeRpm">
+            <property name="text"><string>1000</string></property>
+            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+            <property name="minimumHeight"><number>28</number></property>
+           </widget>
+          </item>
+          <item row="2" column="2">
+           <widget class="QLabel" name="lblProbeRpmUnit">
+            <property name="text"><string>rpm</string></property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+
+        <item>
+         <widget class="QPushButton" name="btnGetStartPos">
+          <property name="text"><string>CAPTURE CURRENT X/Y</string></property>
+          <property name="minimumHeight"><number>40</number></property>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QPushButton" name="btnMeasureLength">
+          <property name="text"><string>MEASURE LENGTH</string></property>
+          <property name="minimumHeight"><number>44</number></property>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QPushButton" name="btnMeasureDiameter">
+          <property name="text"><string>MEASURE DIAMETER</string></property>
+          <property name="minimumHeight"><number>44</number></property>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QPushButton" name="btnMeasureRunout">
+          <property name="text"><string>MEASURE RUNOUT</string></property>
+          <property name="minimumHeight"><number>44</number></property>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QPushButton" name="btnBrokenCheck">
+          <property name="text"><string>BROKEN TOOL CHECK</string></property>
+          <property name="minimumHeight"><number>44</number></property>
+         </widget>
+        </item>
+
+        <item>
+         <spacer name="measureSpacer">
+          <property name="orientation"><enum>Qt::Vertical</enum></property>
+          <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+     </item>
+
+     <!-- ===== RESULTS COLUMN ===== -->
+     <item>
+      <widget class="QGroupBox" name="grpResults">
+       <property name="title"><string>RESULTS</string></property>
+       <layout class="QGridLayout" name="resultsLayout">
+        <property name="leftMargin"><number>14</number></property>
+        <property name="topMargin"><number>20</number></property>
+        <property name="rightMargin"><number>14</number></property>
+        <property name="bottomMargin"><number>14</number></property>
+        <property name="horizontalSpacing"><number>10</number></property>
+        <property name="verticalSpacing"><number>8</number></property>
+
+        <item row="0" column="0">
+         <widget class="QLabel" name="lblResLengthCap">
+          <property name="text"><string>LENGTH</string></property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QLabel" name="lblResLength">
+          <property name="text"><string>0.0000</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="0" column="2">
+         <widget class="QLabel" name="lblResLengthUnit">
+          <property name="text"><string>mm</string></property>
+         </widget>
+        </item>
+
+        <item row="1" column="0">
+         <widget class="QLabel" name="lblResDiamCap">
+          <property name="text"><string>DIAMETER</string></property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QLabel" name="lblResDiam">
+          <property name="text"><string>0.0000</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="1" column="2">
+         <widget class="QLabel" name="lblResDiamUnit">
+          <property name="text"><string>mm</string></property>
+         </widget>
+        </item>
+
+        <item row="2" column="0">
+         <widget class="QLabel" name="lblResRunoutCap">
+          <property name="text"><string>RUNOUT</string></property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QLabel" name="lblResRunout">
+          <property name="text"><string>0.0000</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="2" column="2">
+         <widget class="QLabel" name="lblResRunoutUnit">
+          <property name="text"><string>mm</string></property>
+         </widget>
+        </item>
+
+        <item row="3" column="0" colspan="3">
+         <spacer name="resultsSpacer">
+          <property name="orientation"><enum>Qt::Vertical</enum></property>
+          <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+     </item>
+
+     <!-- ===== CALIBRATION COLUMN ===== -->
+     <item>
+      <widget class="QGroupBox" name="grpCalibration">
+       <property name="title"><string>CALIBRATION</string></property>
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <layout class="QGridLayout" name="calLayout">
+        <property name="leftMargin"><number>12</number></property>
+        <property name="topMargin"><number>18</number></property>
+        <property name="rightMargin"><number>12</number></property>
+        <property name="bottomMargin"><number>12</number></property>
+        <property name="horizontalSpacing"><number>10</number></property>
+        <property name="verticalSpacing"><number>8</number></property>
+
+          <item row="0" column="0">
+           <widget class="QLabel" name="lblMasterPinCap">
+            <property name="text"><string>MASTER PIN</string></property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QLineEdit" name="leMasterPin">
+            <property name="text"><string>12.7000</string></property>
+            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+            <property name="minimumHeight"><number>28</number></property>
+            <property name="maximumWidth"><number>110</number></property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QLabel" name="lblMasterPinUnit">
+            <property name="text"><string>mm</string></property>
+           </widget>
+          </item>
+
+          <item row="1" column="0" colspan="3">
+           <widget class="QPushButton" name="btnCalibrate">
+            <property name="text"><string>CALIBRATE BEAM</string></property>
+            <property name="minimumHeight"><number>36</number></property>
+           </widget>
+          </item>
+
+          <item row="2" column="0" colspan="3">
+           <widget class="QLabel" name="lblBeamOffsetsCap">
+            <property name="text"><string>BEAM OFFSETS</string></property>
+           </widget>
+          </item>
+
+          <item row="3" column="0">
+           <widget class="QLabel" name="lblBeamXCap">
+            <property name="text"><string>BEAM X</string></property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLabel" name="lblBeamX">
+            <property name="text"><string>0.0000</string></property>
+            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+           </widget>
+          </item>
+          <item row="3" column="2">
+           <widget class="QLabel" name="lblBeamXUnit">
+            <property name="text"><string>mm</string></property>
+           </widget>
+          </item>
+
+          <item row="4" column="0">
+           <widget class="QLabel" name="lblBeamYCap">
+            <property name="text"><string>BEAM Y</string></property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QLabel" name="lblBeamY">
+            <property name="text"><string>0.0000</string></property>
+            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+           </widget>
+          </item>
+          <item row="4" column="2">
+           <widget class="QLabel" name="lblBeamYUnit">
+            <property name="text"><string>mm</string></property>
+           </widget>
+          </item>
+
+          <item row="5" column="0">
+           <widget class="QLabel" name="lblBeamZCap">
+            <property name="text"><string>BEAM Z</string></property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QLabel" name="lblBeamZ">
+            <property name="text"><string>0.0000</string></property>
+            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+           </widget>
+          </item>
+          <item row="5" column="2">
+           <widget class="QLabel" name="lblBeamZUnit">
+            <property name="text"><string>mm</string></property>
+           </widget>
+          </item>
+
+          <item row="6" column="0">
+           <widget class="QLabel" name="lblZOffsetCap">
+            <property name="text"><string>Z OFFSET</string></property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QLabel" name="lblZOffset">
+            <property name="text"><string>0.0000</string></property>
+            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+           </widget>
+          </item>
+          <item row="6" column="2">
+           <widget class="QLabel" name="lblZOffsetUnit">
+            <property name="text"><string>mm</string></property>
+           </widget>
+          </item>
+
+          <item row="7" column="0">
+           <widget class="QLabel" name="lblBeamDiaCap">
+            <property name="text"><string>BEAM DIA</string></property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <widget class="QLabel" name="lblBeamDia">
+            <property name="text"><string>0.0000</string></property>
+            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+           </widget>
+          </item>
+          <item row="7" column="2">
+           <widget class="QLabel" name="lblBeamDiaUnit">
+            <property name="text"><string>mm</string></property>
+           </widget>
+          </item>
+       </layout>
+      </widget>
+     </item>
+
+     <!-- ===== TOOL SETTER GRAPHIC (floating, outside panels) ===== -->
+     <item>
+      <widget class="QLabel" name="lblToolSetterImage">
+       <property name="minimumSize">
+        <size><width>180</width><height>150</height></size>
+       </property>
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+         <horstretch>4</horstretch>
+         <verstretch>1</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="text"><string/></property>
+       <property name="alignment"><set>Qt::AlignCenter</set></property>
+       <property name="scaledContents"><bool>false</bool></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- ============== FOOTER BAR ============== -->
+   <item>
+    <widget class="QFrame" name="footerBar">
+     <property name="minimumSize">
+      <size><width>0</width><height>52</height></size>
+     </property>
+     <property name="maximumSize">
+      <size><width>16777215</width><height>52</height></size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <layout class="QHBoxLayout" name="footerLayout">
+      <property name="leftMargin"><number>14</number></property>
+      <property name="topMargin"><number>6</number></property>
+      <property name="rightMargin"><number>14</number></property>
+      <property name="bottomMargin"><number>6</number></property>
+      <property name="spacing"><number>10</number></property>
+
+      <item>
+       <widget class="QPushButton" name="btnAirBlastToggle">
+        <property name="text"><string>AIR BLAST: TOGGLE</string></property>
+        <property name="minimumHeight"><number>36</number></property>
+        <property name="minimumWidth"><number>200</number></property>
+        <property name="checkable"><bool>true</bool></property>
+       </widget>
+      </item>
+
+      <item>
+       <spacer name="footerSpacer">
+        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

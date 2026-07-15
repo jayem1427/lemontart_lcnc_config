@@ -1,0 +1,11 @@
+(author: jayem)
+(date: 2026)
+(SKELETON - NO LOGIC YET)
+(Future: with master gauge pin in spindle, locate beam X/Y/Z,)
+(compute z-offset and beam-diameter-offset, persist to custom_config.yml)
+
+o<laser_calibrate> sub
+    (DEBUG, LASER: calibrate beam with master pin - SKELETON, no logic yet)
+o<laser_calibrate> endsub
+
+M2

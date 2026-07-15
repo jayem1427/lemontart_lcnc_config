@@ -1,0 +1,288 @@
+/* ============================================================
+ * Laser Tool Setter — Probe Basic dark theme
+ * Font: BebasKai (Qt family name — not "Bebas Kai")
+ * Base: #2e3436  |  Panels: #363b3d
+ * ============================================================ */
+
+QWidget#LASER_SETTER {
+    background-color: #2e3436;
+    color: rgb(238, 238, 236);
+    font: 12pt "BebasKai";
+}
+
+/* ---------- Header / footer ---------- */
+
+QFrame#headerBar,
+QFrame#footerBar {
+    background-color: #363b3d;
+    border: 1px solid #8a8484;
+    border-radius: 6px;
+}
+
+QFrame#headerDivider1,
+QFrame#headerDivider3,
+QFrame#headerDivider4 {
+    color: #6e7375;
+    background-color: #6e7375;
+    max-width: 1px;
+}
+
+QLabel#lblTitle {
+    color: white;
+    font: 24pt "BebasKai";
+    letter-spacing: 1px;
+}
+
+QLabel#lblLedLaser,
+QLabel#lblLedAir,
+QLabel#lblActiveTool,
+QLabel#lblUnitsCap {
+    color: rgb(238, 238, 236);
+    font: 13pt "BebasKai";
+    letter-spacing: 1px;
+}
+
+QLabel#ledLaserHealthy,
+QLabel#ledAirBlast {
+    background-color: #4a4f51;
+    border: 1px solid #2a2a2a;
+    border-radius: 9px;
+}
+
+/* ---------- Panels ---------- */
+
+QGroupBox {
+    background-color: #363b3d;
+    border: 1px solid #8a8484;
+    border-radius: 6px;
+    margin-top: 0px;
+    padding-top: 24px;
+    font: 16pt "BebasKai";
+}
+
+QGroupBox#grpMeasure,
+QGroupBox#grpResults,
+QGroupBox#grpCalibration {
+    background-color: #363b3d;
+}
+
+QGroupBox::title {
+    subcontrol-origin: padding;
+    subcontrol-position: top center;
+    left: 0px;
+    top: 4px;
+    padding: 0 8px;
+    color: white;
+    font: 16pt "BebasKai";
+    letter-spacing: 1px;
+}
+
+/* ---------- Section sub-headers inside panels ---------- */
+
+QLabel#lblBeamOffsetsCap {
+    color: #b8bcbe;
+    font: 12pt "BebasKai";
+    letter-spacing: 1px;
+    padding-top: 6px;
+    padding-bottom: 2px;
+}
+
+/* ---------- Buttons ---------- */
+
+QPushButton {
+    color: white;
+    border: 2px solid black;
+    border-radius: 6px;
+    padding: 6px 12px;
+    background: qlineargradient(
+        spread:pad, x1:0, y1:1, x2:0, y2:0,
+        stop:0 rgba(213, 218, 216, 255),
+        stop:0.169312 rgba(82, 82, 83, 255),
+        stop:0.328042 rgba(72, 70, 73, 255),
+        stop:0.492063 rgba(78, 77, 79, 255),
+        stop:0.703704 rgba(72, 70, 73, 255),
+        stop:0.86 rgba(82, 82, 83, 255),
+        stop:1 rgba(213, 218, 216, 255)
+    );
+    font: 15pt "BebasKai";
+    letter-spacing: 1px;
+}
+
+QPushButton#btnGetStartPos {
+    font: 13pt "BebasKai";
+}
+
+QPushButton#btnHelp {
+    font: 18pt "BebasKai";
+    padding: 0;
+    min-width: 36px;
+    max-width: 36px;
+    min-height: 36px;
+    max-height: 36px;
+}
+
+QPushButton:hover {
+    background: qlineargradient(
+        x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 #A19E9E, stop: 1.0 #5C5959
+    );
+}
+
+QPushButton:pressed,
+QPushButton:checked {
+    background: qlineargradient(
+        spread:pad, x1:0, y1:0, x2:0, y2:1,
+        stop:0 rgba(85, 85, 238, 255),
+        stop:0.544974 rgba(90, 91, 239, 255),
+        stop:1 rgba(126, 135, 243, 255)
+    );
+}
+
+QPushButton:disabled {
+    border-color: gray;
+    color: rgb(170, 170, 170);
+}
+
+/* ---------- Inputs ---------- */
+
+QLineEdit {
+    background-color: rgb(235, 235, 235);
+    color: black;
+    border: 1px solid rgb(160, 160, 160);
+    border-radius: 5px;
+    padding: 4px 8px;
+    font: 15pt "BebasKai";
+    min-height: 30px;
+}
+
+QLineEdit:focus {
+    border: 2px solid rgb(85, 85, 238);
+    background-color: rgb(245, 245, 255);
+}
+
+/* ---------- Value readouts (DRO-style) ---------- */
+
+QLabel#lblToolSetterImage {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+QLabel#lblResLength,
+QLabel#lblResDiam,
+QLabel#lblResRunout,
+QLabel#lblBeamX,
+QLabel#lblBeamY,
+QLabel#lblBeamZ,
+QLabel#lblZOffset,
+QLabel#lblBeamDia {
+    color: black;
+    background-color: rgb(235, 235, 235);
+    border: 1px solid rgb(160, 160, 160);
+    border-radius: 5px;
+    padding: 4px 10px;
+    font: 17pt "BebasKai";
+    min-width: 96px;
+    min-height: 30px;
+}
+
+/* ---------- Field labels ---------- */
+
+QGroupBox#grpResults QLabel#lblResLengthCap,
+QGroupBox#grpResults QLabel#lblResDiamCap,
+QGroupBox#grpResults QLabel#lblResRunoutCap {
+    color: rgb(238, 238, 236);
+    font: 15pt "BebasKai";
+    letter-spacing: 1px;
+    min-width: 88px;
+}
+
+QGroupBox#grpResults QLabel#lblResLengthUnit,
+QGroupBox#grpResults QLabel#lblResDiamUnit,
+QGroupBox#grpResults QLabel#lblResRunoutUnit {
+    color: #d6dadc;
+    font: 15pt "BebasKai";
+    min-width: 28px;
+}
+
+QGroupBox#grpMeasure QLabel#lblStartXCap,
+QGroupBox#grpMeasure QLabel#lblStartYCap,
+QGroupBox#grpMeasure QLabel#lblProbeRpmCap,
+QGroupBox#grpCalibration QLabel#lblMasterPinCap,
+QGroupBox#grpCalibration QLabel#lblBeamXCap,
+QGroupBox#grpCalibration QLabel#lblBeamYCap,
+QGroupBox#grpCalibration QLabel#lblBeamZCap,
+QGroupBox#grpCalibration QLabel#lblZOffsetCap,
+QGroupBox#grpCalibration QLabel#lblBeamDiaCap {
+    color: rgb(238, 238, 236);
+    font: 14pt "BebasKai";
+    letter-spacing: 1px;
+    min-width: 88px;
+}
+
+QGroupBox#grpMeasure QLabel#lblStartXUnit,
+QGroupBox#grpMeasure QLabel#lblStartYUnit,
+QGroupBox#grpMeasure QLabel#lblProbeRpmUnit,
+QGroupBox#grpCalibration QLabel#lblMasterPinUnit,
+QGroupBox#grpCalibration QLabel#lblBeamXUnit,
+QGroupBox#grpCalibration QLabel#lblBeamYUnit,
+QGroupBox#grpCalibration QLabel#lblBeamZUnit,
+QGroupBox#grpCalibration QLabel#lblZOffsetUnit,
+QGroupBox#grpCalibration QLabel#lblBeamDiaUnit {
+    color: #d6dadc;
+    font: 14pt "BebasKai";
+    min-width: 28px;
+}
+
+QGroupBox#grpMeasure QLineEdit,
+QGroupBox#grpCalibration QLineEdit {
+    font: 15pt "BebasKai";
+    max-width: 120px;
+}
+
+QGroupBox#grpCalibration QPushButton#btnCalibrate {
+    font: 15pt "BebasKai";
+    min-height: 38px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+QComboBox#cmbUnits {
+    color: white;
+    border: 2px solid black;
+    border-radius: 5px;
+    padding: 4px 8px;
+    min-width: 68px;
+    background: qlineargradient(
+        spread:pad, x1:0, y1:1, x2:0, y2:0,
+        stop:0 rgba(213, 218, 216, 255),
+        stop:0.169312 rgba(82, 82, 83, 255),
+        stop:0.328042 rgba(72, 70, 73, 255),
+        stop:0.492063 rgba(78, 77, 79, 255),
+        stop:0.703704 rgba(72, 70, 73, 255),
+        stop:0.86 rgba(82, 82, 83, 255),
+        stop:1 rgba(213, 218, 216, 255)
+    );
+    font: 13pt "BebasKai";
+}
+
+QComboBox#cmbUnits:hover {
+    background: qlineargradient(
+        x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 #A19E9E, stop: 1.0 #5C5959
+    );
+}
+
+QComboBox#cmbUnits::drop-down {
+    border: none;
+    width: 16px;
+}
+
+QComboBox#cmbUnits QAbstractItemView {
+    color: white;
+    background-color: #363b3d;
+    border: 1px solid black;
+    selection-background-color: rgb(85, 85, 238);
+    font: 13pt "BebasKai";
+}
