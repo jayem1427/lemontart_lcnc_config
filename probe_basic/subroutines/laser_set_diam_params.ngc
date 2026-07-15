@@ -1,0 +1,14 @@
+(author: jayem)
+(date: 2026)
+(Store diameter-measure params.)
+(#1 = Z drop below tip mm, #2 = half-search travel from START XY mm)
+
+o<laser_set_diam_params> sub
+    #5187 = #1
+    o<sdp_search> if [#2 GT 0]
+      #5188 = #2
+    o<sdp_search> endif
+    (DEBUG, LASER: Z-drop=#5187 search=#5188)
+o<laser_set_diam_params> endsub
+
+M2

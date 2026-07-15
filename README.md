@@ -18,6 +18,7 @@ All project docs live in [`docs/`](docs/).
 | **[GETTING_STARTED.md](docs/GETTING_STARTED.md)** | Zero-to-hero path, external links, first boot, troubleshooting |
 | **[DEVIATIONS.md](docs/DEVIATIONS.md)** | How this config differs from stock LinuxCNC / Probe Basic |
 | **[TOOLSETTER.md](docs/TOOLSETTER.md)** | M600 contact toolsetter, touch-probe routing, Fusion post |
+| **[LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md)** | Kexin DS-5V-M laser setter: HAL, diameter, params, recipes |
 | **[INSTALL_TOOL_CHANGE.md](docs/INSTALL_TOOL_CHANGE.md)** | Install tool-change / toolsetter workflow on another machine |
 | **[PROBE_BASIC_UI.md](docs/PROBE_BASIC_UI.md)** | Custom DRO (SET Z), spindle widgets, UI paths |
 | **[SIGNAL_LOGGING.md](docs/SIGNAL_LOGGING.md)** | Logging tab, HAL telemetry, CSV, sample rate / Nyquist |
@@ -30,7 +31,7 @@ All project docs live in [`docs/`](docs/).
 | **[INSTALL_SERVO_TUNING.md](docs/INSTALL_SERVO_TUNING.md)** | Install Servo Tuning + Logging on another machine |
 | **[PYTHON_PACKAGES.md](docs/PYTHON_PACKAGES.md)** | Python dependency / package policy |
 | [probe_basic/subroutines/metrology/README.md](probe_basic/subroutines/metrology/README.md) | Z repeatability test macros |
-| README § Laser tool setter | Laser setter tab UI / macros (in progress) |
+| README § Laser tool setter | Short summary — full detail in [LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md) |
 
 New to LinuxCNC? Start with [GETTING_STARTED.md](docs/GETTING_STARTED.md) — do not jump straight to Probe Basic. Something behaves unlike the manual? Check [DEVIATIONS.md](docs/DEVIATIONS.md) first.
 
@@ -98,7 +99,7 @@ Probe Basic loads **every subdirectory** under `probe_basic/user_tabs/` and expe
 |-----------------|---------|
 | `signal_monitor/` | HAL signal logging |
 | `servo_tuner/` | Servo Tuning + one-click |
-| `laser_setter/` | Laser tool setter (UI in progress) |
+| `laser_setter/` | Laser tool setter — [LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md) |
 
 When you `git checkout` **to** an older feature-only branch, git swaps the tracked tab files but **untracked leftovers can remain** — usually an empty folder or `__pycache__` from the other branch. Probe Basic still tries to load that folder and crashes on startup:
 
@@ -280,54 +281,53 @@ Either fault sets `spindle-vfd-critical-fault`, which triggers
 
 ## Laser tool setter (in progress)
 
-Dedicated Probe Basic tab for an upcoming laser tool setter (tool length + diameter + runout + broken-tool detect). Now included on this branch alongside Servo Tuning / Logging.
+Dedicated Probe Basic tab for the **Kexin DS-5V-M** laser tool setter.
 
-**Current state:** UI and setup-parameter plumbing are in place; measure buttons still call skeleton NGC macros (DEBUG + exit). No HAL pins or real probing yet.
+**Full documentation:** **[docs/LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md)**
+(wiring, HAL mux, parameters, diameter sequence, troubleshooting).
 
-### Loading the tab
+**Current state:** HAL + live beam LED + **MEASURE DIAMETER** (tip-find → Z-drop →
++X break/clear) + optional **CALIBRATE** / **MEASURE LENGTH**. Runout / broken-check /
+air blast still skeleton.
 
-- `USER_TABS_PATH = probe_basic/user_tabs/` in `ethercat_mill.ini` `[DISPLAY]`
-- Tab source: `probe_basic/user_tabs/laser_setter/` (`.ui`, `.py`, `.qss`, `kexin_tool_setter.png`)
-- Skeleton macros: `probe_basic/subroutines/laser_*.ngc`
+### Quick start (diameter)
 
-### Setup fields (Measure column)
+1. Restart LinuxCNC after HAL / tab changes.
+2. CAPTURE START X/Y over the slot center; set **Z DROP** (default 2 mm).
+3. Jog to a safe Z above the beam → **MEASURE DIAMETER**.
+4. If tip-find never trips, invert polarity (`not.10` in `ethercat_mill.hal`) — see the doc.
 
-Before any measure action, the tab syncs three values into LinuxCNC via `o<laser_set_start_xy> call [X] [Y] [RPM]`:
+### Wiring (this mill)
 
-| UI field | NGC parameter | Notes |
-|----------|---------------|-------|
-| START X | `#5181` | Editable; **CAPTURE CURRENT X/Y** fills from machine position |
-| START Y | `#5182` | Same as START X |
-| PROBE RPM | `#5183` | Must be &gt; 0; default 1000 |
+| Signal | Connection |
+|--------|------------|
+| Sensor signal | Slave **2** `lcec.0.2.di-5` — CN1 **DB15 pin 11** (level-shift 5 V→24 V) |
+| Select (enable) | Tie to **GND** (or drive later) |
+| Power | **5 V** / 0 V (not A6 24 V) |
+| Probe mux | `and2.6.in0` arms laser into `motion.probe-input` |
 
-**CAPTURE CURRENT X/Y** writes the current machine X/Y into the fields, then runs the same sync MDI. Length / diameter / runout / broken-check / calibrate buttons call `_sync_setup_params()` first; invalid X/Y/RPM blocks the MDI with a status error.
+### Setup fields / buttons
 
-### Measure buttons
+| UI field | NGC | Notes |
+|----------|-----|-------|
+| START X/Y | `#5181` / `#5182` | Slot center |
+| PROBE RPM | `#5183` | 0 = no spin |
+| Z DROP | `#5187` | Default 2 mm below tip |
+| BEAM Z | `#5184` | CALIBRATE (length only) |
 
-| Button | MDI macro | Z-touch gate |
-|--------|-----------|--------------|
-| MEASURE LENGTH | `o<laser_length> call` | Required first (sets `_z_touched`) |
-| MEASURE DIAMETER | `o<laser_diameter> call` | After length |
-| MEASURE RUNOUT | `o<laser_runout> call` | After length |
-| BROKEN TOOL CHECK | `o<laser_broken_check> call` | After length |
-| CALIBRATE | `o<laser_calibrate> call` | After length |
-| AIR BLAST | `o<laser_air_blast_toggle> call` | No gate |
+| Button | Macro |
+|--------|--------|
+| MEASURE DIAMETER | `o<laser_diameter> call` |
+| MEASURE LENGTH | `o<laser_length> call` |
+| CALIBRATE | tab stores BEAM Z |
 
-Removed from earlier skeleton: **MEASURE FULL TOOL**, **UPDATE TOOL TABLE**, footer **ABORT** (use LinuxCNC stop/estop). Header **?** opens a help placeholder dialog.
+Removed from earlier skeleton: **MEASURE FULL TOOL**, **UPDATE TOOL TABLE**, footer **ABORT**.
 
 ### UI / theme
 
-- Probe Basic dark palette (`#2e3436` / `#363b3d`), BebasKai font (loaded from `/usr/share/fonts/truetype/BebasKai.ttf`)
-- Three-column layout: Measure | Results + tool-setter diagram | Calibration
-- **Tool setter diagram** (`kexin_tool_setter.png`):
-  - **Pre-keyed RGBA PNG** (committed here): green background and watermarks removed offline; displays as-is.
-  - **Green-screen source photos**: replace the PNG with a raw green-screen shot; `laser_setter.py` auto-applies a green-dominance chroma key at load (preserves the silver plate; does not white-key). Crop AI watermarks from the source before committing.
-  - Scales with tab resize (`IMAGE_DISPLAY_SCALE = 0.624`)
-- Units combo converts START X/Y and all linear readouts between mm and inch
-
-### Roadmap (staged PRs)
-
-Hardware pick → HAL wiring → length-only macro → calibration → diameter measure → broken-tool M-code → per-flute profiling. Each phase on its own branch.
+- Probe Basic dark palette, BebasKai, three-column layout
+- Tool setter diagram: `kexin_tool_setter.png` (chroma-key aware)
+- Units combo converts START X/Y, Z DROP, and linear readouts
 
 ## What was left out of git, but is helpful to keep in the config
 

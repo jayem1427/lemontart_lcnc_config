@@ -1,12 +1,11 @@
 (author: jayem)
 (date: 2026)
-(SKELETON - NO LOGIC YET)
-(Future: flip the probe-mux HAL pin between contact probe and laser source.)
-(motion.probe-input can only have one driver so a HAL mux2 selects which)
-(physical input drives it; this macro sets the selector via M64/M65 P<n>)
+(Arm/disarm laser into motion.probe-input via setp and2.6.in0.)
+(The Laser Setter tab prefers halcmd setp; this macro is a manual fallback.)
+(P1 = 1 arm, P1 = 0 disarm. Uses system MDI (halcmd) — requires allow.)
 
 o<laser_mux_toggle> sub
-    (DEBUG, LASER: probe mux toggle - SKELETON, no HAL mux wired yet)
+    (DEBUG, LASER MUX: use the Laser Setter tab — it arms HAL around measure moves)
 o<laser_mux_toggle> endsub
 
 M2

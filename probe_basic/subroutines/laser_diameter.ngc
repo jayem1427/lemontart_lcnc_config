@@ -1,13 +1,116 @@
 (author: jayem)
 (date: 2026)
-(SKELETON - NO LOGIC YET)
-(Future: spinning tool, probe +X and -X edges of beam, compute diameter)
+(Laser diameter — tip-find Z, rapid to side start, drop Z, cross-feed X.)
+(Prereqs: START X/Y + RPM in #5181-#5183; Z-drop #5187; search #5188)
+(HAL: and2.6.in0 must be TRUE so Slave 2 DI5 can trip motion.probe-input)
+(Operator: jog to a safe Z above the beam before calling; START XY = slot center)
+(Measure axis: +X through START X. Diameter = |X_clear - X_break| (raw, no beam-width yet))
 
 o<laser_diameter> sub
-    o100 if [#5399 NE 1]
-        (abort, LASER: Touch off Z first before diameter measurement)
-    o100 endif
-    (DEBUG, LASER: measure diameter - SKELETON, no logic yet)
+    o<400> if [#<_task> EQ 1]
+
+    #<start_x> = #5181
+    #<start_y> = #5182
+    #<probe_rpm> = #5183
+    #<z_drop> = #5187
+    #<search> = #5188
+    #<max_travel> = #5186
+    #<fast_fr> = #3004
+    #<slow_fr> = #3005
+    #<traverse_fr> = 10000
+
+    o<diam_drop> if [#<z_drop> LE 0]
+      #<z_drop> = 2
+    o<diam_drop> endif
+    o<diam_search> if [#<search> LE 0]
+      #<search> = 10
+    o<diam_search> endif
+    o<diam_travel> if [#<max_travel> LE 0]
+      #<max_travel> = 30
+    o<diam_travel> endif
+    o<diam_feeds> if [#<fast_fr> LE 0]
+      #<fast_fr> = 200
+      #<slow_fr> = 40
+    o<diam_feeds> endif
+
+    o<diam_check_xy> if [[#<start_x> EQ 0] AND [#<start_y> EQ 0]]
+      (DEBUG, LASER DIAM: set START X/Y first)
+      o<laser_diameter> return
+    o<diam_check_xy> endif
+
+    #<z_approach> = #<_abs_z>
+    #<z_limit> = [#<z_approach> - #<max_travel>]
+    #<x_left> = [#<start_x> - #<search>]
+    #<x_right> = [#<start_x> + #<search>]
+
+    (DEBUG, LASER DIAM: tip-find at START XY, then cross +X)
+    G90
+    G53 G0 X#<start_x> Y#<start_y>
+
+    o<diam_spin> if [#<probe_rpm> GT 0]
+      M3 S#<probe_rpm>
+      G4 P1.0
+    o<diam_spin> endif
+
+    (--- tip-find Z ---)
+    G53 G38.2 Z#<z_limit> F#<fast_fr>
+    o<diam_miss_tip> if [#5070 EQ 0]
+      (DEBUG, LASER DIAM: no beam trip on tip-find — check XY / height / polarity)
+      M5
+      o<laser_diameter> return
+    o<diam_miss_tip> endif
+
+    #<tip_z> = #<_abs_z>
+    #5390 = #<tip_z>
+    #5399 = 1
+    #<z_measure> = [#<tip_z> - #<z_drop>]
+
+    (Retract, go to clear start beside the beam, drop into measure height)
+    G53 G0 Z#<z_approach>
+    G53 G0 X#<x_left> Y#<start_y>
+    G53 G0 Z#<z_measure>
+
+    o<diam_blocked> if [#<_hal[motion.probe-input]> NE 0]
+      (DEBUG, LASER DIAM: beam already broken at X start — increase search or fix XY)
+      G53 G0 Z#<z_approach>
+      M5
+      o<laser_diameter> return
+    o<diam_blocked> endif
+
+    (--- edge 1: feed +X until beam breaks ---)
+    G53 G38.3 X#<x_right> F#<slow_fr>
+    o<diam_miss_e1> if [#5070 EQ 0]
+      (DEBUG, LASER DIAM: never broke beam on cross-feed)
+      G53 G0 Z#<z_approach>
+      M5
+      o<laser_diameter> return
+    o<diam_miss_e1> endif
+
+    #<x_break> = #<_abs_x>
+    #5393 = #<x_break>
+
+    (--- edge 2: continue +X until beam clears ---)
+    G53 G38.5 X#<x_right> F#<slow_fr>
+    o<diam_miss_e2> if [#5070 EQ 0]
+      (DEBUG, LASER DIAM: never cleared beam — tool larger than search?)
+      G53 G0 Z#<z_approach>
+      M5
+      o<laser_diameter> return
+    o<diam_miss_e2> endif
+
+    #<x_clear> = #<_abs_x>
+    #5394 = #<x_clear>
+    #<diameter> = [ABS[#<x_clear> - #<x_break>]]
+    #5392 = #<diameter>
+
+    (Publish for UI via motion analog out 0)
+    M68 E0 Q#<diameter>
+
+    G53 G0 Z#<z_approach>
+    M5
+
+    (DEBUG, LASER DIAM: break X=#5393 clear X=#5394 diameter=#5392 (Z-drop=#<z_drop>))
+    o<400> endif
 o<laser_diameter> endsub
 
 M2

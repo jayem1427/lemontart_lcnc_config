@@ -1,11 +1,91 @@
 (author: jayem)
 (date: 2026)
-(SKELETON - NO LOGIC YET)
-(Future: probe tool length over laser beam, write Z to tool table)
+(Laser tool length — first real DS-5V-M function)
+(Prereqs: START X/Y + RPM in #5181-#5183 via laser_set_start_xy)
+(        BEAM Z G53 in #5184 — set by CALIBRATE or type into Beam Z for now)
+(HAL: and2.6.in0 must be TRUE so Slave 2 DI5 can trip motion.probe-input)
+(Polarity: laser-beam-broken TRUE when tool blocks the beam)
 
 o<laser_length> sub
-    #5399 = 1 (laser z-touch done for this setup cycle)
-    (DEBUG, LASER: measure length - SKELETON, no logic yet)
+    o<400> if [#<_task> EQ 1]
+
+    #<start_x> = #5181
+    #<start_y> = #5182
+    #<probe_rpm> = #5183
+    #<beam_z> = #5184
+    #<approach> = #5185
+    #<max_travel> = #5186
+    #<fast_fr> = #3004
+    #<slow_fr> = #3005
+    #<traverse_fr> = 10000
+
+    o<len_defaults> if [#<approach> LE 0]
+      #<approach> = 10
+    o<len_defaults> endif
+    o<len_travel> if [#<max_travel> LE 0]
+      #<max_travel> = 30
+    o<len_travel> endif
+    o<len_feeds> if [#<fast_fr> LE 0]
+      #<fast_fr> = 200
+      #<slow_fr> = 40
+    o<len_feeds> endif
+
+    o<len_check_xy> if [[#<start_x> EQ 0] AND [#<start_y> EQ 0]]
+      (DEBUG, LASER LENGTH: set START X/Y first)
+      o<laser_length> return
+    o<len_check_xy> endif
+
+    o<len_check_beam> if [#<beam_z> EQ 0]
+      (DEBUG, LASER LENGTH: set BEAM Z (#5184) first — use CALIBRATE or type Beam Z)
+      o<laser_length> return
+    o<len_check_beam> endif
+
+    #<z_approach> = [#<beam_z> + #<approach>]
+    #<z_limit> = [#<beam_z> - #<max_travel>]
+
+    (DEBUG, LASER LENGTH: arm probe mux, go to start XY)
+    G90
+    G53 G0 Z#<z_approach>
+    G53 G0 X#<start_x> Y#<start_y>
+
+    o<len_spin> if [#<probe_rpm> GT 0]
+      M3 S#<probe_rpm>
+      G4 P1.0
+    o<len_spin> endif
+
+    (Fast seek toward beam)
+    G53 G38.2 Z#<z_limit> F#<fast_fr>
+    o<len_miss_fast> if [#5070 EQ 0]
+      (DEBUG, LASER LENGTH: no beam trip on fast seek — check XY / BEAM Z / polarity)
+      M5
+      o<laser_length> return
+    o<len_miss_fast> endif
+
+    #<trip_fast> = #<_abs_z>
+    G91 G0 Z2
+    G90
+
+    (Slow final trip)
+    G53 G38.2 Z#<z_limit> F#<slow_fr>
+    o<len_miss_slow> if [#5070 EQ 0]
+      (DEBUG, LASER LENGTH: no beam trip on slow seek)
+      M5
+      o<laser_length> return
+    o<len_miss_slow> endif
+
+    #<trip_z> = #<_abs_z>
+    #5390 = #<trip_z>
+    #5399 = 1
+
+    (Tool length vs beam plane — positive when tip is below beam Z after trip)
+    #<tool_length> = [#<beam_z> - #<trip_z>]
+    #5391 = #<tool_length>
+
+    G53 G0 Z#<z_approach>
+    M5
+
+    (DEBUG, LASER LENGTH: trip Z=#5390  length=#5391 (beam_z - trip_z))
+    o<400> endif
 o<laser_length> endsub
 
 M2

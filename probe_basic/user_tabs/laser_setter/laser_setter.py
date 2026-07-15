@@ -1,28 +1,21 @@
 """
 Laser Tool Setter — user tab for Probe Basic.
 
-SKELETON ONLY. Buttons are wired to NGC subroutines that currently do nothing
-except emit a DEBUG message. Real probing / calibration / runout logic will
-land in later commits.
+DS-5V-M on Slave 2 DI5 (DB15 pin 11). Live LASER LED mirrors HAL
+laser-beam-broken (clear vs tool in beam). MEASURE DIAMETER tip-finds Z,
+drops by user Z DROP, then cross-feeds +X for break→clear width.
+MEASURE LENGTH still available; runout / broken-check still skeleton.
 
-Lifecycle:
-  PB scans USER_TABS_PATH on launch, imports this module, instantiates
-  UserTab() and adds it as a main-window tab. The .ui file is loaded at
-  runtime via uic.loadUi (no compile step needed).
-
-MDI dispatch:
-  Uses linuxcnc.command() directly rather than qtpyvcp.actions to stay
-  decoupled from qtpyvcp API drift across the PyQt5 -> PySide6 transition.
-  Trade-off: no fancy queueing, no integration with PB's MDI history.
-  Acceptable for a skeleton; revisit once the macros do real work.
+MDI dispatch uses linuxcnc.command() directly (not qtpyvcp.actions).
 """
 
 import os
+import subprocess
 
 import linuxcnc
 
 from qtpy import uic
-from qtpy.QtCore import Qt, QSize
+from qtpy.QtCore import Qt, QSize, QTimer
 from qtpy.QtGui import QImage, QPixmap, QColor, QPalette, QFont, QFontDatabase
 from qtpy.QtWidgets import QWidget, QMessageBox
 
@@ -33,6 +26,11 @@ MM_PER_INCH = 25.4
 IMAGE_DISPLAY_SCALE = 0.624  # 20% larger than prior 0.52 setting
 PB_FONT = "BebasKai"
 PB_FONT_PATH = "/usr/share/fonts/truetype/BebasKai.ttf"
+HAL_LASER_BROKEN = "laser-beam-broken"
+HAL_LASER_ARM = "and2.6.in0"
+LED_CLEAR = "#c01c28"      # beam clear (nothing in slot)
+LED_BROKEN = "#f5c211"     # tool breaking beam
+LED_UNKNOWN = "#4a4f51"
 
 # Chroma key for green-screen tool setter photos. Uses green-channel dominance
 # (not luminance/white) so the silver calibration plate is preserved.
@@ -54,18 +52,44 @@ def _pixel_greenness(r, g, b):
     return min(1.0, (dominance - _CHROMA_DOMINANCE_THRESH) / float(_CHROMA_FEATHER))
 
 
+def _hal_get_bit(pin: str):
+    try:
+        out = subprocess.check_output(
+            ["halcmd", "getp", pin], stderr=subprocess.STDOUT, text=True
+        ).strip().upper()
+        if out in ("TRUE", "1"):
+            return True
+        if out in ("FALSE", "0"):
+            return False
+    except Exception as exc:
+        LOG.debug("laser_setter: hal getp %s failed: %s", pin, exc)
+    return None
+
+
+def _hal_setp(pin: str, value) -> bool:
+    try:
+        subprocess.check_call(
+            ["halcmd", "setp", pin, str(value)],
+            stderr=subprocess.STDOUT,
+            stdout=subprocess.DEVNULL,
+        )
+        return True
+    except Exception as exc:
+        LOG.error("laser_setter: hal setp %s=%s failed: %s", pin, value, exc)
+        return False
+
+
 # Button objectName  ->  MDI command string
 BUTTON_MDI = {
     'btnMeasureLength':   "o<laser_length> call",
     'btnMeasureDiameter': "o<laser_diameter> call",
     'btnMeasureRunout':   "o<laser_runout> call",
     'btnBrokenCheck':     "o<laser_broken_check> call",
-    'btnCalibrate':       "o<laser_calibrate> call",
+    'btnCalibrate':       None,  # handled in Python (stores BEAM Z)
     'btnAirBlastToggle':  "o<laser_air_blast_toggle> call",
 }
 
 REQUIRES_Z_FIRST = {
-    'btnMeasureDiameter',
     'btnMeasureRunout',
     'btnBrokenCheck',
 }
@@ -93,6 +117,7 @@ LINEAR_UNIT_WIDGETS = (
     'lblMasterPinUnit',
     'lblStartXUnit',
     'lblStartYUnit',
+    'lblZDropUnit',
 )
 
 SETUP_SYNC_BUTTONS = {
@@ -100,7 +125,6 @@ SETUP_SYNC_BUTTONS = {
     'btnMeasureDiameter',
     'btnMeasureRunout',
     'btnBrokenCheck',
-    'btnCalibrate',
 }
 
 
@@ -140,6 +164,13 @@ class UserTab(QWidget):
         self._wire_start_position()
         self._init_units()
         self._z_touched = False
+        self._laser_armed = False
+
+        self._beam_timer = QTimer(self)
+        self._beam_timer.setInterval(200)
+        self._beam_timer.timeout.connect(self._poll_beam_led)
+        self._beam_timer.start()
+        self._poll_beam_led()
 
     def _ensure_font(self):
         """Probe Basic uses BebasKai; Qt family name has no space."""
@@ -241,7 +272,75 @@ class UserTab(QWidget):
             if btn is None:
                 LOG.warning("laser_setter: button %s missing from .ui", obj_name)
                 continue
-            btn.clicked.connect(self._make_handler(mdi_cmd))
+            if obj_name == 'btnCalibrate':
+                btn.clicked.connect(self._calibrate_beam_z)
+            else:
+                btn.clicked.connect(self._make_handler(mdi_cmd))
+
+    def _set_laser_arm(self, armed: bool) -> bool:
+        ok = _hal_setp(HAL_LASER_ARM, 1 if armed else 0)
+        self._laser_armed = bool(armed) if ok else False
+        return ok
+
+    def _poll_beam_led(self):
+        """UI LED mirrors HAL laser-beam-broken (clear vs tool in beam)."""
+        led = getattr(self, 'ledLaserHealthy', None)
+        if led is None:
+            return
+        broken = _hal_get_bit(HAL_LASER_BROKEN)
+        if broken is None:
+            color = LED_UNKNOWN
+            tip = "Laser HAL pin unread — is LinuxCNC running?"
+        elif broken:
+            color = LED_BROKEN
+            tip = "Beam BROKEN (tool in laser)"
+        else:
+            color = LED_CLEAR
+            tip = "Beam CLEAR (nothing in laser)"
+        led.setStyleSheet(
+            "background-color: %s; border-radius: 9px; border: 1px solid #2e3436;"
+            % color
+        )
+        led.setToolTip(tip)
+
+    def _calibrate_beam_z(self, checked=False):
+        """Store current machine Z as BEAM Z while tip is breaking the beam."""
+        if self._cmd is None or self._stat is None:
+            self._set_status("ERROR: linuxcnc unavailable")
+            return
+        try:
+            self._stat.poll()
+            if self._stat.estop:
+                self._set_status("BLOCKED: E-STOP")
+                return
+            if not self._stat.enabled:
+                self._set_status("BLOCKED: machine off")
+                return
+
+            broken = _hal_get_bit(HAL_LASER_BROKEN)
+            if broken is False:
+                self._set_status("BLOCKED: jog tip into beam first (wait for beam broken)")
+                return
+
+            # actual_position is machine coords (G53)
+            z_mach = float(self._stat.actual_position[2])
+            self.lblBeamZ.setText("{:.4f}".format(z_mach))
+
+            self._cmd.mode(linuxcnc.MODE_MDI)
+            self._cmd.wait_complete()
+            self._cmd.mdi(
+                "o<laser_set_beam_z> call [{:.6f}] [10] [30]".format(z_mach)
+            )
+            self._z_touched = True
+            self._set_status(
+                "BEAM Z SET: {:.4f} (tip in beam — ready for MEASURE LENGTH)".format(
+                    z_mach
+                )
+            )
+            LOG.info("laser_setter: calibrated BEAM Z G53=%.6f", z_mach)
+        except Exception as exc:
+            LOG.error("laser_setter: calibrate failed: %s", exc)
+            self._set_status("ERROR: " + str(exc))
 
     def _wire_help(self):
         btn = getattr(self, 'btnHelp', None)
@@ -253,7 +352,14 @@ class UserTab(QWidget):
         QMessageBox.information(
             self,
             "Laser Tool Setter Help",
-            "Help documentation for the laser tool setter is coming soon.",
+            "1. Hardwire DS-5V-M Select to GND; 5 V power; signal → Slave 2 DI5 "
+            "(DB15 pin 11) via level shift.\n"
+            "2. LASER LED follows HAL laser-beam-broken (clear vs tool in beam).\n"
+            "3. CAPTURE START X/Y over the slot center; set Z DROP (default 2 mm).\n"
+            "4. Jog to a safe Z above the beam → MEASURE DIAMETER:\n"
+            "   tip-find → side start → drop Z → cross +X (break→clear) → diameter.\n"
+            "5. Optional: CALIBRATE / MEASURE LENGTH for length experiments.\n"
+            "Runout / broken-check still skeleton.",
         )
 
     def _wire_start_position(self):
@@ -296,6 +402,7 @@ class UserTab(QWidget):
         self._convert_numeric_widget('leMasterPin', factor)
         self._convert_numeric_widget('leStartX', factor)
         self._convert_numeric_widget('leStartY', factor)
+        self._convert_numeric_widget('leZDrop', factor)
         for widget_name in LINEAR_VALUE_WIDGETS:
             self._convert_numeric_widget(widget_name, factor)
 
@@ -316,9 +423,18 @@ class UserTab(QWidget):
             rpm = float(self.leProbeRpm.text().strip())
         except (AttributeError, ValueError):
             return None
-        if rpm <= 0:
+        if rpm < 0:
             return None
         return x_pos, y_pos, rpm
+
+    def _parse_z_drop(self):
+        try:
+            z_drop = float(self.leZDrop.text().strip())
+        except (AttributeError, ValueError):
+            return None
+        if z_drop <= 0:
+            return None
+        return z_drop
 
     def _sync_setup_params(self):
         setup = self._parse_setup_fields()
@@ -355,24 +471,77 @@ class UserTab(QWidget):
             self._set_status("ERROR: " + str(exc))
             return False
 
+    def _sync_diam_params(self) -> bool:
+        """Push Z DROP (+ default search) into #5187/#5188 before diameter."""
+        z_drop = self._parse_z_drop()
+        if z_drop is None:
+            self._set_status("ERROR: invalid Z DROP (must be > 0)")
+            return False
+        if self._cmd is None:
+            return False
+        # Half-travel from START XY; must exceed expected tool radius.
+        search = 10.0
+        try:
+            self._cmd.mode(linuxcnc.MODE_MDI)
+            self._cmd.wait_complete()
+            self._cmd.mdi(
+                "o<laser_set_diam_params> call [{:.6f}] [{:.6f}]".format(
+                    z_drop, search
+                )
+            )
+            self._cmd.wait_complete()
+            return True
+        except Exception as exc:
+            self._set_status("ERROR: " + str(exc))
+            return False
+
     def _make_handler(self, mdi_cmd):
         def handler(checked=False):
             btn = self.sender()
             btn_name = btn.objectName() if btn is not None else None
             if btn_name in REQUIRES_Z_FIRST and not self._z_touched:
-                self._set_status("BLOCKED: TOUCH Z FIRST")
+                self._set_status("BLOCKED: tip-find / CALIBRATE first")
                 LOG.warning("laser_setter: blocked %s until Z touch", btn_name)
                 return
             if btn_name in SETUP_SYNC_BUTTONS and not self._sync_setup_params():
                 return
+            if btn_name == 'btnMeasureLength' and not self._sync_beam_z_param():
+                return
+            if btn_name == 'btnMeasureDiameter' and not self._sync_diam_params():
+                return
             self._issue_mdi(mdi_cmd, btn_name)
         return handler
+
+    def _sync_beam_z_param(self) -> bool:
+        """Push Beam Z label into #5184 before length probe."""
+        try:
+            beam_z = float(self.lblBeamZ.text().strip())
+        except (AttributeError, ValueError):
+            self._set_status("ERROR: set BEAM Z via CALIBRATE first")
+            return False
+        if abs(beam_z) < 1e-9:
+            self._set_status("ERROR: BEAM Z is 0 — CALIBRATE with tip in beam")
+            return False
+        if self._cmd is None:
+            return False
+        try:
+            self._cmd.mode(linuxcnc.MODE_MDI)
+            self._cmd.wait_complete()
+            self._cmd.mdi(
+                "o<laser_set_beam_z> call [{:.6f}] [10] [30]".format(beam_z)
+            )
+            self._cmd.wait_complete()
+            return True
+        except Exception as exc:
+            self._set_status("ERROR: " + str(exc))
+            return False
 
     def _issue_mdi(self, mdi_cmd, btn_name=None):
         if self._cmd is None or self._stat is None:
             LOG.error("laser_setter: linuxcnc unavailable, cannot issue: %s", mdi_cmd)
             self._set_status("ERROR: linuxcnc unavailable")
             return
+        armed = False
         try:
             self._stat.poll()
             if self._stat.estop:
@@ -383,16 +552,90 @@ class UserTab(QWidget):
                 self._set_status("BLOCKED: machine off")
                 LOG.warning("laser_setter: not enabled, blocked: %s", mdi_cmd)
                 return
+
+            needs_laser = btn_name in (
+                'btnMeasureLength',
+                'btnMeasureDiameter',
+                'btnMeasureRunout',
+                'btnBrokenCheck',
+            )
+            if needs_laser:
+                if not self._set_laser_arm(True):
+                    self._set_status("ERROR: could not arm laser probe mux")
+                    return
+                armed = True
+
             self._cmd.mode(linuxcnc.MODE_MDI)
             self._cmd.wait_complete()
             self._cmd.mdi(mdi_cmd)
+            # Wait for the subroutine to finish so we can disarm + read results.
+            self._cmd.wait_complete(120.0)
+
             if btn_name == 'btnMeasureLength':
                 self._z_touched = True
-            self._set_status("SENT: " + mdi_cmd)
+                self._refresh_length_result()
+            elif btn_name == 'btnMeasureDiameter':
+                self._z_touched = True
+                self._refresh_diameter_result()
+            else:
+                self._set_status("DONE: " + mdi_cmd)
             LOG.info("laser_setter: %s", mdi_cmd)
         except Exception as exc:
             LOG.error("laser_setter: MDI failed (%s): %s", mdi_cmd, exc)
             self._set_status("ERROR: " + str(exc))
+        finally:
+            if armed:
+                self._set_laser_arm(False)
+
+    def _refresh_length_result(self):
+        """Pull last probe Z from status after G38 (machine coords)."""
+        try:
+            self._stat.poll()
+            # probed_position is available after a successful probe
+            trip_z = float(self._stat.probed_position[2])
+            try:
+                beam_z = float(self.lblBeamZ.text().strip())
+                length = beam_z - trip_z
+            except (AttributeError, ValueError):
+                length = float("nan")
+            if length == length:  # not NaN
+                self.lblResLength.setText("{:.4f}".format(length))
+                self._set_status(
+                    "LENGTH {:.4f} (beam {:.4f} - tip {:.4f})".format(
+                        length, beam_z, trip_z
+                    )
+                )
+            else:
+                self._set_status("DONE: length probe finished")
+        except Exception as exc:
+            LOG.debug("laser_setter: length result refresh skipped: %s", exc)
+            self._set_status("DONE: length probe finished")
+
+    def _refresh_diameter_result(self):
+        """Read diameter published by laser_diameter via M68 E0 → aout[0]."""
+        try:
+            self._stat.poll()
+            diameter = None
+            if hasattr(self._stat, "aout") and len(self._stat.aout) > 0:
+                diameter = float(self._stat.aout[0])
+            if diameter is None or diameter <= 0:
+                try:
+                    out = subprocess.check_output(
+                        ["halcmd", "getp", "motion.analog-out-00"],
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                    ).strip()
+                    diameter = float(out)
+                except Exception:
+                    diameter = None
+            if diameter is None or diameter <= 0:
+                self._set_status("DIAMETER: done (no result on analog-out-00)")
+                return
+            self.lblResDiam.setText("{:.4f}".format(diameter))
+            self._set_status("DIAMETER {:.4f} (raw break→clear)".format(diameter))
+        except Exception as exc:
+            LOG.debug("laser_setter: diameter result refresh skipped: %s", exc)
+            self._set_status("DONE: diameter probe finished")
 
     def _capture_start_xy(self, checked=False):
         if self._cmd is None or self._stat is None:

@@ -1,11 +1,12 @@
 (author: jayem)
 (date: 2026)
-(SKELETON - NO LOGIC YET)
-(Future: with master gauge pin in spindle, locate beam X/Y/Z,)
-(compute z-offset and beam-diameter-offset, persist to custom_config.yml)
+(Capture laser BEAM Z — prefer the Laser Setter CALIBRATE button (writes #5184).)
+(This NGC alone just echoes current abs Z if called with no args.)
 
 o<laser_calibrate> sub
-    (DEBUG, LASER: calibrate beam with master pin - SKELETON, no logic yet)
+    o<400> if [#<_task> EQ 1]
+      (DEBUG, LASER CALIBRATE: use the tab button — jog tip into beam, then CALIBRATE)
+    o<400> endif
 o<laser_calibrate> endsub
 
 M2

@@ -76,7 +76,7 @@
         <property name="minimumSize"><size><width>18</width><height>18</height></size></property>
         <property name="maximumSize"><size><width>18</width><height>18</height></size></property>
         <property name="text"><string/></property>
-        <property name="toolTip"><string>Laser sensor healthy (placeholder, no HAL wired yet)</string></property>
+        <property name="toolTip"><string>HAL laser-beam-broken: clear vs tool in beam</string></property>
        </widget>
       </item>
       <item>
@@ -228,6 +228,25 @@
           <item row="2" column="2">
            <widget class="QLabel" name="lblProbeRpmUnit">
             <property name="text"><string>rpm</string></property>
+           </widget>
+          </item>
+
+          <item row="3" column="0">
+           <widget class="QLabel" name="lblZDropCap">
+            <property name="text"><string>Z DROP</string></property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLineEdit" name="leZDrop">
+            <property name="text"><string>2.0000</string></property>
+            <property name="toolTip"><string>After tip-find, lower this far into the tool before diameter cross-feed</string></property>
+            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+            <property name="minimumHeight"><number>28</number></property>
+           </widget>
+          </item>
+          <item row="3" column="2">
+           <widget class="QLabel" name="lblZDropUnit">
+            <property name="text"><string>mm</string></property>
            </widget>
           </item>
          </layout>

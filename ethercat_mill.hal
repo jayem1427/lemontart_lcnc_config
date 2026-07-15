@@ -2,7 +2,7 @@
 # 1. CORE MOTION CONTROLLER
 # =========================================================
 loadrt [KINS]KINEMATICS
-loadrt [EMCMOT]EMCMOT servo_period_nsec=[EMCMOT]SERVO_PERIOD num_joints=[KINS]JOINTS
+loadrt [EMCMOT]EMCMOT servo_period_nsec=[EMCMOT]SERVO_PERIOD num_joints=[KINS]JOINTS num_aio=4
 
 # =========================================================
 # 2. ETHERCAT DRIVER & HELPERS
@@ -17,9 +17,9 @@ loadrt mult2 count=12
 loadrt ilowpass count=4
 loadrt limit1 count=4
 loadrt div2 count=4
-loadrt not count=10
-loadrt and2 count=6
-loadrt or2 count=2
+loadrt not count=11
+loadrt and2 count=7
+loadrt or2 count=3
 loadrt near count=3
 loadrt comp count=1
 loadrt constant names=probe-tool-num
@@ -48,7 +48,9 @@ addf and2.2 servo-thread
 addf and2.3 servo-thread
 addf and2.4 servo-thread
 addf and2.5 servo-thread
+addf and2.6 servo-thread
 addf or2.0 servo-thread
+addf or2.2 servo-thread
 addf conv-u32-float.0 servo-thread
 addf comp.0 servo-thread
 addf probe-tool-num servo-thread
@@ -62,8 +64,10 @@ addf not.6 servo-thread
 addf not.7 servo-thread
 addf not.8 servo-thread
 addf not.9 servo-thread
+addf not.10 servo-thread
 setp and2.0.in0 0
 setp and2.0.in1 0
+setp and2.6.in0 0
 
 # Pendant jog conditioning: limit scale, smooth counts
 addf limit1.0 servo-thread
@@ -221,11 +225,17 @@ net z-home       not.7.out => joint.2.home-sw-in
 # net a-home-sw    lcec.0.3.di-3 => joint.3.home-sw-in
 net za-lims-gagged and2.0.out => joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
 
-# --- TOUCH PROBE + TOOLSETTER (active-high at trip -> motion.probe-input) ---
+# --- TOUCH PROBE + TOOLSETTER + LASER (active-high at trip -> motion.probe-input) ---
 # Touch probe: Slave 1 DI5, NC (NPN). Idle closed = di inactive; trip open = di TRUE. Direct.
 # Toolsetter: Slave 1 DI2 (DB15 pin 9), NC (NPN). Direct, no inversion.
-# Route by spindle tool (halui.tool.number): T99 -> DI5; any other tool -> toolsetter DI2.
-# Unplugged NC touch probe no longer false-trips toolsetter when a cutter is loaded.
+# Laser DS-5V-M: Slave 2 DI5 (DB15 pin 11). HCMOS 5 V — level-shift before the A6 DI.
+#   Spec: beam clear = 5 V, beam broken = 0 V. After a typical high-side/opto into
+#   a 24 V DI, di-5 is TRUE when clear. not.10 inverts so laser-beam-broken is
+#   TRUE when the tool blocks the beam (probe-trip polarity). If your level
+#   shifter already gives TRUE-when-broken, remove not.10 and net di-5 directly
+#   to laser-beam-broken.
+# Route contact sensors by spindle tool: T99 -> DI5; any other tool -> toolsetter DI2.
+# Laser is OR'd in only while and2.6.in0 is TRUE (set by Laser Setter tab).
 setp probe-tool-num.value 99
 setp comp.0.hyst 0.1
 net spindle-tool halui.tool.number => conv-u32-float.0.in
@@ -238,7 +248,13 @@ net probe-tool-loaded comp.0.equal => not.6.in
 net cutter-loaded not.6.out => and2.4.in0
 net toolsetter-in    lcec.0.1.di-2 => and2.4.in1
 net toolsetter-active and2.4.out => or2.0.in1
-net probe-in         or2.0.out => motion.probe-input
+
+# Laser beam → probe mux (arm via setp and2.6.in0 — bit, not float constant)
+net laser-di-raw          lcec.0.2.di-5 => not.10.in
+net laser-beam-broken     not.10.out => and2.6.in1
+net laser-probe-active    and2.6.out => or2.2.in1
+net probe-contact         or2.0.out => or2.2.in0
+net probe-in              or2.2.out => motion.probe-input
 
 # Standard Software GUI E-Stop Loop (Physical Master E-Stop cuts Mains Power)
 # Software E-stop switch is NC on Slave 3 DI1 / DB15 pin 10.
