@@ -14,9 +14,9 @@ tool setter on this mill.
 | **MEASURE DIAMETER** (tip-find → Z-drop → +X break/clear) | Live (HAL step-seek) |
 | **CALIBRATE** / **MEASURE LENGTH** | Live (experimental; length ≠ contact TLO yet) |
 | Oversize / remaining-travel abort | Live |
-| MEASURE RUNOUT | Skeleton |
-| BROKEN TOOL CHECK | Skeleton |
-| AIR BLAST | Skeleton |
+
+Unimplemented features (runout, broken-tool check, air blast, TLO commit) are
+tracked in the roadmap only — no stub macros or dead UI buttons.
 
 ## Hardware
 
@@ -71,7 +71,6 @@ touch/toolsetter (or2.0) ──→ motion.probe-input   (unchanged, laser never 
 | `probe_basic/subroutines/laser_length.ngc` | Length seek (optional) |
 | `probe_basic/subroutines/laser_set_beam_z.ngc` | Store BEAM Z / approach / travel |
 | `probe_basic/subroutines/laser_set_start_xy.ngc` | `#5501–#5503` |
-| `probe_basic/subroutines/laser_*.ngc` | Other stubs (runout, broken, air, …) |
 | `ethercat_mill.hal` | DI5 → `laser-beam-broken`; contact → `probe-input` |
 | `ethercat_mill.ini` | `USER_TABS_PATH`, `SUBROUTINE_PATH` |
 
@@ -98,7 +97,7 @@ or ATC `M66` result (`#5399`).
 | `#5513` | X break | diameter | First edge |
 | `#5514` | X clear | diameter | Second edge |
 | `#5515` | Success | diameter / length | `1` = measure OK (also `M68 E1`) |
-| `#5519` | Z-touched | diameter / length | Gates runout / broken stubs |
+| `#5519` | Z-touched | diameter / length | Set after successful tip-find |
 | `#3004` / `#3005` | Fast / slow probe FR | `linuxcnc.var` | Used by macros |
 
 Feeds fall back to 200 / 40 mm/min if `#3004`/`#3005` are unset.
@@ -162,8 +161,6 @@ contact toolsetter.
 - Diameter / length results require `M68 E1` success; failures do not set
   `_z_touched` or keep a stale diameter label update.
 - Footer `lblStatus` shows BLOCKED / ERROR / DONE / FAILED messages.
-- Runout / broken-check still require `_z_touched` (set only on successful measure
-  or CALIBRATE).
 
 ## Troubleshooting
 

@@ -83,28 +83,12 @@ def _hal_get_float(pin: str):
 BUTTON_MDI = {
     'btnMeasureLength':   "o<laser_length> call",
     'btnMeasureDiameter': "o<laser_diameter> call",
-    'btnMeasureRunout':   "o<laser_runout> call",
-    'btnBrokenCheck':     "o<laser_broken_check> call",
     'btnCalibrate':       None,  # handled in Python (stores BEAM Z)
-    'btnAirBlastToggle':  "o<laser_air_blast_toggle> call",
-}
-
-# Skeleton actions — still callable but do not imply a real measure succeeded.
-SKELETON_BUTTONS = {
-    'btnMeasureRunout',
-    'btnBrokenCheck',
-    'btnAirBlastToggle',
-}
-
-REQUIRES_Z_FIRST = {
-    'btnMeasureRunout',
-    'btnBrokenCheck',
 }
 
 LINEAR_VALUE_WIDGETS = (
     'lblResLength',
     'lblResDiam',
-    'lblResRunout',
     'lblBeamX',
     'lblBeamY',
     'lblBeamZ',
@@ -115,7 +99,6 @@ LINEAR_VALUE_WIDGETS = (
 LINEAR_UNIT_WIDGETS = (
     'lblResLengthUnit',
     'lblResDiamUnit',
-    'lblResRunoutUnit',
     'lblBeamXUnit',
     'lblBeamYUnit',
     'lblBeamZUnit',
@@ -130,8 +113,6 @@ LINEAR_UNIT_WIDGETS = (
 SETUP_SYNC_BUTTONS = {
     'btnMeasureLength',
     'btnMeasureDiameter',
-    'btnMeasureRunout',
-    'btnBrokenCheck',
 }
 
 
@@ -283,8 +264,6 @@ class UserTab(QWidget):
                 btn.clicked.connect(self._calibrate_beam_z)
             else:
                 btn.clicked.connect(self._make_handler(mdi_cmd))
-            if obj_name in SKELETON_BUTTONS and btn is not None:
-                btn.setToolTip("Skeleton — not implemented yet")
 
     def _poll_beam_led(self):
         """UI LED mirrors HAL laser-beam-broken (clear vs tool in beam)."""
@@ -379,8 +358,7 @@ class UserTab(QWidget):
             "4. Jog to a safe Z above the beam → MEASURE DIAMETER:\n"
             "   tip-find → side start → drop Z → cross +X (break→clear) → diameter.\n"
             "5. Optional: CALIBRATE / MEASURE LENGTH for length experiments.\n"
-            "Laser measure does NOT use motion.probe-input (contact path stays clean).\n"
-            "Runout / broken-check still skeleton.",
+            "Laser measure does NOT use motion.probe-input (contact path stays clean).",
         )
 
     def _wire_start_position(self):
@@ -521,10 +499,6 @@ class UserTab(QWidget):
         def handler(checked=False):
             btn = self.sender()
             btn_name = btn.objectName() if btn is not None else None
-            if btn_name in REQUIRES_Z_FIRST and not self._z_touched:
-                self._set_status("BLOCKED: tip-find / CALIBRATE first")
-                LOG.warning("laser_setter: blocked %s until Z touch", btn_name)
-                return
             if btn_name in SETUP_SYNC_BUTTONS and not self._sync_setup_params():
                 return
             if btn_name == 'btnMeasureLength' and not self._sync_beam_z_param():
@@ -594,8 +568,6 @@ class UserTab(QWidget):
                 self._refresh_length_result()
             elif btn_name == 'btnMeasureDiameter':
                 self._refresh_diameter_result()
-            elif btn_name in SKELETON_BUTTONS:
-                self._set_status("SKELETON: " + mdi_cmd + " (no measure logic yet)")
             else:
                 self._set_status("DONE: " + mdi_cmd)
             LOG.info("laser_setter: %s", mdi_cmd)

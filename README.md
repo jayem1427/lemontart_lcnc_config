@@ -288,8 +288,7 @@ Dedicated Probe Basic tab for the **Kexin DS-5V-M** laser tool setter.
 
 **Current state:** HAL + live beam LED + **MEASURE DIAMETER** (tip-find → Z-drop →
 +X break/clear via stepped seek on `laser-beam-broken`) + optional **CALIBRATE** /
-**MEASURE LENGTH**. Laser is **not** wired into `motion.probe-input`. Runout /
-broken-check / air blast still skeleton.
+**MEASURE LENGTH**. Laser is **not** wired into `motion.probe-input`.
 
 ### Quick start (diameter)
 
@@ -321,8 +320,6 @@ broken-check / air blast still skeleton.
 | MEASURE DIAMETER | `o<laser_diameter> call` |
 | MEASURE LENGTH | `o<laser_length> call` |
 | CALIBRATE | tab stores BEAM Z |
-
-Removed from earlier skeleton: **MEASURE FULL TOOL**, **UPDATE TOOL TABLE**, footer **ABORT**.
 
 ### UI / theme
 

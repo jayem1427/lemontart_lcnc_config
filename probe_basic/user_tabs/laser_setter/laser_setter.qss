@@ -48,8 +48,7 @@ QLabel#lblUnitsCap {
     letter-spacing: 1px;
 }
 
-QLabel#ledLaserHealthy,
-QLabel#ledAirBlast {
+QLabel#ledLaserHealthy {
     background-color: #4a4f51;
     border: 1px solid #2a2a2a;
     border-radius: 9px;
@@ -177,7 +176,6 @@ QLabel#lblToolSetterImage {
 
 QLabel#lblResLength,
 QLabel#lblResDiam,
-QLabel#lblResRunout,
 QLabel#lblBeamX,
 QLabel#lblBeamY,
 QLabel#lblBeamZ,
@@ -196,8 +194,7 @@ QLabel#lblBeamDia {
 /* ---------- Field labels ---------- */
 
 QGroupBox#grpResults QLabel#lblResLengthCap,
-QGroupBox#grpResults QLabel#lblResDiamCap,
-QGroupBox#grpResults QLabel#lblResRunoutCap {
+QGroupBox#grpResults QLabel#lblResDiamCap {
     color: rgb(238, 238, 236);
     font: 15pt "BebasKai";
     letter-spacing: 1px;
@@ -205,8 +202,7 @@ QGroupBox#grpResults QLabel#lblResRunoutCap {
 }
 
 QGroupBox#grpResults QLabel#lblResLengthUnit,
-QGroupBox#grpResults QLabel#lblResDiamUnit,
-QGroupBox#grpResults QLabel#lblResRunoutUnit {
+QGroupBox#grpResults QLabel#lblResDiamUnit {
     color: #d6dadc;
     font: 15pt "BebasKai";
     min-width: 28px;

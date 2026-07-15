@@ -93,27 +93,6 @@
       </item>
 
       <item>
-       <widget class="QLabel" name="ledAirBlast">
-        <property name="minimumSize"><size><width>18</width><height>18</height></size></property>
-        <property name="maximumSize"><size><width>18</width><height>18</height></size></property>
-        <property name="text"><string/></property>
-        <property name="toolTip"><string>Air blast (placeholder)</string></property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="lblLedAir">
-        <property name="text"><string>AIR</string></property>
-       </widget>
-      </item>
-
-      <item>
-       <widget class="QFrame" name="headerDivider3">
-        <property name="frameShape"><enum>QFrame::VLine</enum></property>
-        <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
-       </widget>
-      </item>
-
-      <item>
        <widget class="QLabel" name="lblActiveTool">
         <property name="text"><string>TOOL: --</string></property>
        </widget>
@@ -274,20 +253,6 @@
         </item>
 
         <item>
-         <widget class="QPushButton" name="btnMeasureRunout">
-          <property name="text"><string>MEASURE RUNOUT</string></property>
-          <property name="minimumHeight"><number>44</number></property>
-         </widget>
-        </item>
-
-        <item>
-         <widget class="QPushButton" name="btnBrokenCheck">
-          <property name="text"><string>BROKEN TOOL CHECK</string></property>
-          <property name="minimumHeight"><number>44</number></property>
-         </widget>
-        </item>
-
-        <item>
          <spacer name="measureSpacer">
           <property name="orientation"><enum>Qt::Vertical</enum></property>
           <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
@@ -343,24 +308,7 @@
          </widget>
         </item>
 
-        <item row="2" column="0">
-         <widget class="QLabel" name="lblResRunoutCap">
-          <property name="text"><string>RUNOUT</string></property>
-         </widget>
-        </item>
-        <item row="2" column="1">
-         <widget class="QLabel" name="lblResRunout">
-          <property name="text"><string>0.0000</string></property>
-          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
-         </widget>
-        </item>
-        <item row="2" column="2">
-         <widget class="QLabel" name="lblResRunoutUnit">
-          <property name="text"><string>mm</string></property>
-         </widget>
-        </item>
-
-        <item row="3" column="0" colspan="3">
+        <item row="2" column="0" colspan="3">
          <spacer name="resultsSpacer">
           <property name="orientation"><enum>Qt::Vertical</enum></property>
           <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
@@ -546,15 +494,6 @@
       <property name="rightMargin"><number>14</number></property>
       <property name="bottomMargin"><number>6</number></property>
       <property name="spacing"><number>10</number></property>
-
-      <item>
-       <widget class="QPushButton" name="btnAirBlastToggle">
-        <property name="text"><string>AIR BLAST: TOGGLE</string></property>
-        <property name="minimumHeight"><number>36</number></property>
-        <property name="minimumWidth"><number>200</number></property>
-        <property name="checkable"><bool>true</bool></property>
-       </widget>
-      </item>
 
       <item>
        <widget class="QLabel" name="lblStatus">
