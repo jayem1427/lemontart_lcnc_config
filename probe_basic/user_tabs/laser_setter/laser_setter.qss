@@ -20,7 +20,6 @@ QFrame#footerBar {
 }
 
 QFrame#headerDivider1,
-QFrame#headerDivider3,
 QFrame#headerDivider4 {
     color: #6e7375;
     background-color: #6e7375;
@@ -40,7 +39,6 @@ QLabel#lblStatus {
 }
 
 QLabel#lblLedLaser,
-QLabel#lblLedAir,
 QLabel#lblActiveTool,
 QLabel#lblUnitsCap {
     color: rgb(238, 238, 236);
