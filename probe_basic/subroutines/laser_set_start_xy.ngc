@@ -1,13 +1,13 @@
 (author: jayem)
 (date: 2026)
-(Sets laser start position from operator-jogged center point)
-(Stores only X/Y. Z is managed in a separate Z-touch flow.)
+(Sets laser start position + probe RPM.)
+(Uses #5501-#5503 — NOT G30/toolsetter #5181-#5183.)
 
 o<laser_set_start_xy> sub
-    #5181 = #1
-    #5182 = #2
-    #5183 = #3
-    (DEBUG, LASER: start XY saved to #5181/#5182, probe RPM #5183)
+    #5501 = #1
+    #5502 = #2
+    #5503 = #3
+    (DEBUG, LASER: start XY #5501/#5502, probe RPM #5503)
 o<laser_set_start_xy> endsub
 
 M2

@@ -33,6 +33,12 @@ QLabel#lblTitle {
     letter-spacing: 1px;
 }
 
+QLabel#lblStatus {
+    color: #f5c211;
+    font: 11pt "BebasKai";
+    padding-left: 8px;
+}
+
 QLabel#lblLedLaser,
 QLabel#lblLedAir,
 QLabel#lblActiveTool,

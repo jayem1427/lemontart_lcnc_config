@@ -2,16 +2,17 @@
 (date: 2026)
 (Store laser beam plane Z and optional approach / max-travel.)
 (#1 = BEAM Z G53 mm, #2 = approach above beam mm, #3 = max travel below beam mm)
+(Uses #5504-#5506 — NOT G30 #5184-#5186.)
 
 o<laser_set_beam_z> sub
-    #5184 = #1
+    #5504 = #1
     o<sbz_app> if [#2 GT 0]
-      #5185 = #2
+      #5505 = #2
     o<sbz_app> endif
     o<sbz_trv> if [#3 GT 0]
-      #5186 = #3
+      #5506 = #3
     o<sbz_trv> endif
-    (DEBUG, LASER: BEAM Z=#5184 approach=#5185 travel=#5186)
+    (DEBUG, LASER: BEAM Z=#5504 approach=#5505 travel=#5506)
 o<laser_set_beam_z> endsub
 
 M2

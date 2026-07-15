@@ -4,7 +4,7 @@
 (Future: perform dedicated laser-toolsetter Z touch routine only)
 
 o<laser_touch_z> sub
-    #5399 = 1 (laser z-touch done for this setup cycle)
+    #5519 = 1
     (DEBUG, LASER: touch off Z - SKELETON, no logic yet)
 o<laser_touch_z> endsub
 

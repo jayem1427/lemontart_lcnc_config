@@ -1,7 +1,6 @@
 (author: jayem)
 (date: 2026)
-(Capture laser BEAM Z — prefer the Laser Setter CALIBRATE button (writes #5184).)
-(This NGC alone just echoes current abs Z if called with no args.)
+(Capture laser BEAM Z — prefer the Laser Setter CALIBRATE button (writes #5504).)
 
 o<laser_calibrate> sub
     o<400> if [#<_task> EQ 1]

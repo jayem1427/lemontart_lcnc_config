@@ -4,11 +4,11 @@
 (#1 = Z drop below tip mm, #2 = half-search travel from START XY mm)
 
 o<laser_set_diam_params> sub
-    #5187 = #1
+    #5507 = #1
     o<sdp_search> if [#2 GT 0]
-      #5188 = #2
+      #5508 = #2
     o<sdp_search> endif
-    (DEBUG, LASER: Z-drop=#5187 search=#5188)
+    (DEBUG, LASER: Z-drop=#5507 search=#5508)
 o<laser_set_diam_params> endsub
 
 M2

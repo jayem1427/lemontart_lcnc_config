@@ -284,11 +284,12 @@ Either fault sets `spindle-vfd-critical-fault`, which triggers
 Dedicated Probe Basic tab for the **Kexin DS-5V-M** laser tool setter.
 
 **Full documentation:** **[docs/LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md)**
-(wiring, HAL mux, parameters, diameter sequence, troubleshooting).
+(wiring, HAL pin, parameters, diameter sequence, troubleshooting).
 
 **Current state:** HAL + live beam LED + **MEASURE DIAMETER** (tip-find → Z-drop →
-+X break/clear) + optional **CALIBRATE** / **MEASURE LENGTH**. Runout / broken-check /
-air blast still skeleton.
++X break/clear via stepped seek on `laser-beam-broken`) + optional **CALIBRATE** /
+**MEASURE LENGTH**. Laser is **not** wired into `motion.probe-input`. Runout /
+broken-check / air blast still skeleton.
 
 ### Quick start (diameter)
 
@@ -304,16 +305,16 @@ air blast still skeleton.
 | Sensor signal | Slave **2** `lcec.0.2.di-5` — CN1 **DB15 pin 11** (level-shift 5 V→24 V) |
 | Select (enable) | Tie to **GND** (or drive later) |
 | Power | **5 V** / 0 V (not A6 24 V) |
-| Probe mux | `and2.6.in0` arms laser into `motion.probe-input` |
+| Measure input | Named HAL pin `laser-beam-broken` (macros use `#<_hal[...]>`; not `probe-input`) |
 
 ### Setup fields / buttons
 
 | UI field | NGC | Notes |
 |----------|-----|-------|
-| START X/Y | `#5181` / `#5182` | Slot center |
-| PROBE RPM | `#5183` | 0 = no spin |
-| Z DROP | `#5187` | Default 2 mm below tip |
-| BEAM Z | `#5184` | CALIBRATE (length only) |
+| START X/Y | `#5501` / `#5502` | Slot center (G53 mm; not G30 `#5181–#5183`) |
+| PROBE RPM | `#5503` | 0 = no spin |
+| Z DROP | `#5507` | Default 2 mm below tip |
+| BEAM Z | `#5504` | CALIBRATE (length only) |
 
 | Button | Macro |
 |--------|--------|
@@ -327,6 +328,7 @@ Removed from earlier skeleton: **MEASURE FULL TOOL**, **UPDATE TOOL TABLE**, foo
 
 - Probe Basic dark palette, BebasKai, three-column layout
 - Tool setter diagram: `kexin_tool_setter.png` (chroma-key aware)
+- Footer status line for BLOCKED / ERROR / measure results
 - Units combo converts START X/Y, Z DROP, and linear readouts
 
 ## What was left out of git, but is helpful to keep in the config

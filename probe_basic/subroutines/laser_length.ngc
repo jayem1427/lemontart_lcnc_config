@@ -1,23 +1,27 @@
 (author: jayem)
 (date: 2026)
-(Laser tool length — first real DS-5V-M function)
-(Prereqs: START X/Y + RPM in #5181-#5183 via laser_set_start_xy)
-(        BEAM Z G53 in #5184 — set by CALIBRATE or type into Beam Z for now)
-(HAL: and2.6.in0 must be TRUE so Slave 2 DI5 can trip motion.probe-input)
-(Polarity: laser-beam-broken TRUE when tool blocks the beam)
+(Laser tool length — Z seek onto beam via laser-beam-broken (no G38 / probe-input).)
+(Prereqs: START X/Y + RPM #5501-#5503; BEAM Z #5504)
+(Results: #5510 tip Z, #5511 length=beam_z-trip_z, #5515=1 on success, M68 E0/E1)
 
 o<laser_length> sub
     o<400> if [#<_task> EQ 1]
 
-    #<start_x> = #5181
-    #<start_y> = #5182
-    #<probe_rpm> = #5183
-    #<beam_z> = #5184
-    #<approach> = #5185
-    #<max_travel> = #5186
+    G21 G90
+
+    #5515 = 0
+    M68 E1 Q0
+
+    #<start_x> = #5501
+    #<start_y> = #5502
+    #<probe_rpm> = #5503
+    #<beam_z> = #5504
+    #<approach> = #5505
+    #<max_travel> = #5506
     #<fast_fr> = #3004
     #<slow_fr> = #3005
-    #<traverse_fr> = 10000
+    #<step_z_coarse> = 0.20
+    #<step_z_fine> = 0.02
 
     o<len_defaults> if [#<approach> LE 0]
       #<approach> = 10
@@ -36,15 +40,14 @@ o<laser_length> sub
     o<len_check_xy> endif
 
     o<len_check_beam> if [#<beam_z> EQ 0]
-      (DEBUG, LASER LENGTH: set BEAM Z (#5184) first — use CALIBRATE or type Beam Z)
+      (DEBUG, LASER LENGTH: set BEAM Z (#5504) first — use CALIBRATE)
       o<laser_length> return
     o<len_check_beam> endif
 
     #<z_approach> = [#<beam_z> + #<approach>]
     #<z_limit> = [#<beam_z> - #<max_travel>]
 
-    (DEBUG, LASER LENGTH: arm probe mux, go to start XY)
-    G90
+    (DEBUG, LASER LENGTH: seek via laser-beam-broken)
     G53 G0 Z#<z_approach>
     G53 G0 X#<start_x> Y#<start_y>
 
@@ -53,38 +56,60 @@ o<laser_length> sub
       G4 P1.0
     o<len_spin> endif
 
-    (Fast seek toward beam)
-    G53 G38.2 Z#<z_limit> F#<fast_fr>
-    o<len_miss_fast> if [#5070 EQ 0]
-      (DEBUG, LASER LENGTH: no beam trip on fast seek — check XY / BEAM Z / polarity)
+    (Coarse seek toward beam)
+    o<len_c> while [[#<_hal[laser-beam-broken]> EQ 0] AND [#<_abs_z> GT #<z_limit>]]
+      #<z_next> = [#<_abs_z> - #<step_z_coarse>]
+      o<len_cc> if [#<z_next> LT #<z_limit>]
+        #<z_next> = #<z_limit>
+      o<len_cc> endif
+      G53 G1 Z#<z_next> F#<fast_fr>
+    o<len_c> endwhile
+
+    o<len_miss_fast> if [#<_hal[laser-beam-broken]> EQ 0]
+      (DEBUG, LASER LENGTH: no beam trip on coarse seek — check XY / BEAM Z / polarity)
+      G53 G0 Z#<z_approach>
       M5
       o<laser_length> return
     o<len_miss_fast> endif
 
-    #<trip_fast> = #<_abs_z>
-    G91 G0 Z2
-    G90
+    (Absolute backoff — never G91 inch-ambiguous retract)
+    #<z_backoff> = [#<_abs_z> + 1]
+    o<len_bo> if [#<z_backoff> GT #<z_approach>]
+      #<z_backoff> = #<z_approach>
+    o<len_bo> endif
+    G53 G0 Z#<z_backoff>
 
-    (Slow final trip)
-    G53 G38.2 Z#<z_limit> F#<slow_fr>
-    o<len_miss_slow> if [#5070 EQ 0]
-      (DEBUG, LASER LENGTH: no beam trip on slow seek)
+    (Fine seek)
+    o<len_f> while [[#<_hal[laser-beam-broken]> EQ 0] AND [#<_abs_z> GT #<z_limit>]]
+      #<z_next> = [#<_abs_z> - #<step_z_fine>]
+      o<len_fc> if [#<z_next> LT #<z_limit>]
+        #<z_next> = #<z_limit>
+      o<len_fc> endif
+      G53 G1 Z#<z_next> F#<slow_fr>
+    o<len_f> endwhile
+
+    o<len_miss_slow> if [#<_hal[laser-beam-broken]> EQ 0]
+      (DEBUG, LASER LENGTH: no beam trip on fine seek)
+      G53 G0 Z#<z_approach>
       M5
       o<laser_length> return
     o<len_miss_slow> endif
 
     #<trip_z> = #<_abs_z>
-    #5390 = #<trip_z>
-    #5399 = 1
+    #5510 = #<trip_z>
+    #5519 = 1
 
-    (Tool length vs beam plane — positive when tip is below beam Z after trip)
     #<tool_length> = [#<beam_z> - #<trip_z>]
-    #5391 = #<tool_length>
+    #5511 = #<tool_length>
+    #5515 = 1
+
+    M68 E0 Q#<tool_length>
+    M68 E1 Q1
 
     G53 G0 Z#<z_approach>
     M5
 
-    (DEBUG, LASER LENGTH: trip Z=#5390  length=#5391 (beam_z - trip_z))
+    (DEBUG, LASER LENGTH: trip Z=#5510  length=#5511 (beam_z - trip_z))
     o<400> endif
 o<laser_length> endsub
 

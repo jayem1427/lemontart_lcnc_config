@@ -557,6 +557,14 @@
       </item>
 
       <item>
+       <widget class="QLabel" name="lblStatus">
+        <property name="text"><string>Ready</string></property>
+        <property name="alignment"><set>Qt::AlignVCenter|Qt::AlignLeft</set></property>
+        <property name="toolTip"><string>Laser setter status / errors</string></property>
+       </widget>
+      </item>
+
+      <item>
        <spacer name="footerSpacer">
         <property name="orientation"><enum>Qt::Horizontal</enum></property>
         <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
