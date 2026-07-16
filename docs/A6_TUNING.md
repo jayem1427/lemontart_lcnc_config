@@ -28,6 +28,9 @@ Or skip the loop entirely: **ONE-CLICK TUNE** on the same tab runs the whole
 gain ladder per axis automatically (stimulus moves + FFT stability gate +
 auto notch + journaled revert paths) — see **`ONE_CLICK_TUNING.md`**.
 
+Before one-click, set inertia via the **INERTIA** panel
+(`GRAPHICAL_INERTIA_TUNE.md`) when C00.06 is unknown.
+
 ### Clipboard → LLM
 
 Servo Tuning → **CLIPBOARD** strip:

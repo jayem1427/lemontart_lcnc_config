@@ -64,7 +64,8 @@ restored to its baseline value.
   still does not push loop gains at startup — a power cycle is always a
   hard reset to whatever the drive has stored.
 - **Not touched:** LinuxCNC `joint.f-error` / INI `FERROR`, 6065/6066 fault
-  windows, 2nd gain set, torque filter, feedforward, stiffness, inertia.
+  windows, 2nd gain set, torque filter, feedforward, stiffness, inertia
+  (set C00.06 first via the **INERTIA** panel — `GRAPHICAL_INERTIA_TUNE.md`).
 
 ---
 
