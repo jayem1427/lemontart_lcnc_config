@@ -92,7 +92,7 @@ Update README cross-references if you document a non-99 default elsewhere.
 - Tool-change positioning uses **30000 / 10000 mm/min** traverse overrides (`#<traverse_xy_fr>` / `#<traverse_z_fr>`), not Probe Basic `#3006` alone
 - `M50 P1` runs **before** M6 so feed override is enabled when the OK dialog appears
 - No post-probe `M00`/`M01` — CAM resumes cutting immediately after the probe cycle
-- M600 always runs the full change+probe sequence (no same-tool skip that could false-pause)
+- M600 always runs the full change+probe sequence (no same-tool skip that could false-positive and pause with `M00`)
 
 ### Tool-load position (collet change)
 
@@ -104,7 +104,7 @@ Separate from the setter teach. Default G53 coordinates in `tool_touch_off.ngc`:
 #<tool_load_z_coords> = 0.0
 ```
 
-`go_to_g30.ngc` and `abort_tool_change.ngc` use the same XY. **SET TOOL TOUCH OFF POS** still writes only `#5181–#5183` (setter platter).
+`go_to_g30.ngc` and `abort_tool_change.ngc` use the same XY. **SET TOOL TOUCH OFF POS** still writes only `#5181–#5183` (setter platter center).
 
 To relocate the collet-change spot:
 
@@ -119,7 +119,7 @@ To relocate the collet-change spot:
 | **OK** on dialog | Retract Z → move to setter → probe → resume program |
 | **ABORT** on dialog | `program.abort()` → `abort_tool_change.ngc` parks at tool-load XY (if still enabled) |
 | Window close / Esc | **Ignored** — must use ABORT or OK |
-| Global **Abort** button | `on_abort.ngc` — spindle/coolant off only; **no park move** |
+| Global **Abort** button | `on_abort.ngc` — spindle/coolant off only; **no park move** (machine may be disabled) |
 
 Custom dialog: [`probe_basic/toolchange_dialog.py`](../probe_basic/toolchange_dialog.py) via [`custom_config.yml`](../probe_basic/custom_config.yml). Details: [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md#manual-tool-change-dialog-abort-cycle).
 
@@ -158,13 +158,13 @@ Custom dialog: [`probe_basic/toolchange_dialog.py`](../probe_basic/toolchange_di
 
 1. Jog over the setter platter → **SET TOOL TOUCH OFF POS** (`#5181`–`#5183`)
 2. Load a **cutter** (not the touch probe) → **PROBE SPINDLE NOSE ZERO** → `#3010`
-   - `probe_spindle_nose.ngc` **aborts** if `T#3014` is in the spindle — HAL would listen to the touch probe instead of the contact setter (Z crash risk).
+   - `probe_spindle_nose.ngc` **aborts** if `T#3014` is in the spindle — HAL routes `motion.probe-input` to the touch probe in that state, so a G38 on the contact setter would never trip (Z crash risk).
 3. Set probe feeds / retract in Tool Setter screen → **UPDATE** (`tool_setter_param_update.ngc`)
-4. Optional: jog to the collet-change spot and confirm it matches `#<tool_load_*>` (default G53 **270, 100**).
+4. Optional: jog to the collet-change spot and confirm it matches `#<tool_load_*>` (default G53 **270, 100**). Adjust in `tool_touch_off.ngc` if your bench differs.
 
 ### Air-test program
 
-[`nc_files/m600_tool_change_test.ngc`](../nc_files/m600_tool_change_test.ngc) — machine homed, setter taught, tools in the table. Run in AUTO; each `T<n> M600` pauses at tool-load for the dialog, then probes on the setter. This machine’s Z soft limit is low — the program uses `G53 Z0`.
+[`nc_files/m600_tool_change_test.ngc`](../nc_files/m600_tool_change_test.ngc) — machine homed, setter taught, tools in the table. Run in AUTO; each `T<n> M600` pauses at tool-load for the dialog, then probes on the setter. This machine’s Z soft limit is low — the program uses `G53 Z0`, not a high work Z.
 
 ## CAM / post processor (`linuxcnc-djr.cps`)
 

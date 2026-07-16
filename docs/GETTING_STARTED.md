@@ -79,7 +79,7 @@ Drive docs (vendor):
 
 ### Stage 3 — Homing, limits, bench mode
 
-Homing and limit wiring live in [`ethercat_mill.hal`](../ethercat_mill.hal), not the INI. See [README.md](../README.md#current-machine-behavior-captured-config) for the DI map.
+Homing and limit wiring live in [`ethercat_mill.hal`](../ethercat_mill.hal), not the INI. See [README.md](../README.md#current-machine-notes-this-bench) for bench notes.
 
 **Bench / breakout shortcuts** (revert before production — details in [DEVIATIONS.md](DEVIATIONS.md#bench--breakout-shortcuts)):
 
@@ -122,12 +122,14 @@ When XYZ motion is trustworthy:
 
 Before trusting CAM:
 
-1. Teach the setter (**SET TOOL TOUCH OFF POS**) and spindle nose zero (cutter loaded — not T#3014).
-2. Air-cut test: [`nc_files/m600_tool_change_test.ngc`](../nc_files/m600_tool_change_test.ngc) — each stop is at **tool-load XY** (default 270, 100), not the setter.
+1. Teach setter (**SET TOOL TOUCH OFF POS**) and spindle zero (**PROBE SPINDLE NOSE ZERO**) — unload touch probe first; see [TOOLSETTER.md](TOOLSETTER.md#teach-before-first-use).
+2. Air-cut test: [`nc_files/m600_tool_change_test.ngc`](../nc_files/m600_tool_change_test.ngc) — `T3 M600`, jog, `T9`/`T10 M600`. Each stop is at **tool-load XY** (default 270, 100), not the setter.
 3. Confirm **ABORT** on the Manual Tool Change dialog parks cleanly — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md).
-4. Optional: Laser Setter diameter smoke test — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md).
+4. MDI metrology: `o<probe_z_repeat_stats> call [10]` — [metrology README](../probe_basic/subroutines/metrology/README.md).
+5. Confirm HAL routing: `halcmd show pin halui.tool.number` and trip each sensor.
+6. Optional: Laser Setter diameter smoke test — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md).
 
-**EtherCAT note:** committed INI `FERROR` values are wide for bring-up; drives also set SDO `6065`/`6066` (~1.0 mm / 250 ms). See [DEVIATIONS.md](DEVIATIONS.md) and [A6_TUNING.md](A6_TUNING.md).
+**EtherCAT note:** committed INI `FERROR` values are wide for bring-up (1270 / 254 mm); drives also set SDO `6065`/`6066` (~1.0 mm / 250 ms). Tighten both after motion is stable — [DEVIATIONS.md](DEVIATIONS.md#relaxed-ferror--min_ferror) and [A6_TUNING.md](A6_TUNING.md).
 
 ## How the config fits together
 
@@ -188,8 +190,8 @@ ethercat_mill.ini
 | Probe never trips | Wrong tool in spindle for HAL route (T99 vs cutter), DI wiring, `motion.probe-input` with `halcmd` |
 | M600 does not probe | `#5181–#5183` unset, `#3010` spindle zero unset, `TOOL_CHANGE_AT_G30=0` (expected — macro handles motion) |
 | M600 pauses at the wrong place | Tool-load XY (`270, 100`) ≠ setter — [TOOLSETTER.md](TOOLSETTER.md#tool-load-position-collet-change) |
-| Following error / drive Er47.0 | INI `FERROR` vs drive SDO 6065 — [DEVIATIONS](DEVIATIONS.md) / [A6_TUNING](A6_TUNING.md) |
-| PROBE SPINDLE NOSE crashes Z | Touch probe T#3014 was loaded — load a cutter first |
+| Following error / drive Er47.0 | Wide INI `FERROR` vs drive SDO 6065 — [DEVIATIONS.md](DEVIATIONS.md#relaxed-ferror--min_ferror) / [A6_TUNING](A6_TUNING.md) |
+| PROBE SPINDLE NOSE crashes Z | Touch probe T#3014 was loaded — unload and load a cutter first; macro aborts if `#3014` is in the spindle |
 | Pocket probe flies too fast | Local `[3017]` vs `[#3017]` typo — fixed in this tree; re-check after PB merges |
 | Laser diameter never trips | `laser-beam-broken` polarity / BEAM OFFSET — [LASER_TOOL_SETTER](LASER_TOOL_SETTER.md) |
 | Pendant Z jog blocked | Homing flags — see `xhc-whb04b-6.hal` machine.is-on tie-in |

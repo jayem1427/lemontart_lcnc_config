@@ -97,13 +97,13 @@ dialogs:
 | | Stock PB | This machine |
 |---|----------|--------------|
 | Resume | OK / change button | **ONCE TOOL IS LOADED - PRESS TO RESUME** |
-| Cancel mid-change | Often Esc / window close | **ABORT** only — Esc and close are **ignored** |
+| Cancel mid-change | Often Esc / window close | **ABORT** button only — Esc and close are **ignored** |
 | After ABORT | Interpreter stuck or ambiguous | `program.abort()` → MDI `o<abort_tool_change> call` → G53 Z0 → tool-load XY (270, 100) |
 | After estop during dialog | — | Park skipped (machine disabled); `on_abort.ngc` handles spindle/coolant only |
 
-HAL contract is unchanged: same `qtpyvcp_manualtoolchange` pins. Postgui wiring stays stock.
+HAL contract is unchanged: same `qtpyvcp_manualtoolchange` pins (`change`, `changed`, `number`). Postgui wiring stays stock.
 
-Used by `M6` (manual OK mode), **M6 G43**, and **M600** collet pause. Full flow: [TOOLSETTER.md](TOOLSETTER.md#abort--cancel-during-m600).
+Used by `M6` (manual OK mode), **M6 G43**, and **M600** collet pause in `tool_touch_off.ngc`. Full flow: [TOOLSETTER.md](TOOLSETTER.md#abort--cancel-during-m600).
 
 ---
 

@@ -28,13 +28,13 @@ Stock references:
 | Feed override max | 100–200% | **250%** (`MAX_FEED_OVERRIDE = 2.5`) |
 | Fusion post | Stock `linuxcnc.cps`, `M6`, preload `T` | **`linuxcnc-djr.cps`**, M600 default, no preload |
 | `PROGRAM_PREFIX` | Relative to config | **Absolute path** in committed INI — change on clone |
-| Joint following error | Tight (e.g. ~2 mm) | **Relaxed** `FERROR` / `MIN_FERROR` for bench — tighten later |
+| Joint following error | Tight (e.g. ~2 mm / 1 mm) | **Relaxed** `FERROR = 1270`, `MIN_FERROR = 254` for bench — tighten later |
 | M600 collet pause | Often same as setter / G30 | **Separate tool-load XY** (default G53 270, 100) vs taught setter `#5181–#5183` |
-| Manual Tool Change dialog | Stock QtPyVCP; Esc cancels | **Custom dialog** with **ABORT**; Esc/close ignored |
+| Manual Tool Change dialog | Stock QtPyVCP; Esc cancels | **Custom dialog** with **ABORT**; Esc/close ignored — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Drive position deviation | Drive defaults | **SDO 6065/6066** ≈ 1.0 mm / 1.0° / 250 ms — [A6_TUNING](A6_TUNING.md) |
 | Laser tool setter | (none) | Own pin `laser-beam-broken` — **not** on `motion.probe-input` — [LASER_TOOL_SETTER](LASER_TOOL_SETTER.md) |
-| Pocket probe traverse feed | `#3017` from Probe Basic | Local fix: some macros had bare `[3017]` (literal mm/min) |
-| PROBE SPINDLE NOSE ZERO | Runs on setter input | **Aborts if T#3014 loaded** — wrong HAL route |
+| Pocket probe traverse feed | `#3017` from Probe Basic | **Local fix** — several `probe_*.ngc` had bare `[3017]` (3017 mm/min literal) |
+| PROBE SPINDLE NOSE ZERO | Runs on setter input | **Aborts if T#3014 loaded** — HAL routes touch probe only when that tool is in spindle |
 
 ---
 
@@ -98,9 +98,9 @@ FERROR = 1270.0
 MIN_FERROR = 254.0
 ```
 
-Intentionally wide so LinuxCNC does not fault during jog / homing / bench bring-up while EtherCAT following error is still being tuned.
+Stock servo configs often use ~2 mm / 1 mm. These values are **intentionally wide** so LinuxCNC does not fault during jog / homing / bench bring-up while EtherCAT following error is still being tuned.
 
-**For production:** tighten per axis after drive tuning. Drive-side windows (SDO 6065/6066 ≈ **1.0 mm / 1.0° / 250 ms**) are separate — see [A6_TUNING.md](A6_TUNING.md).
+**For production:** tighten per axis after drive tuning and confirm no false trips under cutting loads. Drive-side windows (SDO 6065/6066 ≈ **1.0 mm / 1.0° / 250 ms**) are separate — see [A6_TUNING.md](A6_TUNING.md) and [CiA 402 following error](https://linuxcnc.org/docs/html/config/ini-config.html#sub:joint-section).
 
 ---
 
@@ -141,7 +141,7 @@ Laser is **not** in this mux. It uses `laser-beam-broken` only — [LASER_TOOL_S
 
 Uses `and2` + `or2`, not `mux2` (float-only). **`#3014` does not update HAL** — renumbering requires editing `setp probe-tool-num.value`.
 
-See [README.md](../README.md#touch-probe-vs-toolsetter-routing) and [TOOLSETTER.md](TOOLSETTER.md#touch-probe-tool-number-setup-and-renumbering).
+See [README.md](../README.md#contact-probe-vs-toolsetter-hal) and [TOOLSETTER.md](TOOLSETTER.md#touch-probe-tool-number-setup-and-renumbering).
 
 ### Tool change HAL loop broken on purpose
 
@@ -198,10 +198,10 @@ Here M600 automatic mode uses **two G53 positions**:
 
 | Position | Coordinates | Purpose |
 |----------|-------------|---------|
-| **Tool-load** (collet change) | Default `270, 100, 0` mm — `#<tool_load_*>` | M6 OK dialog; wrench clearance |
+| **Tool-load** (collet change) | Default `270, 100, 0` mm — `#<tool_load_*>` in `tool_touch_off.ngc`, `go_to_g30.ngc` | M6 OK dialog; wrench clearance |
 | **Setter** (probe) | `#5181–#5183` from **SET TOOL TOUCH OFF POS** | G38 length measure only |
 
-Flow: retract Z → tool-load XY → **M6 dialog** → retract Z → setter XY → probe. Details: [TOOLSETTER.md](TOOLSETTER.md#tool-load-position-collet-change).
+Flow: retract Z → tool-load XY → **M6 dialog** → retract Z → setter XY → probe. Edit `#<tool_load_*>` if your bench layout differs. Details: [TOOLSETTER.md](TOOLSETTER.md#tool-load-position-collet-change).
 
 ### M600 traverse feed override
 
@@ -212,7 +212,9 @@ Flow: retract Z → tool-load XY → **M6 dialog** → retract Z → setter XY �
 | Trigger | Subroutine | Motion |
 |---------|------------|--------|
 | Program **Abort** / estop while enabled | `on_abort.ngc` | **No G0/G1** — machine may be disabled |
-| **ABORT** on Manual Tool Change dialog | `abort_tool_change.ngc` | Z retract G53 Z0 → park tool-load XY |
+| **ABORT** on Manual Tool Change dialog | `abort_tool_change.ngc` (via `toolchange_dialog.py`) | Z retract G53 Z0 → park tool-load XY |
+
+Global abort must not move axes when LinuxCNC is disabled; dialog abort runs while still enabled after `program.abort()`.
 
 ### `TOOL_TABLE_COLUMNS = TDZR`
 
@@ -228,10 +230,10 @@ Documented in [TOOLSETTER.md](TOOLSETTER.md#probe--length-math-fixes-vs-stock-pb
 
 ### Local Probe Basic subroutine patches
 
-Upstream `probe_*.ngc` in this tree include machine-specific fixes:
+Upstream `probe_*.ngc` in this tree include **machine-specific fixes** not in stock Probe Basic:
 
-- **Traverse feed typo** — some pocket/valley/calibration macros had `[3017]` (literal 3017 mm/min) instead of `[#3017]`. Re-check after merging new Probe Basic versions.
-- **`probe_spindle_nose.ngc`** — aborts if touch probe `T#3014` is loaded (wrong HAL route). Failed-probe recovery uses `#5422` like sibling macros.
+- **Traverse feed typo** — pocket/valley/calibration macros passed `[3017]` (literal 3017 mm/min) instead of `[#3017]` (Probe Basic traverse param). Fixed in this repo; re-check after merging new PB versions.
+- **`probe_spindle_nose.ngc`** — aborts if touch probe `T#3014` is loaded (HAL would listen to wrong sensor). Failed-probe recovery uses `#<z> = #5422` like sibling macros.
 
 ### Optional TooTall18T M-codes **not** installed
 
@@ -263,7 +265,9 @@ dialogs:
     provider: toolchange_dialog:ToolChangeDialog
 ```
 
-See [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md#manual-tool-change-dialog-abort-cycle). Most PB machine params still live in `linuxcnc.var` / Probe screens.
+Replaces stock QtPyVCP dialog with **ABORT CYCLE** button. See [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md#manual-tool-change-dialog-abort-cycle).
+
+Most PB machine params still live in `linuxcnc.var` / Probe screens.
 
 ### `launch.sh`
 
