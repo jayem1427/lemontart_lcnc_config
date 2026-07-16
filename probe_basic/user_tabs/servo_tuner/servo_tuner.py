@@ -1356,10 +1356,10 @@ class UserTab(QWidget):
         hint = QLabel(
             "Yaskawa Sigma II Graphical Analysis (Tp−Tf → C00.06). "
             "Enter motor J_M + rated torque, then BEGIN. Auto-lowers "
-            "MAX_ACCELERATION (~120 ms ramp); if accel torque is spiky, "
-            "auto-flatten runs a Pn402-style second pass. Writes C00.06 "
-            "only when quality is good. Prefer cycles=1 and F5000–F10000 "
-            "on linear axes.",
+            "MAX_ACCELERATION (~180 ms ramp); always clamps (fixed Torque "
+            "limit, or probe→Pn402 flatten). α from a fixed 25–75% RPM band. "
+            "Writes C00.06 only when quality is good. Linear recipe: "
+            "F8000 / ~50 mm / cycles=1.",
             page,
         )
         hint.setObjectName("lblParamHint")
@@ -1456,9 +1456,9 @@ class UserTab(QWidget):
             300.0,
             5.0,
             " %",
-            "0 = auto-flatten may apply a Pn402-style clamp on a 2nd pass if "
-            "accel torque is spiky (Sigma II). Set explicitly to force that "
-            "limit as Tp (workbook: torque limit IS peak torque).",
+            "0 = always probe then Pn402-style clamp for the measurement "
+            "pass (v0.6). Set explicitly to force that limit as Tp "
+            "(workbook: torque limit IS peak torque).",
         )
         layout.addLayout(form)
 
@@ -2575,7 +2575,8 @@ class UserTab(QWidget):
             f"Rated torque = {settings.rated_torque_nm:.4g} N·m\n\n"
             f"We sample torque (6077) + velocity (606C), compute "
             f"Yaskawa Tp−Tf → C00.06, and WRITE it to the drive (RAM).\n"
-            f"Spiky accel torque may trigger an auto-flatten second pass.\n"
+            f"Always clamps (fixed Torque limit, or probe→Pn402 flatten).\n"
+            f"α from a fixed 25–75% RPM band on a ~180 ms ramp.\n"
             f"Then switch back to GAINS and run ONE-CLICK.\n\n"
             f"Journal: logs/tuning/graphical_inertia/\n"
             f"Keep a hand near ESTOP.",

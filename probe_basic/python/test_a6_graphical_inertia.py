@@ -13,6 +13,8 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 from a6_graphical_inertia import (  # noqa: E402
+    ALPHA_BAND_HI,
+    ALPHA_BAND_LO,
     AxisInertiaSettings,
     GraphicalInertiaConfig,
     GraphicalInertiaError,
@@ -39,8 +41,10 @@ def _trap_trace(
     sample_hz: float = 1000.0,
     axis: str = "X",
     cycles: int = 1,
+    torque_spike_pct: float = 0.0,
 ):
     """Build ideal torque/velocity traces for known J (X: 10 mm/rev)."""
+    del axis
     alpha = (peak_rpm * 2 * math.pi / 60.0) / accel_s
     t_accel_nm = j_total * alpha
     t_accel_pct = 100.0 * t_accel_nm / rated_nm
@@ -60,7 +64,13 @@ def _trap_trace(
             vel.append(0.0)
         for i in range(n_acc):
             frac = (i + 1) / n_acc
-            torque.append(t_peak * sign)
+            # Optional mid-ramp spike — must not move fixed α endpoints.
+            spike = (
+                torque_spike_pct
+                if ALPHA_BAND_LO < frac < ALPHA_BAND_HI and i % 7 == 0
+                else 0.0
+            )
+            torque.append((t_peak + spike) * sign)
             vel.append(peak_feed * frac * sign)
         for _ in range(n_cru):
             torque.append(friction_pct * sign)
@@ -148,8 +158,10 @@ def test_target_id_accel() -> None:
     a = target_id_accel(3000.0, 0.08)
     assert abs(a - 625.0) < 1e-6
     assert abs(unit_accel_to_alpha("X", 2942.0) - 1848.5) < 1.0
-    a120 = target_id_accel(8000.0, PREFERRED_ACCEL_S)
-    assert abs(a120 - (8000.0 / 60.0 / PREFERRED_ACCEL_S)) < 1e-6
+    a180 = target_id_accel(8000.0, PREFERRED_ACCEL_S)
+    assert abs(a180 - (8000.0 / 60.0 / PREFERRED_ACCEL_S)) < 1e-6
+    # Fixed 25–75% band at preferred ramp ≥ ~90 ms.
+    assert PREFERRED_ACCEL_S * (ALPHA_BAND_HI - ALPHA_BAND_LO) >= 0.090
 
 
 def test_analyze_ideal_trace() -> None:
@@ -162,15 +174,82 @@ def test_analyze_ideal_trace() -> None:
         rated_nm=rated,
         friction_pct=5.0,
         peak_rpm=800.0,
-        accel_s=0.15,
+        accel_s=0.18,
         cruise_s=0.1,
     )
-    est = analyze_torque_velocity("X", tq, vel, 1000.0, j_m, rated)
+    est = analyze_torque_velocity(
+        "X",
+        tq,
+        vel,
+        1000.0,
+        j_m,
+        rated,
+        torque_limit_pct=truth["t_peak"],
+    )
     assert est.quality == "good", est
     assert abs(est.ratio_pct - truth["ratio_pct"]) / truth["ratio_pct"] < 0.15, (
         est.ratio_pct,
         truth["ratio_pct"],
     )
+    # α window is the fixed band fraction of the ramp (approx).
+    assert 0.07 <= est.delta_t_s <= 0.12, est.delta_t_s
+
+
+def test_analyze_unclamped_is_marginal() -> None:
+    j_m = 1.0e-4
+    j_l = 2.5e-4
+    rated = 1.27
+    tq, vel, _truth = _trap_trace(
+        j_total=j_m + j_l,
+        j_motor=j_m,
+        rated_nm=rated,
+        friction_pct=5.0,
+        peak_rpm=800.0,
+        accel_s=0.18,
+        cruise_s=0.1,
+    )
+    est = analyze_torque_velocity("X", tq, vel, 1000.0, j_m, rated)
+    assert est.quality == "marginal", est
+    assert any("no torque clamp" in n.lower() for n in est.notes), est.notes
+
+
+def test_analyze_alpha_band_ignores_torque_spikes() -> None:
+    """Spiky 6077 must not move fixed α endpoints vs a clean twin."""
+    j_m = 1.0e-4
+    j_l = 2.5e-4
+    rated = 1.27
+    clean_tq, vel, truth = _trap_trace(
+        j_total=j_m + j_l,
+        j_motor=j_m,
+        rated_nm=rated,
+        friction_pct=5.0,
+        peak_rpm=800.0,
+        accel_s=0.18,
+        cruise_s=0.1,
+        torque_spike_pct=0.0,
+    )
+    spike_tq, _, _ = _trap_trace(
+        j_total=j_m + j_l,
+        j_motor=j_m,
+        rated_nm=rated,
+        friction_pct=5.0,
+        peak_rpm=800.0,
+        accel_s=0.18,
+        cruise_s=0.1,
+        torque_spike_pct=40.0,
+    )
+    limit = truth["t_peak"]
+    clean = analyze_torque_velocity(
+        "X", clean_tq, vel, 1000.0, j_m, rated, torque_limit_pct=limit
+    )
+    spiked = analyze_torque_velocity(
+        "X", spike_tq, vel, 1000.0, j_m, rated, torque_limit_pct=limit
+    )
+    assert abs(clean.delta_t_s - spiked.delta_t_s) < 1e-9
+    assert abs(clean.delta_rpm - spiked.delta_rpm) < 1e-9
+    assert abs(clean.alpha_rad_s2 - spiked.alpha_rad_s2) < 1e-6
+    # Spikes may demote flatness, but α itself stays put.
+    assert clean.quality == "good", clean
 
 
 def test_analyze_short_stepped_rejected() -> None:
@@ -187,10 +266,12 @@ def test_analyze_short_stepped_rejected() -> None:
         cycles=5,
     )
     try:
-        analyze_torque_velocity("X", tq, vel, 1000.0, j_m, rated)
+        analyze_torque_velocity(
+            "X", tq, vel, 1000.0, j_m, rated, torque_limit_pct=28.6
+        )
         raise AssertionError("expected short-ramp rejection")
     except GraphicalInertiaError as exc:
-        assert "ms" in str(exc).lower() or "pair" in str(exc).lower(), exc
+        assert "ms" in str(exc).lower() or "band" in str(exc).lower(), exc
 
 
 def test_analyze_rejects_tiny_move() -> None:
@@ -229,6 +310,7 @@ class _FakeIO:
         self.accel_restored = None
         self.force_marginal = force_marginal
         self.feed_used = None
+        self.move_count = 0
 
     def machine_ready(self):
         return True, "ok"
@@ -263,6 +345,7 @@ class _FakeIO:
 
     def run_move_and_sample(self, axis, stroke, feed, cycles, hz, settle, cancel):
         self.feed_used = feed
+        self.move_count += 1
         return list(self.tq), list(self.vel), {"aborted": False}
 
 
@@ -276,48 +359,84 @@ def test_tuner_writes_when_good(tmp: str) -> None:
         rated_nm=rated,
         friction_pct=4.0,
         peak_rpm=800.0,
-        accel_s=0.15,
-        cruise_s=0.08,
+        accel_s=0.18,
+        cruise_s=0.10,
     )
     settings = AxisInertiaSettings(
         motor_inertia_kgm2=j_m,
         rated_torque_nm=rated,
-        stroke=40.0,
+        stroke=50.0,
         feed=8000.0,
         write_to_drive=True,
-        id_accel_unit_s2=1111.0,
+        id_accel_unit_s2=target_id_accel(8000.0, PREFERRED_ACCEL_S),
         auto_flatten=False,
+        torque_limit_pct=truth["t_peak"],
     )
     io = _FakeIO(tq, vel)
     cfg = GraphicalInertiaConfig.for_axis("X", settings, sample_hz=1000.0)
     result = GraphicalInertiaTuner(cfg, io=io, journal_root=tmp).run()
     assert result.status == "ok", result.summary()
     assert io.written is not None
-    assert io.accel_applied == 1111.0
+    assert io.accel_applied == settings.id_accel_unit_s2
     assert io.accel_restored is not None
     assert abs(io.written - truth["ratio_pct"]) / truth["ratio_pct"] < 0.25
+    assert io.move_count == 1  # fixed limit → no probe/flatten second pass
+
+
+def test_tuner_always_clamps_when_limit_zero(tmp: str) -> None:
+    j_m = 1.0e-4
+    j_l = 3.0e-4
+    rated = 1.27
+    tq, vel, truth = _trap_trace(
+        j_total=j_m + j_l,
+        j_motor=j_m,
+        rated_nm=rated,
+        friction_pct=4.0,
+        peak_rpm=800.0,
+        accel_s=0.18,
+        cruise_s=0.10,
+    )
+    settings = AxisInertiaSettings(
+        motor_inertia_kgm2=j_m,
+        rated_torque_nm=rated,
+        stroke=50.0,
+        feed=8000.0,
+        write_to_drive=True,
+        id_accel_unit_s2=target_id_accel(8000.0, PREFERRED_ACCEL_S),
+        auto_flatten=True,
+        torque_limit_pct=0.0,
+    )
+    io = _FakeIO(tq, vel)
+    cfg = GraphicalInertiaConfig.for_axis("X", settings, sample_hz=1000.0)
+    result = GraphicalInertiaTuner(cfg, io=io, journal_root=tmp).run()
+    assert result.status == "ok", result.summary()
+    assert io.move_count == 2  # probe + clamp
+    assert io.torque_limit_applied is not None
+    assert io.torque_limit_applied < truth["t_peak"]
+    assert io.written is not None
 
 
 def test_tuner_clamps_feed(tmp: str) -> None:
     j_m = 1.0e-4
     j_l = 3.0e-4
     rated = 1.27
-    tq, vel, _truth = _trap_trace(
+    tq, vel, truth = _trap_trace(
         j_total=j_m + j_l,
         j_motor=j_m,
         rated_nm=rated,
         friction_pct=4.0,
         peak_rpm=800.0,
-        accel_s=0.15,
-        cruise_s=0.08,
+        accel_s=0.18,
+        cruise_s=0.10,
     )
     settings = AxisInertiaSettings(
         motor_inertia_kgm2=j_m,
         rated_torque_nm=rated,
         feed=50000.0,
         write_to_drive=False,
-        id_accel_unit_s2=1111.0,
+        id_accel_unit_s2=target_id_accel(8000.0, PREFERRED_ACCEL_S),
         auto_flatten=False,
+        torque_limit_pct=truth["t_peak"],
     )
     io = _FakeIO(tq, vel)
     cfg = GraphicalInertiaConfig.for_axis("X", settings, sample_hz=1000.0)
@@ -344,6 +463,8 @@ def test_tuner_skips_write_when_marginal(tmp: str) -> None:
         rated_torque_nm=rated,
         write_to_drive=True,
         id_accel_unit_s2=2942.0,
+        auto_flatten=False,
+        torque_limit_pct=18.2,
     )
     io = _FakeIO(tq, vel)
     cfg = GraphicalInertiaConfig.for_axis("X", settings, sample_hz=1000.0)
@@ -382,7 +503,17 @@ def test_real_f10000_traces_cluster() -> None:
                 tq.append(float(a))
                 vel.append(float(b))
         try:
-            est = analyze_torque_velocity("X", tq, vel, hz, 5.9e-5, 1.27)
+            # Replay as clamped using each trace's own peak as Tp proxy.
+            peak = max(abs(x) for x in tq) if tq else 0.0
+            est = analyze_torque_velocity(
+                "X",
+                tq,
+                vel,
+                hz,
+                5.9e-5,
+                1.27,
+                torque_limit_pct=peak if peak > 0 else None,
+            )
         except GraphicalInertiaError as exc:
             print(f"SKIP {name}: {exc}")
             continue
@@ -391,7 +522,7 @@ def test_real_f10000_traces_cluster() -> None:
             f"dt={est.delta_t_s * 1000:.0f}ms"
         )
         # Only "good" estimates are trusted for the cluster check; marginal
-        # (pair spread / SNR) is allowed to sit outside and must not write.
+        # (pair spread / SNR / no cruise) is allowed to sit outside.
         if est.quality != "good":
             continue
         ratios.append(est.ratio_pct)
@@ -413,10 +544,13 @@ if __name__ == "__main__":
         ("sigma_ii_worksheet", test_sigma_ii_worksheet_example, False),
         ("target_accel", test_target_id_accel, False),
         ("analyze", test_analyze_ideal_trace, False),
+        ("unclamped_marginal", test_analyze_unclamped_is_marginal, False),
+        ("alpha_band_spikes", test_analyze_alpha_band_ignores_torque_spikes, False),
         ("short_stepped", test_analyze_short_stepped_rejected, False),
         ("tiny", test_analyze_rejects_tiny_move, False),
         ("validate", test_settings_validate, False),
         ("tuner", test_tuner_writes_when_good, True),
+        ("always_clamp", test_tuner_always_clamps_when_limit_zero, True),
         ("clamp_feed", test_tuner_clamps_feed, True),
         ("no_write_marginal", test_tuner_skips_write_when_marginal, True),
         ("real_f10000", test_real_f10000_traces_cluster, False),
