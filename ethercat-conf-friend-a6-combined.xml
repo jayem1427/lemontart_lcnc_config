@@ -1,0 +1,143 @@
+<masters>
+  <!--
+    Combined: friend's drives (vid 0x83) + this repo's tested A6 behavior.
+    From friend: VID/PID, PDO slots 1702/1b04, watchdog, SM0/SM1, 60FD digins.
+    From A6 setup: CSP (08), refClockSyncCycles=-1, HAL pin names, follow-error SDOs,
+    slim motion PDOs, slave order X/Y/Z to match ethercat_mill.hal.
+
+    Friend only had 3 axes (no A). Confirm VID/PID with: ethercat slaves
+    DI bit→pin map for 60FD is a guess (bits 4..8 → di-1..di-5); manual helps verify.
+  -->
+  <master idx="0" appTimePeriod="1000000" refClockSyncCycles="-1">
+
+    <!-- Slave 0 = X  (friend had this as idx1, pid 0x06) -->
+    <slave idx="0" type="generic" vid="00000083" pid="00000006" name="X" configPdos="true">
+      <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
+      <watchdog divider="2498" intervals="1000"/>
+
+      <!-- CSP (A6-tested). Friend had 09=CSV — changed on purpose. -->
+      <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <!-- Follow-error — retune counts for these encoders -->
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
+      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
+
+      <syncManager idx="0" dir="out"/>
+      <syncManager idx="1" dir="in"/>
+
+      <!-- Master → drive (friend PDO slot 1702; slimmed like A6) -->
+      <syncManager idx="2" dir="out">
+        <pdo idx="1702">
+          <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word"  halType="u32"/>
+          <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd"    halType="s32"/>
+        </pdo>
+      </syncManager>
+
+      <!-- Drive → master (friend PDO slot 1b04) -->
+      <syncManager idx="3" dir="in">
+        <pdo idx="1b04">
+          <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
+          <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb"    halType="s32"/>
+          <!-- 60FD: keep friend's bit layout; alias bits 4..8 as di-1..di-5 for HAL -->
+          <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
+            <complexEntry bitLen="1" halPin="din-not"   halType="bit"/> <!-- 0 -->
+            <complexEntry bitLen="1" halPin="din-pot"   halType="bit"/> <!-- 1 -->
+            <complexEntry bitLen="1" halPin="din-dec"   halType="bit"/> <!-- 2 -->
+            <complexEntry bitLen="1"/>                                   <!-- 3 -->
+            <complexEntry bitLen="1" halPin="di-1"      halType="bit"/> <!-- 4 -->
+            <complexEntry bitLen="1" halPin="di-2"      halType="bit"/> <!-- 5 -->
+            <complexEntry bitLen="1" halPin="di-3"      halType="bit"/> <!-- 6 -->
+            <complexEntry bitLen="1" halPin="di-4"      halType="bit"/> <!-- 7 -->
+            <complexEntry bitLen="1" halPin="di-5"      halType="bit"/> <!-- 8 -->
+            <complexEntry bitLen="7"/>                                   <!-- 9..15 -->
+            <complexEntry bitLen="1" halPin="din-pc"    halType="bit"/> <!-- 16 -->
+            <complexEntry bitLen="1" halPin="din-ext1"  halType="bit"/> <!-- 17 -->
+            <complexEntry bitLen="1" halPin="din-ext2"  halType="bit"/> <!-- 18 -->
+            <complexEntry bitLen="1" halPin="din-ext3"  halType="bit"/> <!-- 19 -->
+            <complexEntry bitLen="12"/>                                  <!-- 20..31 -->
+          </pdoEntry>
+        </pdo>
+      </syncManager>
+    </slave>
+
+    <!-- Slave 1 = Y  (friend had this as idx2, pid 0x07) -->
+    <slave idx="1" type="generic" vid="00000083" pid="00000007" name="Y" configPdos="true">
+      <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
+      <watchdog divider="2498" intervals="1000"/>
+      <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
+      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
+      <syncManager idx="0" dir="out"/>
+      <syncManager idx="1" dir="in"/>
+      <syncManager idx="2" dir="out">
+        <pdo idx="1702">
+          <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word" halType="u32"/>
+          <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd"   halType="s32"/>
+        </pdo>
+      </syncManager>
+      <syncManager idx="3" dir="in">
+        <pdo idx="1b04">
+          <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
+          <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb"     halType="s32"/>
+          <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
+            <complexEntry bitLen="1" halPin="din-not"   halType="bit"/>
+            <complexEntry bitLen="1" halPin="din-pot"   halType="bit"/>
+            <complexEntry bitLen="1" halPin="din-dec"   halType="bit"/>
+            <complexEntry bitLen="1"/>
+            <complexEntry bitLen="1" halPin="di-1"      halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-2"      halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-3"      halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-4"      halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-5"      halType="bit"/>
+            <complexEntry bitLen="7"/>
+            <complexEntry bitLen="1" halPin="din-pc"    halType="bit"/>
+            <complexEntry bitLen="1" halPin="din-ext1"  halType="bit"/>
+            <complexEntry bitLen="1" halPin="din-ext2"  halType="bit"/>
+            <complexEntry bitLen="1" halPin="din-ext3"  halType="bit"/>
+            <complexEntry bitLen="12"/>
+          </pdoEntry>
+        </pdo>
+      </syncManager>
+    </slave>
+
+    <!-- Slave 2 = Z  (friend had this as idx0, pid 0x06) -->
+    <slave idx="2" type="generic" vid="00000083" pid="00000006" name="Z" configPdos="true">
+      <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
+      <watchdog divider="2498" intervals="1000"/>
+      <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
+      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
+      <syncManager idx="0" dir="out"/>
+      <syncManager idx="1" dir="in"/>
+      <syncManager idx="2" dir="out">
+        <pdo idx="1702">
+          <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word" halType="u32"/>
+          <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd"   halType="s32"/>
+        </pdo>
+      </syncManager>
+      <syncManager idx="3" dir="in">
+        <pdo idx="1b04">
+          <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
+          <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb"     halType="s32"/>
+          <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
+            <complexEntry bitLen="1" halPin="din-not"   halType="bit"/>
+            <complexEntry bitLen="1" halPin="din-pot"   halType="bit"/>
+            <complexEntry bitLen="1" halPin="din-dec"   halType="bit"/>
+            <complexEntry bitLen="1"/>
+            <complexEntry bitLen="1" halPin="di-1"      halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-2"      halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-3"      halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-4"      halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-5"      halType="bit"/>
+            <complexEntry bitLen="7"/>
+            <complexEntry bitLen="1" halPin="din-pc"    halType="bit"/>
+            <complexEntry bitLen="1" halPin="din-ext1"  halType="bit"/>
+            <complexEntry bitLen="1" halPin="din-ext2"  halType="bit"/>
+            <complexEntry bitLen="1" halPin="din-ext3"  halType="bit"/>
+            <complexEntry bitLen="12"/>
+          </pdoEntry>
+        </pdo>
+      </syncManager>
+    </slave>
+
+  </master>
+</masters>
