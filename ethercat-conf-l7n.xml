@@ -1,0 +1,56 @@
+<masters>
+  <!-- 1 ms servo period; -1 = no slave ref-clock sync (stops random DC hitters) -->
+  <master idx="0" appTimePeriod="1000000" refClockSyncCycles="-1">
+
+    <!-- L7N: VID 0x4321 / PID 0xDA — confirm with: ethercat slaves -->
+    <slave idx="0" type="generic" vid="00004321" pid="000000DA" configPdos="true">
+      <!-- DC Sync0 for CSP -->
+      <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
+
+      <!-- Modes of operation = CSP (8) -->
+      <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+
+      <!-- Follow-error window (counts) + timeout (ms) — retune 6065 for your encoder -->
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
+      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
+
+      <!-- Pr4.00..03 = DI1..DI4 function. 0 = raw inputs on 60FD bits 4..7 (not factory POT/NOT/HOME) -->
+      <sdoConfig idx="2400" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
+      <sdoConfig idx="2401" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
+      <sdoConfig idx="2402" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
+      <sdoConfig idx="2403" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
+
+      <!-- Master → drive -->
+      <syncManager idx="2" dir="out">
+        <pdo idx="1600">
+          <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word"  halType="u32"/>
+          <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd"    halType="s32"/>
+        </pdo>
+      </syncManager>
+
+      <!-- Drive → master -->
+      <syncManager idx="3" dir="in">
+        <pdo idx="1a00">
+          <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
+          <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb"     halType="s32"/>
+          <!-- 60FD: bit0 NOT, bit1 POT, bit2 HOME, bit4..7 DI1..DI4, bit26/27 Probe1/2 -->
+          <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
+            <complexEntry bitLen="1" halPin="neg-limit" halType="bit"/>
+            <complexEntry bitLen="1" halPin="pos-limit" halType="bit"/>
+            <complexEntry bitLen="1" halPin="home"      halType="bit"/>
+            <complexEntry bitLen="1"/>
+            <complexEntry bitLen="1" halPin="di-1"      halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-2"      halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-3"      halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-4"      halType="bit"/>
+            <complexEntry bitLen="18"/>
+            <complexEntry bitLen="1" halPin="probe1"    halType="bit"/>
+            <complexEntry bitLen="1" halPin="probe2"    halType="bit"/>
+            <complexEntry bitLen="4"/>
+          </pdoEntry>
+        </pdo>
+      </syncManager>
+    </slave>
+
+  </master>
+</masters>
