@@ -1,19 +1,21 @@
 <masters>
   <!--
-    Friend's chain, A6-style CSP/HAL behavior:
-      0 = Omron G5 400W   vid 0x83  pid 0x007
-      1 = Omron G5 200W   vid 0x83  pid 0x006
-      2 = Omron G5 200W   vid 0x83  pid 0x006
-      3 = Leadshine L6N-100  vid 0x4321  pid CONFIRM (L7N was 0xDA — check: ethercat slaves)
+    Mixed EtherCAT axis chain (linuxcnc-ethercat / lcec generic slaves).
 
-    Omron: PDO slots 1702/1b04 from friend's working XML.
-    L6N: 1600/1a00 + 60FD layout from L7N manual (verify on L6N).
-    Master: refClockSyncCycles=-1 (A6-tested anti-hitter).
-    Mode: CSP 08 (friend Omron XML had CSV 09 — changed on purpose).
+    Slave 0  Omron G5 400 W     VID 0x00000083  PID 0x00000007
+    Slave 1  Omron G5 200 W     VID 0x00000083  PID 0x00000006
+    Slave 2  Omron G5 200 W     VID 0x00000083  PID 0x00000006
+    Slave 3  Leadshine L6N-100  VID 0x00004321  PID 0x000000DA (confirm on bus)
+
+    Operation mode: CiA 402 CSP (0x6060 = 8).
+    DC: Sync0 enabled (assignActivate 0x0300).
+    refClockSyncCycles=-1 disables slave reference-clock disciplining.
+
+    Verify VID/PID with: ethercat slaves
   -->
   <master idx="0" appTimePeriod="1000000" refClockSyncCycles="-1">
 
-    <!-- ========== Slave 0: Omron G5 400W ========== -->
+    <!-- Omron G5 400 W -->
     <slave idx="0" type="generic" vid="00000083" pid="00000007" name="G5-400W" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <watchdog divider="2498" intervals="1000"/>
@@ -32,7 +34,7 @@
         <pdo idx="1b04">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb"     halType="s32"/>
-          <!-- Omron 60FD: bits 4..8 aliased to di-1..di-5 for HAL — verify vs G5 manual -->
+          <!-- 0x60FD digital inputs; bits 4..8 exposed as di-1..di-5 -->
           <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
             <complexEntry bitLen="1" halPin="din-not"  halType="bit"/>
             <complexEntry bitLen="1" halPin="din-pot"  halType="bit"/>
@@ -54,7 +56,7 @@
       </syncManager>
     </slave>
 
-    <!-- ========== Slave 1: Omron G5 200W ========== -->
+    <!-- Omron G5 200 W -->
     <slave idx="1" type="generic" vid="00000083" pid="00000006" name="G5-200W" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <watchdog divider="2498" intervals="1000"/>
@@ -94,7 +96,7 @@
       </syncManager>
     </slave>
 
-    <!-- ========== Slave 2: Omron G5 200W ========== -->
+    <!-- Omron G5 200 W -->
     <slave idx="2" type="generic" vid="00000083" pid="00000006" name="G5-200W" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <watchdog divider="2498" intervals="1000"/>
@@ -134,15 +136,13 @@
       </syncManager>
     </slave>
 
-    <!-- ========== Slave 3: Leadshine L6N-100 ========== -->
-    <!-- pid below is from L7N ESI (0xDA) — REPLACE if ethercat slaves shows different for L6N -->
+    <!-- Leadshine L6N-100 (PID 0xDA from related L7N ESI — confirm for this unit) -->
     <slave idx="3" type="generic" vid="00004321" pid="000000DA" name="L6N-100" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <!-- A-axis-sized follow-error placeholder — retune for L6N encoder -->
       <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="6D 00 00 00"/></sdoConfig>
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
-      <!-- Pr4.00..03=0 → raw DI1..DI4 on 60FD bits 4..7 (L7N manual; confirm on L6N) -->
+      <!-- DI function select Pr4.00..Pr4.03 = 0 (raw DI1..DI4 on 0x60FD bits 4..7) -->
       <sdoConfig idx="2400" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
       <sdoConfig idx="2401" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
       <sdoConfig idx="2402" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
@@ -157,7 +157,7 @@
         <pdo idx="1a00">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb"     halType="s32"/>
-          <!-- L7N-style 60FD: bit0 NOT,1 POT,2 HOME,4..7 DI1..DI4,26/27 probe -->
+          <!-- 0x60FD: bit0 NOT, bit1 POT, bit2 HOME, bits 4..7 DI1..DI4, bits 26/27 probe -->
           <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
             <complexEntry bitLen="1" halPin="neg-limit" halType="bit"/>
             <complexEntry bitLen="1" halPin="pos-limit" halType="bit"/>
