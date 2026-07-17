@@ -147,8 +147,8 @@
       </syncManager>
     </slave>
 
-    <!-- Leadshine L6N-S 100 W — VID 0x4321 / PID 0xDA (confirm with: ethercat slaves) -->
-    <slave idx="3" type="generic" vid="00004321" pid="000000DA" name="L6N-100" configPdos="true">
+    <!-- Leadshine L6N — VID 0x4321 / PID 0xE2 (from L6N ESI; series PID kept as L6N-400) -->
+    <slave idx="3" type="generic" vid="00004321" pid="000000E2" name="L6N-100" configPdos="true">
       <!-- DC Sync0 for CSP -->
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <!-- Modes of operation = CSP (8) -->
