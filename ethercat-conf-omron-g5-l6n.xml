@@ -1,40 +1,37 @@
 <masters>
-  <!--
-    Mixed EtherCAT axis chain (linuxcnc-ethercat / lcec generic slaves).
-
-    Slave 0  Omron G5 400 W     VID 0x00000083  PID 0x00000007
-    Slave 1  Omron G5 200 W     VID 0x00000083  PID 0x00000006
-    Slave 2  Omron G5 200 W     VID 0x00000083  PID 0x00000006
-    Slave 3  Leadshine L6N-100  VID 0x00004321  PID 0x000000DA (confirm on bus)
-
-    Operation mode: CiA 402 CSP (0x6060 = 8).
-    DC: Sync0 enabled (assignActivate 0x0300).
-    refClockSyncCycles=-1 disables slave reference-clock disciplining.
-
-    Verify VID/PID with: ethercat slaves
-  -->
+  <!-- 1 ms servo period; -1 = no slave ref-clock sync (avoids random DC hitters) -->
   <master idx="0" appTimePeriod="1000000" refClockSyncCycles="-1">
 
-    <!-- Omron G5 400 W -->
+    <!-- Omron G5 400 W — VID 0x83 / PID 0x007 — confirm with: ethercat slaves -->
     <slave idx="0" type="generic" vid="00000083" pid="00000007" name="G5-400W" configPdos="true">
+      <!-- DC Sync0 for CSP -->
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <watchdog divider="2498" intervals="1000"/>
+
+      <!-- Modes of operation = CSP (8) -->
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <!-- Follow-error window (counts) + timeout (ms) — retune 6065 for encoder -->
       <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
+
+      <!-- Mailbox sync managers -->
       <syncManager idx="0" dir="out"/>
       <syncManager idx="1" dir="in"/>
+
+      <!-- Master → drive (Omron RxPDO 0x1702) -->
       <syncManager idx="2" dir="out">
         <pdo idx="1702">
           <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word"  halType="u32"/>
           <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd"    halType="s32"/>
         </pdo>
       </syncManager>
+
+      <!-- Drive → master (Omron TxPDO 0x1b04) -->
       <syncManager idx="3" dir="in">
         <pdo idx="1b04">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb"     halType="s32"/>
-          <!-- 0x60FD digital inputs; bits 4..8 exposed as di-1..di-5 -->
+          <!-- 60FD: function bits + di-1..di-5 on bits 4..8 — verify vs G5 manual -->
           <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
             <complexEntry bitLen="1" halPin="din-not"  halType="bit"/>
             <complexEntry bitLen="1" halPin="din-pot"  halType="bit"/>
@@ -56,25 +53,32 @@
       </syncManager>
     </slave>
 
-    <!-- Omron G5 200 W -->
+    <!-- Omron G5 200 W — VID 0x83 / PID 0x006 -->
     <slave idx="1" type="generic" vid="00000083" pid="00000006" name="G5-200W" configPdos="true">
+      <!-- DC Sync0 for CSP -->
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <watchdog divider="2498" intervals="1000"/>
+      <!-- Modes of operation = CSP (8) -->
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <!-- Follow-error window (counts) + timeout (ms) — retune 6065 for encoder -->
       <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
+      <!-- Mailbox sync managers -->
       <syncManager idx="0" dir="out"/>
       <syncManager idx="1" dir="in"/>
+      <!-- Master → drive -->
       <syncManager idx="2" dir="out">
         <pdo idx="1702">
-          <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word" halType="u32"/>
-          <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd"   halType="s32"/>
+          <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word"  halType="u32"/>
+          <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd"    halType="s32"/>
         </pdo>
       </syncManager>
+      <!-- Drive → master -->
       <syncManager idx="3" dir="in">
         <pdo idx="1b04">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb"     halType="s32"/>
+          <!-- 60FD: function bits + di-1..di-5 on bits 4..8 -->
           <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
             <complexEntry bitLen="1" halPin="din-not"  halType="bit"/>
             <complexEntry bitLen="1" halPin="din-pot"  halType="bit"/>
@@ -96,25 +100,32 @@
       </syncManager>
     </slave>
 
-    <!-- Omron G5 200 W -->
+    <!-- Omron G5 200 W — VID 0x83 / PID 0x006 -->
     <slave idx="2" type="generic" vid="00000083" pid="00000006" name="G5-200W" configPdos="true">
+      <!-- DC Sync0 for CSP -->
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <watchdog divider="2498" intervals="1000"/>
+      <!-- Modes of operation = CSP (8) -->
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <!-- Follow-error window (counts) + timeout (ms) — retune 6065 for encoder -->
       <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
+      <!-- Mailbox sync managers -->
       <syncManager idx="0" dir="out"/>
       <syncManager idx="1" dir="in"/>
+      <!-- Master → drive -->
       <syncManager idx="2" dir="out">
         <pdo idx="1702">
-          <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word" halType="u32"/>
-          <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd"   halType="s32"/>
+          <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word"  halType="u32"/>
+          <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd"    halType="s32"/>
         </pdo>
       </syncManager>
+      <!-- Drive → master -->
       <syncManager idx="3" dir="in">
         <pdo idx="1b04">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb"     halType="s32"/>
+          <!-- 60FD: function bits + di-1..di-5 on bits 4..8 -->
           <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
             <complexEntry bitLen="1" halPin="din-not"  halType="bit"/>
             <complexEntry bitLen="1" halPin="din-pot"  halType="bit"/>
@@ -136,28 +147,33 @@
       </syncManager>
     </slave>
 
-    <!-- Leadshine L6N-100 (PID 0xDA from related L7N ESI — confirm for this unit) -->
+    <!-- Leadshine L6N-100 — VID 0x4321 / PID 0xDA (confirm on bus) -->
     <slave idx="3" type="generic" vid="00004321" pid="000000DA" name="L6N-100" configPdos="true">
+      <!-- DC Sync0 for CSP -->
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
+      <!-- Modes of operation = CSP (8) -->
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <!-- Follow-error window (counts) + timeout (ms) — retune 6065 for encoder -->
       <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="6D 00 00 00"/></sdoConfig>
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
-      <!-- DI function select Pr4.00..Pr4.03 = 0 (raw DI1..DI4 on 0x60FD bits 4..7) -->
+      <!-- Pr4.00..03 = DI1..DI4 function. 0 = raw inputs on 60FD bits 4..7 -->
       <sdoConfig idx="2400" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
       <sdoConfig idx="2401" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
       <sdoConfig idx="2402" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
       <sdoConfig idx="2403" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
+      <!-- Master → drive -->
       <syncManager idx="2" dir="out">
         <pdo idx="1600">
-          <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word" halType="u32"/>
-          <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd"   halType="s32"/>
+          <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word"  halType="u32"/>
+          <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd"    halType="s32"/>
         </pdo>
       </syncManager>
+      <!-- Drive → master -->
       <syncManager idx="3" dir="in">
         <pdo idx="1a00">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb"     halType="s32"/>
-          <!-- 0x60FD: bit0 NOT, bit1 POT, bit2 HOME, bits 4..7 DI1..DI4, bits 26/27 probe -->
+          <!-- 60FD: bit0 NOT, bit1 POT, bit2 HOME, bit4..7 DI1..DI4, bit26/27 Probe1/2 -->
           <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
             <complexEntry bitLen="1" halPin="neg-limit" halType="bit"/>
             <complexEntry bitLen="1" halPin="pos-limit" halType="bit"/>
