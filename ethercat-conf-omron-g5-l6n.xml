@@ -147,7 +147,7 @@
       </syncManager>
     </slave>
 
-    <!-- Leadshine L6N-100 — VID 0x4321 / PID 0xDA (confirm on bus) -->
+    <!-- Leadshine L6N-S 100 W — VID 0x4321 / PID 0xDA (confirm with: ethercat slaves) -->
     <slave idx="3" type="generic" vid="00004321" pid="000000DA" name="L6N-100" configPdos="true">
       <!-- DC Sync0 for CSP -->
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
@@ -156,24 +156,26 @@
       <!-- Follow-error window (counts) + timeout (ms) — retune 6065 for encoder -->
       <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="6D 00 00 00"/></sdoConfig>
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
-      <!-- Pr4.00..03 = DI1..DI4 function. 0 = raw inputs on 60FD bits 4..7 -->
+      <!-- P04.00..05 = DI1..DI6 function (2400h..2405h). 0 = raw on 60FD bits 4..9 per L6N-S manual -->
       <sdoConfig idx="2400" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
       <sdoConfig idx="2401" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
       <sdoConfig idx="2402" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
       <sdoConfig idx="2403" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <!-- Master → drive -->
+      <sdoConfig idx="2404" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
+      <sdoConfig idx="2405" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
+      <!-- Master → drive (RxPDO 1600; slimmed from factory 6040/607A/60B8) -->
       <syncManager idx="2" dir="out">
         <pdo idx="1600">
           <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word"  halType="u32"/>
           <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd"    halType="s32"/>
         </pdo>
       </syncManager>
-      <!-- Drive → master -->
+      <!-- Drive → master (TxPDO 1A00) -->
       <syncManager idx="3" dir="in">
         <pdo idx="1a00">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb"     halType="s32"/>
-          <!-- 60FD: bit0 NOT, bit1 POT, bit2 HOME, bit4..7 DI1..DI4, bit26/27 Probe1/2 -->
+          <!-- 60FD per L6N-S: bit0 NOT,1 POT,2 HOME,4..9 DI1..DI6,26/27 Probe1/2 -->
           <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
             <complexEntry bitLen="1" halPin="neg-limit" halType="bit"/>
             <complexEntry bitLen="1" halPin="pos-limit" halType="bit"/>
@@ -183,7 +185,9 @@
             <complexEntry bitLen="1" halPin="di-2"      halType="bit"/>
             <complexEntry bitLen="1" halPin="di-3"      halType="bit"/>
             <complexEntry bitLen="1" halPin="di-4"      halType="bit"/>
-            <complexEntry bitLen="18"/>
+            <complexEntry bitLen="1" halPin="di-5"      halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-6"      halType="bit"/>
+            <complexEntry bitLen="16"/>
             <complexEntry bitLen="1" halPin="probe1"    halType="bit"/>
             <complexEntry bitLen="1" halPin="probe2"    halType="bit"/>
             <complexEntry bitLen="4"/>
