@@ -1,39 +1,18 @@
 <masters>
-  <!-- refClockSyncCycles="-1": disable slave ref-clock sync (avoids random DC "hitters") -->
   <master idx="0" appTimePeriod="1000000" refClockSyncCycles="-1">
 
-    <!--
-      Leadshine L7N (ESI: Vendor Id 17185 / ProductCode 0xDA).
-      Confirm on the bus: ethercat slaves
-
-      Motion pins (CiA402) keep the same HAL names as the old A6 config:
-        ctrl-word 6040, pos-cmd 607A, status-word 6041, pos-fb 6064
-
-      Digital inputs are 60FD (32-bit), NOT A6 manufacturer 2040:05.
-      Manual bit map:
-        bit0 NOT, bit1 POT, bit2 HOME, bit3 reserved,
-        bit4..7 DI1..DI4 (raw physical status when Pr4.00..Pr4.03 = 0),
-        bit26 Probe1 (EXT1), bit27 Probe2 (EXT2)
-
-      Pr4.00..Pr4.03 (0x2400..0x2403) are cleared so DI1..DI4 appear on bits 4..7
-      for breakout-style wiring. L7N has only 4 general DIs + 2 probe inputs —
-      there is no A6-style DI5; use probe1/probe2 (EXT) or another slave's DI.
-      Retune 6065 for L7N encoder resolution before relying on follow-error trips.
-    -->
-
-    <!-- Slave 0: X (also used as X/Y limit+home breakout in ethercat_mill.hal) -->
-    <slave idx="0" type="generic" vid="00004321" pid="000000DA" configPdos="true">
+    <slave idx="0" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <!-- 6065: follow-error window (encoder counts) — retune for L7N -->
+      <!-- 6065: position deviation limit (encoder counts). 3932 = 0.3 mm @ 13107.2 counts/mm -->
       <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
-      <!-- 6066: follow-error timeout (ms) -->
+      <!-- 6066: ms deviation must persist before Er47.0 (100 ms) -->
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
-      <!-- Pr4.00..Pr4.03 = 0 → raw DI1..DI4 on 60FD bits 4..7 -->
-      <sdoConfig idx="2400" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2401" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2402" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2403" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="01"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="05"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="09"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="0d"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="11"><sdoDataRaw data="00 00"/></sdoConfig>
       <syncManager idx="2" dir="out">
         <pdo idx="1600">
           <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word" halType="u32"/>
@@ -44,34 +23,30 @@
         <pdo idx="1a00">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb" halType="s32"/>
-          <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
-            <complexEntry bitLen="1" halPin="neg-limit"  halType="bit"/>  <!-- bit0 NOT -->
-            <complexEntry bitLen="1" halPin="pos-limit"  halType="bit"/>  <!-- bit1 POT -->
-            <complexEntry bitLen="1" halPin="home"       halType="bit"/>  <!-- bit2 HOME -->
-            <complexEntry bitLen="1"/>                                    <!-- bit3 reserved -->
-            <complexEntry bitLen="1" halPin="di-1"       halType="bit"/>  <!-- bit4 DI1 -->
-            <complexEntry bitLen="1" halPin="di-2"       halType="bit"/>  <!-- bit5 DI2 -->
-            <complexEntry bitLen="1" halPin="di-3"       halType="bit"/>  <!-- bit6 DI3 -->
-            <complexEntry bitLen="1" halPin="di-4"       halType="bit"/>  <!-- bit7 DI4 -->
-            <complexEntry bitLen="18"/>                                   <!-- bits 8..25 -->
-            <complexEntry bitLen="1" halPin="probe1"     halType="bit"/>  <!-- bit26 EXT1 -->
-            <complexEntry bitLen="1" halPin="probe2"     halType="bit"/>  <!-- bit27 EXT2 -->
-            <complexEntry bitLen="4"/>                                    <!-- bits 28..31 -->
+          <pdoEntry idx="2040" subIdx="05" bitLen="16" halType="complex">
+            <complexEntry bitLen="1" halPin="di-1" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-2" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-3" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-4" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-5" halType="bit"/>
+            <complexEntry bitLen="11"/>
           </pdoEntry>
         </pdo>
       </syncManager>
     </slave>
 
-    <!-- Slave 1: Y (probe / toolsetter breakout in ethercat_mill.hal) -->
-    <slave idx="1" type="generic" vid="00004321" pid="000000DA" configPdos="true">
+    <slave idx="1" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <!-- 6065: position deviation limit (encoder counts). 3932 = 0.3 mm @ 13107.2 counts/mm -->
       <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
+      <!-- 6066: ms deviation must persist before Er47.0 (100 ms) -->
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
-      <sdoConfig idx="2400" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2401" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2402" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2403" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="01"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="05"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="09"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="0d"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="11"><sdoDataRaw data="00 00"/></sdoConfig>
       <syncManager idx="2" dir="out">
         <pdo idx="1600">
           <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word" halType="u32"/>
@@ -82,34 +57,30 @@
         <pdo idx="1a00">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb" halType="s32"/>
-          <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
-            <complexEntry bitLen="1" halPin="neg-limit"  halType="bit"/>
-            <complexEntry bitLen="1" halPin="pos-limit"  halType="bit"/>
-            <complexEntry bitLen="1" halPin="home"       halType="bit"/>
-            <complexEntry bitLen="1"/>
-            <complexEntry bitLen="1" halPin="di-1"       halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-2"       halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-3"       halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-4"       halType="bit"/>
-            <complexEntry bitLen="18"/>
-            <complexEntry bitLen="1" halPin="probe1"     halType="bit"/>
-            <complexEntry bitLen="1" halPin="probe2"     halType="bit"/>
-            <complexEntry bitLen="4"/>
+          <pdoEntry idx="2040" subIdx="05" bitLen="16" halType="complex">
+            <complexEntry bitLen="1" halPin="di-1" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-2" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-3" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-4" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-5" halType="bit"/>
+            <complexEntry bitLen="11"/>
           </pdoEntry>
         </pdo>
       </syncManager>
     </slave>
 
-    <!-- Slave 2: Z -->
-    <slave idx="2" type="generic" vid="00004321" pid="000000DA" configPdos="true">
+    <slave idx="2" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <!-- 6065: position deviation limit (encoder counts). 3932 = 0.3 mm @ 13107.2 counts/mm -->
       <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
+      <!-- 6066: ms deviation must persist before Er47.0 (100 ms) -->
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
-      <sdoConfig idx="2400" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2401" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2402" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2403" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="01"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="05"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="09"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="0d"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="11"><sdoDataRaw data="00 00"/></sdoConfig>
       <syncManager idx="2" dir="out">
         <pdo idx="1600">
           <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word" halType="u32"/>
@@ -120,35 +91,25 @@
         <pdo idx="1a00">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb" halType="s32"/>
-          <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
-            <complexEntry bitLen="1" halPin="neg-limit"  halType="bit"/>
-            <complexEntry bitLen="1" halPin="pos-limit"  halType="bit"/>
-            <complexEntry bitLen="1" halPin="home"       halType="bit"/>
-            <complexEntry bitLen="1"/>
-            <complexEntry bitLen="1" halPin="di-1"       halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-2"       halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-3"       halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-4"       halType="bit"/>
-            <complexEntry bitLen="18"/>
-            <complexEntry bitLen="1" halPin="probe1"     halType="bit"/>
-            <complexEntry bitLen="1" halPin="probe2"     halType="bit"/>
-            <complexEntry bitLen="4"/>
+          <pdoEntry idx="2040" subIdx="05" bitLen="16" halType="complex">
+            <complexEntry bitLen="1" halPin="di-1" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-2" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-3" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-4" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-5" halType="bit"/>
+            <complexEntry bitLen="11"/>
           </pdoEntry>
         </pdo>
       </syncManager>
     </slave>
 
-    <!-- Slave 3: A -->
-    <slave idx="3" type="generic" vid="00004321" pid="000000DA" configPdos="true">
+    <slave idx="3" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <!-- 6065: retune for A-axis L7N encoder (old A6 value was 109 counts) -->
+      <!-- 6065: position deviation limit (encoder counts). 109 = 0.3 deg @ 364.09 counts/deg -->
       <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="6D 00 00 00"/></sdoConfig>
+      <!-- 6066: ms deviation must persist before Er47.0 (100 ms) -->
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
-      <sdoConfig idx="2400" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2401" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2402" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2403" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
       <syncManager idx="2" dir="out">
         <pdo idx="1600">
           <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word" halType="u32"/>
@@ -159,19 +120,13 @@
         <pdo idx="1a00">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb" halType="s32"/>
-          <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
-            <complexEntry bitLen="1" halPin="neg-limit"  halType="bit"/>
-            <complexEntry bitLen="1" halPin="pos-limit"  halType="bit"/>
-            <complexEntry bitLen="1" halPin="home"       halType="bit"/>
-            <complexEntry bitLen="1"/>
-            <complexEntry bitLen="1" halPin="di-1"       halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-2"       halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-3"       halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-4"       halType="bit"/>
-            <complexEntry bitLen="18"/>
-            <complexEntry bitLen="1" halPin="probe1"     halType="bit"/>
-            <complexEntry bitLen="1" halPin="probe2"     halType="bit"/>
-            <complexEntry bitLen="4"/>
+          <pdoEntry idx="2040" subIdx="05" bitLen="16" halType="complex">
+            <complexEntry bitLen="1" halPin="di-1" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-2" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-3" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-4" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-5" halType="bit"/>
+            <complexEntry bitLen="11"/>
           </pdoEntry>
         </pdo>
       </syncManager>
