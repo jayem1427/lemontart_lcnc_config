@@ -1,80 +1,56 @@
 <masters>
   <!--
     Friend machine: Omron G5 400W(Z) / 200W(X) / 200W(Y) + Leadshine L6N(A).
-
-    Pin names match a typical Probe Basic / cia402 HAL that nets:
-      cia402.N.ctrl-word  => lcec.0.<axis>.controlword
-      cia402.N.pos-cmd    => lcec.0.<axis>.pos-cmd-raw
-      lcec.0.<axis>.cia-statusword => cia402.N.status-word
-      lcec.0.<axis>.actual-position => cia402.N.pos-fb
-
-    If your HAL uses lcec.0.0.ctrl-word / pos-cmd / status-word / pos-fb instead,
-    remove the name= attributes and rename those four pins accordingly.
-
+    HAL: controlword / pos-cmd-raw / cia-statusword / actual-position on lcec.0.Z|X|Y|A.*
     loadusr -W lcec_conf ethercat-conf-omron-g5-l6n.xml
   -->
   <master idx="0" appTimePeriod="1000000" refClockSyncCycles="-1">
 
-    <!-- Z: Omron G5 400 W — VID 0x83 / PID 0x007 -->
+    <!-- Z: Omron G5 — VID 0x83 / PID 0x07 -->
     <slave idx="0" type="generic" vid="00000083" pid="00000007" name="Z" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="0"/>
-      <!-- CSP (8). 6060 is NOT in RxPDO — avoids cyclic overwrite of mode with 0. -->
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
-      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
 
-      <!-- Fat Omron RxPDO 0x1702 (same shape as a known-working G5 map; no cyclic 6060) -->
       <syncManager idx="2" dir="out">
         <pdo idx="1702">
-          <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="controlword"  halType="u32"/>
+          <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="controlword" halType="u32"/>
           <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd-raw"  halType="s32"/>
-          <pdoEntry idx="60ff" subIdx="00" bitLen="32" halPin="vel-cmd-raw"  halType="s32"/>
-          <pdoEntry idx="6071" subIdx="00" bitLen="16" halPin="target-torque" halType="s32"/>
+          <pdoEntry idx="60ff" subIdx="00" bitLen="32" halType="s32"/>
+          <pdoEntry idx="6071" subIdx="00" bitLen="16" halType="s32"/>
         </pdo>
       </syncManager>
 
-      <!-- Fat Omron TxPDO 0x1b04 -->
       <syncManager idx="3" dir="in">
         <pdo idx="1b04">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="cia-statusword"  halType="u32"/>
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="actual-position" halType="s32"/>
-          <pdoEntry idx="606c" subIdx="00" bitLen="32" halPin="actual-velocity" halType="s32"/>
-          <pdoEntry idx="6077" subIdx="00" bitLen="16" halPin="actual-torque"   halType="s32"/>
-          <pdoEntry idx="6061" subIdx="00" bitLen="8"  halPin="opmode-display"  halType="s32"/>
+          <pdoEntry idx="606c" subIdx="00" bitLen="32" halType="s32"/>
+          <pdoEntry idx="6077" subIdx="00" bitLen="16" halType="s32"/>
+          <pdoEntry idx="6061" subIdx="00" bitLen="8"  halType="s32"/>
           <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
-            <complexEntry bitLen="1" halPin="din-not"  halType="bit"/>
-            <complexEntry bitLen="1" halPin="din-pot"  halType="bit"/>
-            <complexEntry bitLen="1" halPin="din-dec"  halType="bit"/>
-            <complexEntry bitLen="1"/>
-            <complexEntry bitLen="1" halPin="di-1"     halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-2"     halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-3"     halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-4"     halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-5"     halType="bit"/>
-            <complexEntry bitLen="7"/>
-            <complexEntry bitLen="1" halPin="din-pc"   halType="bit"/>
-            <complexEntry bitLen="1" halPin="din-ext1" halType="bit"/>
-            <complexEntry bitLen="1" halPin="din-ext2" halType="bit"/>
-            <complexEntry bitLen="1" halPin="din-ext3" halType="bit"/>
-            <complexEntry bitLen="12"/>
+            <complexEntry bitLen="4"/>
+            <complexEntry bitLen="1" halPin="di-1" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-2" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-3" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-4" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-5" halType="bit"/>
+            <complexEntry bitLen="23"/>
           </pdoEntry>
         </pdo>
       </syncManager>
     </slave>
 
-    <!-- X: Omron G5 200 W — VID 0x83 / PID 0x006 -->
+    <!-- X: Omron G5 — VID 0x83 / PID 0x06 -->
     <slave idx="1" type="generic" vid="00000083" pid="00000006" name="X" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="0"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
-      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
 
       <syncManager idx="2" dir="out">
         <pdo idx="1702">
           <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="controlword" halType="u32"/>
           <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd-raw"  halType="s32"/>
-          <pdoEntry idx="60ff" subIdx="00" bitLen="32" halPin="vel-cmd-raw"  halType="s32"/>
-          <pdoEntry idx="6071" subIdx="00" bitLen="16" halPin="target-torque" halType="s32"/>
+          <pdoEntry idx="60ff" subIdx="00" bitLen="32" halType="s32"/>
+          <pdoEntry idx="6071" subIdx="00" bitLen="16" halType="s32"/>
         </pdo>
       </syncManager>
 
@@ -82,43 +58,33 @@
         <pdo idx="1b04">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="cia-statusword"  halType="u32"/>
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="actual-position" halType="s32"/>
-          <pdoEntry idx="606c" subIdx="00" bitLen="32" halPin="actual-velocity" halType="s32"/>
-          <pdoEntry idx="6077" subIdx="00" bitLen="16" halPin="actual-torque"   halType="s32"/>
-          <pdoEntry idx="6061" subIdx="00" bitLen="8"  halPin="opmode-display"  halType="s32"/>
+          <pdoEntry idx="606c" subIdx="00" bitLen="32" halType="s32"/>
+          <pdoEntry idx="6077" subIdx="00" bitLen="16" halType="s32"/>
+          <pdoEntry idx="6061" subIdx="00" bitLen="8"  halType="s32"/>
           <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
-            <complexEntry bitLen="1" halPin="din-not"  halType="bit"/>
-            <complexEntry bitLen="1" halPin="din-pot"  halType="bit"/>
-            <complexEntry bitLen="1" halPin="din-dec"  halType="bit"/>
-            <complexEntry bitLen="1"/>
-            <complexEntry bitLen="1" halPin="di-1"     halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-2"     halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-3"     halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-4"     halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-5"     halType="bit"/>
-            <complexEntry bitLen="7"/>
-            <complexEntry bitLen="1" halPin="din-pc"   halType="bit"/>
-            <complexEntry bitLen="1" halPin="din-ext1" halType="bit"/>
-            <complexEntry bitLen="1" halPin="din-ext2" halType="bit"/>
-            <complexEntry bitLen="1" halPin="din-ext3" halType="bit"/>
-            <complexEntry bitLen="12"/>
+            <complexEntry bitLen="4"/>
+            <complexEntry bitLen="1" halPin="di-1" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-2" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-3" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-4" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-5" halType="bit"/>
+            <complexEntry bitLen="23"/>
           </pdoEntry>
         </pdo>
       </syncManager>
     </slave>
 
-    <!-- Y: Omron G5 200 W — VID 0x83 / PID 0x006 -->
+    <!-- Y: Omron G5 — VID 0x83 / PID 0x06 -->
     <slave idx="2" type="generic" vid="00000083" pid="00000006" name="Y" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="0"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="5C 0F 00 00"/></sdoConfig>
-      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
 
       <syncManager idx="2" dir="out">
         <pdo idx="1702">
           <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="controlword" halType="u32"/>
           <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd-raw"  halType="s32"/>
-          <pdoEntry idx="60ff" subIdx="00" bitLen="32" halPin="vel-cmd-raw"  halType="s32"/>
-          <pdoEntry idx="6071" subIdx="00" bitLen="16" halPin="target-torque" halType="s32"/>
+          <pdoEntry idx="60ff" subIdx="00" bitLen="32" halType="s32"/>
+          <pdoEntry idx="6071" subIdx="00" bitLen="16" halType="s32"/>
         </pdo>
       </syncManager>
 
@@ -126,25 +92,17 @@
         <pdo idx="1b04">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="cia-statusword"  halType="u32"/>
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="actual-position" halType="s32"/>
-          <pdoEntry idx="606c" subIdx="00" bitLen="32" halPin="actual-velocity" halType="s32"/>
-          <pdoEntry idx="6077" subIdx="00" bitLen="16" halPin="actual-torque"   halType="s32"/>
-          <pdoEntry idx="6061" subIdx="00" bitLen="8"  halPin="opmode-display"  halType="s32"/>
+          <pdoEntry idx="606c" subIdx="00" bitLen="32" halType="s32"/>
+          <pdoEntry idx="6077" subIdx="00" bitLen="16" halType="s32"/>
+          <pdoEntry idx="6061" subIdx="00" bitLen="8"  halType="s32"/>
           <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
-            <complexEntry bitLen="1" halPin="din-not"  halType="bit"/>
-            <complexEntry bitLen="1" halPin="din-pot"  halType="bit"/>
-            <complexEntry bitLen="1" halPin="din-dec"  halType="bit"/>
-            <complexEntry bitLen="1"/>
-            <complexEntry bitLen="1" halPin="di-1"     halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-2"     halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-3"     halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-4"     halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-5"     halType="bit"/>
-            <complexEntry bitLen="7"/>
-            <complexEntry bitLen="1" halPin="din-pc"   halType="bit"/>
-            <complexEntry bitLen="1" halPin="din-ext1" halType="bit"/>
-            <complexEntry bitLen="1" halPin="din-ext2" halType="bit"/>
-            <complexEntry bitLen="1" halPin="din-ext3" halType="bit"/>
-            <complexEntry bitLen="12"/>
+            <complexEntry bitLen="4"/>
+            <complexEntry bitLen="1" halPin="di-1" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-2" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-3" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-4" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-5" halType="bit"/>
+            <complexEntry bitLen="23"/>
           </pdoEntry>
         </pdo>
       </syncManager>
@@ -154,14 +112,6 @@
     <slave idx="3" type="generic" vid="00004321" pid="000000E2" name="A" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="0"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="6D 00 00 00"/></sdoConfig>
-      <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="64 00"/></sdoConfig>
-      <sdoConfig idx="2400" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2401" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2402" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2403" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2404" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
-      <sdoConfig idx="2405" subIdx="00"><sdoDataRaw data="00 00 00 00"/></sdoConfig>
 
       <syncManager idx="2" dir="out">
         <pdo idx="1600">
@@ -174,22 +124,15 @@
         <pdo idx="1a00">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="cia-statusword"  halType="u32"/>
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="actual-position" halType="s32"/>
-          <!-- 60FD: bit0 NOT,1 POT,2 HOME,4..9 DI1..DI6,26/27 Probe1/2 -->
           <pdoEntry idx="60fd" subIdx="00" bitLen="32" halType="complex">
-            <complexEntry bitLen="1" halPin="neg-limit" halType="bit"/>
-            <complexEntry bitLen="1" halPin="pos-limit" halType="bit"/>
-            <complexEntry bitLen="1" halPin="home"      halType="bit"/>
-            <complexEntry bitLen="1"/>
-            <complexEntry bitLen="1" halPin="di-1"      halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-2"      halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-3"      halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-4"      halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-5"      halType="bit"/>
-            <complexEntry bitLen="1" halPin="di-6"      halType="bit"/>
-            <complexEntry bitLen="16"/>
-            <complexEntry bitLen="1" halPin="probe1"    halType="bit"/>
-            <complexEntry bitLen="1" halPin="probe2"    halType="bit"/>
             <complexEntry bitLen="4"/>
+            <complexEntry bitLen="1" halPin="di-1" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-2" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-3" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-4" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-5" halType="bit"/>
+            <complexEntry bitLen="1" halPin="di-6" halType="bit"/>
+            <complexEntry bitLen="22"/>
           </pdoEntry>
         </pdo>
       </syncManager>
