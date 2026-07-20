@@ -1,14 +1,14 @@
 # Lemontart LinuxCNC config
 
-A working **EtherCAT mill** config you can learn from and adapt — Probe Basic UI,
-A6 servos, pendant, VFD, contact toolsetter, and an optional laser tool setter.
+A working Linuxcnc/ethercat config I am currently running on my Lemontart CNC Mill. Highlights include:
+Probe Basic UI, 4x Stepperonline A6 servos, XHC-4 axis pendant, modbus-controlled H100 VFD, a contact toolsetter (TooTall18T's custom manual tool change overrides), and a non-contact laser tool setter for diameter measuremnts. 
 
-This is a **real machine config**, not a polished product. Expect to edit EtherCAT
-slave order, scales, limits, serial ports, and homing for your hardware before
-you cut metal. That is normal.
+Any deviations from stock configuration of probe basic or the components are captured in docs/DEVIATIONS.md.
 
-If you are brand new to LinuxCNC: start with **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**.
-Do not jump straight into Probe Basic.
+Please note that -- for better or for worse -- this is a **my machine config**, not a polished product. Expect to edit EtherCAT
+slave order, scales, limits, serial ports, and homing for your hardware. This repo might work better as a reference rather than a starting point for your own machine. 
+
+If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page a read @ **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**. I tried to capture a 1-pager that I wish I would have seen before I started my Linuxcnc journey.
 
 ---
 
@@ -21,8 +21,8 @@ Do not jump straight into Probe Basic.
 | Pendant | XHC WHB04B-6 with jog smoothing |
 | Spindle | H100 VFD over Modbus (`mb2hal`) |
 | Tool length | Contact toolsetter via **M600** (TooTall18T-style flow) |
-| Optional | Kexin DS-5V-M **laser** diameter / length tab |
-| Optional | Signal logging + servo tuning tabs |
+| Tool diameter | Kexin DS-5V-M **laser** diameter / length tab |
+| Metrics | Signal logging + servo tuning tabs |
 
 ---
 
@@ -76,8 +76,7 @@ The staged path (sim → EtherCAT → Probe Basic → CAM) is spelled out in
 | `docs/` | Everything you’re reading about |
 
 These files talk to each other a lot. An AI coding assistant helps when you point
-it at several of them at once — but **always verify** on air before you trust a
-change. Add one feature at a time.
+it at several of them at once. Add one feature at a time, and rigorously test before moving on to the next feature.
 
 ---
 
@@ -91,11 +90,12 @@ change. Add one feature at a time.
 | Measure tool diameter (laser) | Laser Setter tab → [LASER_TOOL_SETTER](docs/LASER_TOOL_SETTER.md) |
 | Z repeatability tests | MDI metrology macros → [metrology README](probe_basic/subroutines/metrology/README.md) |
 
-Feed override goes to **250%**. The pendant uses the same limit.
-
 ---
 
-## Tool length in one paragraph
+## Contact Tool length setter overview
+
+Manual tool changes use M600 rather than the default M6, as per TooTall18T's suggestion. 
+This means that the CAM software has to output M600 instead, that modification has been made in the post processor and is in this repo. 
 
 CAM asks for `T3 M600`. The machine retracts, parks at a **tool-load** spot so
 you can change the collet, waits for **OK**, then moves to the **contact
@@ -106,7 +106,7 @@ toolsetter). Details: [TOOLSETTER.md](docs/TOOLSETTER.md).
 
 ---
 
-## Laser tool setter in one paragraph
+## Laser tool setter overview
 
 The Kexin DS-5V-M is a U-slot beam-break sensor. The Laser Setter tab measures
 diameter by finding the tip in Z, then sweeping across the beam in X. Measure
@@ -116,9 +116,12 @@ set START OFFSET / MAX TRAVEL / Z DROP, then MEASURE DIAMETER. Optional
 **CALIBRATE BEAM** (master pin − raw) stores a beam-width offset applied to later
 readings.
 
+You could replace the contact toolsetter entirely, but the U-slot of this sensor accepts a maximum of 9mm tools, which I find too restricting. 
+So I have both types on my machine.
+
 **Full guide:** [docs/LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md)
 
-### Diameter in 30 seconds
+### Tool Diameter Measurement
 
 1. Restart LinuxCNC after HAL / tab changes.
 2. Jog Y to slot center, X in the beam (LED broken) → **CAPTURE BEAM**.
@@ -141,7 +144,7 @@ Laser (`laser-beam-broken`, Slave 2 DI5) joins `motion.probe-input` only while
 
 ---
 
-## Switching feature branches
+## DEV NOTES: Switching feature branches
 
 Probe Basic loads **every** folder under `probe_basic/user_tabs/`. If you check
 out an older branch, leftover empty folders from another feature can crash
@@ -163,7 +166,7 @@ git checkout <branch>
 
 ---
 
-## Current machine notes (this bench)
+## Current machine notes
 
 - Built-in M6 motion is **off**; macros own retract / park / probe.
 - M600 collet pause is at a fixed **tool-load** XY (default G53 **270, 100**),
@@ -181,8 +184,9 @@ history or ask in an issue if you need the full pin table restored inline.
 Deep hardware notes still live in [DEVIATIONS.md](docs/DEVIATIONS.md) and
 [GETTING_STARTED.md](docs/GETTING_STARTED.md).
 
-### Spindle at-speed (short version)
+### Spindle at-speed 
 
+I was finding that the VFD's at-speed signal was triggering early, so I added a fixed delay to guarantee the spindle was actually at speed. 
 After the VFD feedback matches commanded RPM (±50), HAL waits an extra **5 s**
 before `spindle.0.at-speed` goes true. Tunable in `custom.hal`.
 
@@ -195,8 +199,7 @@ Fault codes `64` (overcurrent) and `92` (overtemp) force a software E-stop.
 ## Safety
 
 Verify E-stop, drives, and spindle before running programs. Review breakout /
-limit comments in the INI if you are still on the bench. Air-cut first.
-Always.
+limit comments in the INI if you are still on the bench.
 
 ---
 
@@ -208,5 +211,3 @@ PRs and forks welcome. When you adapt this to another mill:
 2. Keep [DEVIATIONS.md](docs/DEVIATIONS.md) honest — that file is how the next person
    (or future you) avoids a weekend of confusion.
 3. Prefer documenting “why” next to “what.”
-
-Questions and war stories help more than silent forks. Open an issue.
