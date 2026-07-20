@@ -32,7 +32,7 @@ Stock references:
 | M600 collet pause | Often same as setter / G30 | **Separate tool-load XY** (default G53 270, 100) vs taught setter `#5181–#5183` |
 | Manual Tool Change dialog | Stock QtPyVCP; Esc cancels | **Custom dialog** with **ABORT**; Esc/close ignored — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Drive position deviation | Drive defaults | **SDO 6065/6066** ≈ 1.0 mm / 1.0° / 250 ms — [A6_TUNING](A6_TUNING.md) |
-| Laser tool setter | (none) | Own pin `laser-beam-broken` — **not** on `motion.probe-input` — [LASER_TOOL_SETTER](LASER_TOOL_SETTER.md) |
+| Laser tool setter | M62 P0 mux to `motion.probe-input` for G38 | [LASER_TOOL_SETTER](LASER_TOOL_SETTER.md) |
 | Pocket probe traverse feed | `#3017` from Probe Basic | **Local fix** — several `probe_*.ngc` had bare `[3017]` (3017 mm/min literal) |
 | PROBE SPINDLE NOSE ZERO | Runs on setter input | **Aborts if T#3014 loaded** — HAL routes touch probe only when that tool is in spindle |
 
@@ -53,7 +53,9 @@ Stock LinuxCNC blocks motion until all joints with `HOME_SEQUENCE > 0` are homed
 
 ### REF ALL sequence
 
-`HOME_SEQUENCE`: Z=`0`, X=`1`, Y=`2`, A=`3` — sequential (wait for prior joint). `HOME_SEARCH_VEL` is 2× prior; latch/final unchanged.
+`HOME_SEQUENCE`: Z=`0`, X=`1`, Y=`2`, A=`3` — sequential (wait for prior joint).
+X/Y search toward the negative end (~33 mm/min); Z search toward **+Z** home
+(~33 mm/min). Host `FERROR` stays wide (1270 / 254) for bench homing.
 
 ### `[TRAJ] AXES = 4`
 
@@ -137,7 +139,7 @@ Here: `halui.tool.number` compared to constant **99** (`probe-tool-num`):
 - Equal → touch probe `lcec.0.1.di-5`
 - Not equal → toolsetter `lcec.0.1.di-2`
 
-Laser is **not** in this mux. It uses `laser-beam-broken` only — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md).
+Laser **M62 P0** muxes `laser-beam-broken` onto `motion.probe-input` for G38 measure macros; **M63 P0** restores contact-only routing — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md).
 
 Uses `and2` + `or2`, not `mux2` (float-only). **`#3014` does not update HAL** — renumbering requires editing `setp probe-tool-num.value`.
 

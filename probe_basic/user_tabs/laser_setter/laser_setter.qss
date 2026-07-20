@@ -80,16 +80,6 @@ QGroupBox::title {
     letter-spacing: 1px;
 }
 
-/* ---------- Section sub-headers inside panels ---------- */
-
-QLabel#lblBeamOffsetsCap {
-    color: #b8bcbe;
-    font: 12pt "BebasKai";
-    letter-spacing: 1px;
-    padding-top: 6px;
-    padding-bottom: 2px;
-}
-
 /* ---------- Buttons ---------- */
 
 QPushButton {
@@ -173,12 +163,7 @@ QLabel#lblToolSetterImage {
 }
 
 QLabel#lblResLength,
-QLabel#lblResDiam,
-QLabel#lblBeamX,
-QLabel#lblBeamY,
-QLabel#lblBeamZ,
-QLabel#lblZOffset,
-QLabel#lblBeamDia {
+QLabel#lblResDiam {
     color: black;
     background-color: rgb(235, 235, 235);
     border: 1px solid rgb(160, 160, 160);
@@ -210,25 +195,17 @@ QGroupBox#grpMeasure QLabel#lblStartXCap,
 QGroupBox#grpMeasure QLabel#lblStartYCap,
 QGroupBox#grpMeasure QLabel#lblProbeRpmCap,
 QGroupBox#grpCalibration QLabel#lblMasterPinCap,
-QGroupBox#grpCalibration QLabel#lblBeamXCap,
-QGroupBox#grpCalibration QLabel#lblBeamYCap,
-QGroupBox#grpCalibration QLabel#lblBeamZCap,
-QGroupBox#grpCalibration QLabel#lblZOffsetCap,
 QGroupBox#grpCalibration QLabel#lblBeamDiaCap {
     color: rgb(238, 238, 236);
     font: 14pt "BebasKai";
     letter-spacing: 1px;
-    min-width: 88px;
+    min-width: 140px;
 }
 
 QGroupBox#grpMeasure QLabel#lblStartXUnit,
 QGroupBox#grpMeasure QLabel#lblStartYUnit,
 QGroupBox#grpMeasure QLabel#lblProbeRpmUnit,
 QGroupBox#grpCalibration QLabel#lblMasterPinUnit,
-QGroupBox#grpCalibration QLabel#lblBeamXUnit,
-QGroupBox#grpCalibration QLabel#lblBeamYUnit,
-QGroupBox#grpCalibration QLabel#lblBeamZUnit,
-QGroupBox#grpCalibration QLabel#lblZOffsetUnit,
 QGroupBox#grpCalibration QLabel#lblBeamDiaUnit {
     color: #d6dadc;
     font: 14pt "BebasKai";

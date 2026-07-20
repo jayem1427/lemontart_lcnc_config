@@ -109,20 +109,22 @@ toolsetter). Details: [TOOLSETTER.md](docs/TOOLSETTER.md).
 ## Laser tool setter in one paragraph
 
 The Kexin DS-5V-M is a U-slot beam-break sensor. The Laser Setter tab measures
-diameter by finding the tip in Z, then sweeping across the beam in X. It reads
-its own HAL pin (`laser-beam-broken`) — it does **not** piggyback on
-`motion.probe-input`, so it won’t fight the contact probe. Operator idea: capture
-START **beside** the beam, set how far to the beam and how far you’re willing to
-travel, then press MEASURE DIAMETER.
+diameter by finding the tip in Z, then sweeping across the beam in X. Measure
+macros use **M62 P0** only around each **G38** (never during G0/G1); **M63 P0**
+restores the contact probe mux. Capture BEAM XY with the tool blocking the light,
+set START OFFSET / MAX TRAVEL / Z DROP, then MEASURE DIAMETER. Optional
+**CALIBRATE BEAM** (master pin − raw) stores a beam-width offset applied to later
+readings.
 
 **Full guide:** [docs/LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md)
 
 ### Diameter in 30 seconds
 
 1. Restart LinuxCNC after HAL / tab changes.
-2. Jog Y to slot center, X clear of the beam → **CAPTURE START**.
-3. Set **BEAM OFFSET**, **MAX TRAVEL** (stop before the far wall), **Z DROP**.
+2. Jog Y to slot center, X in the beam (LED broken) → **CAPTURE BEAM**.
+3. Set **START OFFSET** (default 15), **MAX TRAVEL** (default 30), **Z DROP**.
 4. **MEASURE DIAMETER**.
+5. Optional: enter **MASTER PIN** → measure again → **CALIBRATE BEAM**.
 
 ---
 
@@ -133,7 +135,9 @@ travel, then press MEASURE DIAMETER.
 | **T99** (touch probe) | Touch probe — Slave 1 DI5 | Toolsetter DI2 |
 | **Any other tool** | Toolsetter — Slave 1 DI2 | Touch probe DI5 |
 
-Laser lives on Slave 2 DI5 as `laser-beam-broken` and never enters this mux.
+Laser (`laser-beam-broken`, Slave 2 DI5) joins `motion.probe-input` only while
+**M62 P0** is active around each laser **G38**; **M63 P0** restores the table above
+(also on abort).
 
 ---
 

@@ -5,4 +5,4 @@ T12  P4   D+9.525000 Z+40.250484 ; 3/8" 3FL Endmill
 T99  P5   D+2.000000 ; touch probe
 T14  P0   Z+29.186718 ; 2.5mm drill bit
 T17  P0   Z+22.809230 ; 3mm thread mill
-T18  P0   Z+26.758434 ; 6mm pcd endmill
+T18  P0   Z+25.423137 ; 6mm pcd endmill

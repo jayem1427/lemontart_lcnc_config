@@ -58,6 +58,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from a6_servo_tune import (
     AXES,
+    FOLLOWING_ERROR_TUNING,
     PARAM_BY_KEY,
     AxisTuneParams,
     apply_axis_params,
@@ -67,7 +68,9 @@ from a6_servo_tune import (
     hal_getp_s32,
     machine_is_on,
     read_axis_params,
+    relax_following_error_for_tuning,
     repo_root,
+    restore_following_error_run,
     save_preset,
 )
 from resonance_analysis import (
@@ -864,6 +867,7 @@ class OneClickTuner:
         self._notch_attempted = False
         self._notch_applied = False
         self._signed_stroke: float = abs(config.stimulus.stroke)
+        self._ferr_relaxed = False
 
     # -- public API ----------------------------------------------------------
 
@@ -889,6 +893,20 @@ class OneClickTuner:
                 k: self._baseline[k] for k in TOUCHABLE_KEYS if k in self._baseline
             }
             self._save_backup_preset()
+
+            if not self.cfg.dry_run:
+                prior_ferr = relax_following_error_for_tuning(axis)
+                self._ferr_relaxed = True
+                self._abort_ferr = FOLLOWING_ERROR_TUNING * self.cfg.ferr_abort_ratio
+                self.journal.event(
+                    "baseline",
+                    "ferr-window",
+                    f"6065 raised to {FOLLOWING_ERROR_TUNING:g} {axis_unit(axis)} "
+                    f"for tuning (was {prior_ferr:g}); production window is 0.5",
+                    prior=prior_ferr,
+                    tuning=FOLLOWING_ERROR_TUNING,
+                    abort_ferr=self._abort_ferr,
+                )
 
             self.io.begin_session()
             session_open = True
@@ -996,6 +1014,17 @@ class OneClickTuner:
             self._finalize(result)
             return result
         finally:
+            if getattr(self, "_ferr_relaxed", False):
+                try:
+                    restore_following_error_run(self.cfg.axis)
+                    self.journal.event(
+                        "finalize",
+                        "ferr-window",
+                        "6065 restored to 0.5 production window",
+                    )
+                except Exception:
+                    LOG.exception("restore 6065 production window failed")
+                self._ferr_relaxed = False
             if session_open:
                 try:
                     self.io.end_session()

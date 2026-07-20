@@ -7,6 +7,7 @@ o<on_abort> sub
 
 M5 (Spindle Stop)
 M9 (Coolant Off)
+M63 P0 (Restore contact probe mux — laser M62 must not block homing/jog)
 M50 P1
 G90 (Absolute Positioning)
 G40 (Cancel Cutter Radius Compensation)

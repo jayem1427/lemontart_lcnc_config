@@ -11,7 +11,7 @@ import os
 import sys
 import threading
 import time
-from typing import Deque, Dict, List, Optional, Tuple
+from typing import Deque, Dict, List, Optional, Sequence, Tuple
 
 from qtpy import uic
 from qtpy.QtCore import Qt, QTimer, Signal
@@ -99,8 +99,10 @@ from a6_graphical_inertia import (  # noqa: E402
     GraphicalInertiaConfig,
     GraphicalInertiaTuner,
     HardwareGraphicalInertiaIO,
+    InertiaEstimate,
     default_settings_for_axis,
     load_all_settings,
+    load_trace_csv,
     save_all_settings,
 )
 
@@ -128,9 +130,14 @@ AXIS_PLOT_COLORS = {
     "A": "#ad7fa8",  # purple
 }
 
-# Inertia live plot (T=Jα inputs): torque left, velocity right.
+# Inertia live plot (Sigma II Graphical Analysis): torque left, velocity right.
 INERTIA_TQ_COLOR = "#fcaf3e"  # orange — torque %
 INERTIA_VEL_COLOR = "#729fcf"  # blue — velocity
+INERTIA_TP_COLOR = "#ef2929"  # red — Tp horizontal
+INERTIA_TF_COLOR = "#8ae234"  # green — Tf horizontal
+INERTIA_SIM_COLOR = "#ad7fa8"  # violet — physics-fit simulated velocity
+INERTIA_ACCEL_COLOR = (252, 175, 62, 55)  # orange wash — α window
+INERTIA_CRUISE_COLOR = (114, 159, 207, 40)  # blue wash — Tf cruise
 INERTIA_WINDOW_S = 12.0
 INERTIA_SAMPLE_MS = float(FERR_SAMPLE_MS)
 
@@ -575,11 +582,12 @@ class FerrPlotWidget(QWidget):
 
 
 class InertiaLivePlotWidget(QWidget):
-    """Live torque (%) + velocity (unit/min) strip chart for graphical inertia ID.
+    """Torque (%) + velocity (unit/min) plot for inertia analysis.
 
     Left axis = torque % rated (6077). Right axis = velocity unit/min (606C).
-    Shows the full buffer window (not the zoomed FERR strip) so the trapezoid
-    and torque plateau are visible during BEGIN.
+    During BEGIN: live strip. After finish: full 1 kHz journal trace with the
+    physics-fit simulated velocity (dashed) plus Tp / Tf horizontals and
+    α / cruise window regions from the Yaskawa cross-check.
     """
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
@@ -594,12 +602,20 @@ class InertiaLivePlotWidget(QWidget):
         )
         self._tq: Deque[float] = collections.deque(maxlen=self._buf_len)
         self._vel: Deque[float] = collections.deque(maxlen=self._buf_len)
+        self._xs_live: Deque[float] = collections.deque(maxlen=self._buf_len)
         self._vel_unit = "mm/min"
         self._title = ""
         self._vel_vb = None
         self._tq_curve = None
         self._vel_curve = None
+        self._sim_curve = None
         self._zero_line = None
+        self._tp_line = None
+        self._tf_line = None
+        self._accel_region = None
+        self._cruise_region = None
+        self._legend = None
+        self._campaign_mode = False  # True after load_trace (fixed axes)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -639,16 +655,81 @@ class InertiaLivePlotWidget(QWidget):
                 y=0, pen=pg.mkPen(color=PLOT_ZERO, width=1, style=Qt.DashLine)
             )
             self._tq_curve = self.plot.plot(
-                pen=pg.mkPen(color=INERTIA_TQ_COLOR, width=2.5), name="TQ%"
+                pen=pg.mkPen(color=INERTIA_TQ_COLOR, width=2.5), name="TQ %"
             )
             self._vel_curve = pg.PlotCurveItem(
-                pen=pg.mkPen(color=INERTIA_VEL_COLOR, width=2.0)
+                pen=pg.mkPen(color=INERTIA_VEL_COLOR, width=2.0), name="VEL"
             )
             self._vel_vb.addItem(self._vel_curve)
+            # Physics-fit simulated velocity (model J·ω̇ = T − friction).
+            self._sim_curve = pg.PlotCurveItem(
+                pen=pg.mkPen(
+                    color=INERTIA_SIM_COLOR, width=2.0, style=Qt.DashLine
+                ),
+                name="VEL fit",
+            )
+            self._vel_vb.addItem(self._sim_curve)
+            # Proxy so VEL appears in the main legend (secondary ViewBox).
             try:
-                self.plot.addLegend(offset=(10, 10))
+                self._vel_legend_proxy = self.plot.plot(
+                    pen=pg.mkPen(color=INERTIA_VEL_COLOR, width=2.0), name="VEL"
+                )
+                self._vel_legend_proxy.setData([], [])
+                self._sim_legend_proxy = self.plot.plot(
+                    pen=pg.mkPen(
+                        color=INERTIA_SIM_COLOR, width=2.0, style=Qt.DashLine
+                    ),
+                    name="VEL fit",
+                )
+                self._sim_legend_proxy.setData([], [])
             except Exception:
-                pass
+                self._vel_legend_proxy = None
+                self._sim_legend_proxy = None
+            self._tp_line = pg.InfiniteLine(
+                angle=0,
+                pen=pg.mkPen(color=INERTIA_TP_COLOR, width=2, style=Qt.DashLine),
+                label="Tp",
+                labelOpts={
+                    "color": INERTIA_TP_COLOR,
+                    "position": 0.92,
+                    "fill": (30, 33, 34, 180),
+                },
+            )
+            self._tf_line = pg.InfiniteLine(
+                angle=0,
+                pen=pg.mkPen(color=INERTIA_TF_COLOR, width=2, style=Qt.DashLine),
+                label="Tf",
+                labelOpts={
+                    "color": INERTIA_TF_COLOR,
+                    "position": 0.08,
+                    "fill": (30, 33, 34, 180),
+                },
+            )
+            self._accel_region = pg.LinearRegionItem(
+                values=(0, 0),
+                brush=pg.mkBrush(*INERTIA_ACCEL_COLOR),
+                pen=pg.mkPen(color=INERTIA_TQ_COLOR, width=1),
+                movable=False,
+            )
+            self._cruise_region = pg.LinearRegionItem(
+                values=(0, 0),
+                brush=pg.mkBrush(*INERTIA_CRUISE_COLOR),
+                pen=pg.mkPen(color=INERTIA_VEL_COLOR, width=1),
+                movable=False,
+            )
+            for item in (
+                self._accel_region,
+                self._cruise_region,
+                self._tp_line,
+                self._tf_line,
+            ):
+                item.setVisible(False)
+                item.setZValue(-10 if item in (self._accel_region, self._cruise_region) else 10)
+                self.plot.addItem(item)
+            try:
+                self._legend = self.plot.addLegend(offset=(10, 10))
+            except Exception:
+                self._legend = None
 
             def _sync_vel_vb():
                 try:
@@ -660,7 +741,7 @@ class InertiaLivePlotWidget(QWidget):
             pi.vb.sigResized.connect(_sync_vel_vb)
             try:
                 self.plot.enableAutoRange(x=False, y=False)
-                self.plot.setMouseEnabled(x=False, y=True)
+                self.plot.setMouseEnabled(x=True, y=True)
                 self._vel_vb.setMouseEnabled(x=False, y=True)
             except Exception:
                 pass
@@ -695,9 +776,25 @@ class InertiaLivePlotWidget(QWidget):
             except Exception:
                 pass
 
+    def clear_overlays(self) -> None:
+        for item in (
+            self._tp_line,
+            self._tf_line,
+            self._accel_region,
+            self._cruise_region,
+        ):
+            if item is not None:
+                try:
+                    item.setVisible(False)
+                except Exception:
+                    pass
+
     def clear(self) -> None:
+        self._campaign_mode = False
         self._tq.clear()
         self._vel.clear()
+        self._xs_live.clear()
+        self.clear_overlays()
         if self._tq_curve is not None:
             try:
                 self._tq_curve.setData([], [])
@@ -706,6 +803,11 @@ class InertiaLivePlotWidget(QWidget):
         if self._vel_curve is not None:
             try:
                 self._vel_curve.setData([], [])
+            except Exception:
+                pass
+        if self._sim_curve is not None:
+            try:
+                self._sim_curve.setData([], [])
             except Exception:
                 pass
         self.reset_y_scale()
@@ -723,11 +825,16 @@ class InertiaLivePlotWidget(QWidget):
             pass
 
     def push(self, torque_pct: float, vel_unit_per_min: float) -> None:
+        if self._campaign_mode:
+            return
         if torque_pct != torque_pct or vel_unit_per_min != vel_unit_per_min:
             return
         # Sanity gates — not FERR limits; allow full motion envelopes.
         if abs(torque_pct) > 500.0 or abs(vel_unit_per_min) > 200_000.0:
             return
+        dt = self._sample_ms / 1000.0
+        t_next = (self._xs_live[-1] + dt) if self._xs_live else 0.0
+        self._xs_live.append(t_next)
         self._tq.append(float(torque_pct))
         self._vel.append(float(vel_unit_per_min))
         self._refresh()
@@ -742,7 +849,7 @@ class InertiaLivePlotWidget(QWidget):
         n = min(len(tq), len(vel))
         if n < 1:
             return
-        xs = self._xs(n)
+        xs = list(self._xs_live)[:n] if len(self._xs_live) >= n else self._xs(n)
         if self._tq_curve is not None:
             self._tq_curve.setData(xs, tq[:n])
         if self._vel_curve is not None:
@@ -754,11 +861,137 @@ class InertiaLivePlotWidget(QWidget):
                 v_peak = max(abs(min(vel[:n])), abs(max(vel[:n])), 50.0)
                 self._vel_vb.setYRange(-(v_peak * 1.15), v_peak * 1.15, padding=0)
             # Show the whole capture (or trailing window_s).
-            x_end = max((n - 1) * (self._sample_ms / 1000.0), self._window_s * 0.25)
+            x_end = max(xs[-1] if xs else 0.0, self._window_s * 0.25)
             x_start = max(0.0, x_end - self._window_s)
             self.plot.setXRange(x_start, x_end, padding=0)
         elif self._painter_mode:
             self.update()
+
+    def load_trace(
+        self,
+        times: Sequence[float],
+        torque_pct: Sequence[float],
+        vel_unit_per_min: Sequence[float],
+        estimate: Optional[InertiaEstimate] = None,
+        *,
+        title: Optional[str] = None,
+    ) -> None:
+        """Replace the strip with a full campaign capture + analysis overlays."""
+        n = min(len(times), len(torque_pct), len(vel_unit_per_min))
+        if n < 2:
+            return
+        xs = [float(times[i]) for i in range(n)]
+        tq = [float(torque_pct[i]) for i in range(n)]
+        vel = [float(vel_unit_per_min[i]) for i in range(n)]
+        self._campaign_mode = True
+        self._tq.clear()
+        self._vel.clear()
+        self._xs_live.clear()
+        # Keep peaks readable via readout helpers.
+        for v in tq:
+            self._tq.append(v)
+        for v in vel:
+            self._vel.append(v)
+
+        if self._tq_curve is not None:
+            self._tq_curve.setData(xs, tq)
+        if self._vel_curve is not None:
+            self._vel_curve.setData(xs, vel)
+        if self._sim_curve is not None:
+            sim_t = getattr(estimate, "sim_t_s", None) if estimate else None
+            sim_v = (
+                getattr(estimate, "sim_vel_unit_per_min", None)
+                if estimate
+                else None
+            )
+            try:
+                if sim_t and sim_v:
+                    m = min(len(sim_t), len(sim_v))
+                    self._sim_curve.setData(sim_t[:m], sim_v[:m])
+                else:
+                    self._sim_curve.setData([], [])
+            except Exception:
+                pass
+
+        if self.plot is not None:
+            t_peak = max(abs(min(tq)), abs(max(tq)), 5.0)
+            # Leave headroom for Tp/Tf labels.
+            if estimate is not None:
+                for lvl in (estimate.tp_plot_pct, estimate.tf_plot_pct, estimate.t_peak_pct):
+                    if lvl is not None and lvl == lvl:
+                        t_peak = max(t_peak, abs(float(lvl)))
+            self.plot.setYRange(-(t_peak * 1.25), t_peak * 1.25, padding=0)
+            if self._vel_vb is not None:
+                v_peak = max(abs(min(vel)), abs(max(vel)), 50.0)
+                self._vel_vb.setYRange(-(v_peak * 1.15), v_peak * 1.15, padding=0)
+            pad = max(0.02, 0.02 * (xs[-1] - xs[0]))
+            self.plot.setXRange(xs[0] - pad, xs[-1] + pad, padding=0)
+            try:
+                self.plot.setMouseEnabled(x=True, y=True)
+            except Exception:
+                pass
+
+        self._apply_estimate_overlays(estimate)
+        if title is not None:
+            self.set_title(title)
+        elif estimate is not None:
+            err = getattr(estimate, "fit_err_frac", None)
+            fc = getattr(estimate, "coulomb_nm", None)
+            bits = [
+                f"{self._title.split('·')[0].strip() or 'inertia'}",
+                f"ratio={estimate.ratio_pct:.0f}% ({estimate.quality})",
+            ]
+            if err is not None:
+                bits.append(f"fit err {err * 100:.0f}%")
+            if fc is not None:
+                bits.append(f"Fc={fc:.2f} Nm")
+            if estimate.alpha_rad_s2:
+                ta = float(estimate.t_peak_pct) - float(estimate.t_friction_pct)
+                bits.append(
+                    f"Tp={estimate.t_peak_pct:.1f}% "
+                    f"Tf={estimate.t_friction_pct:.1f}% Ta={ta:.1f}%"
+                )
+            self.set_title(" · ".join(bits))
+        self.update()
+
+    def _apply_estimate_overlays(
+        self, estimate: Optional[InertiaEstimate]
+    ) -> None:
+        self.clear_overlays()
+        if estimate is None or self.plot is None:
+            return
+        tp = estimate.tp_plot_pct
+        tf = estimate.tf_plot_pct
+        if tp is None:
+            tp = estimate.t_peak_pct
+        if tf is None:
+            tf = estimate.t_friction_pct
+        if self._tp_line is not None and tp is not None and tp == tp:
+            self._tp_line.setValue(float(tp))
+            self._tp_line.setVisible(True)
+        if self._tf_line is not None and tf is not None and tf == tf:
+            self._tf_line.setValue(float(tf))
+            self._tf_line.setVisible(True)
+        if (
+            self._accel_region is not None
+            and estimate.accel_t0_s is not None
+            and estimate.accel_t1_s is not None
+            and estimate.accel_t1_s > estimate.accel_t0_s
+        ):
+            self._accel_region.setRegion(
+                (float(estimate.accel_t0_s), float(estimate.accel_t1_s))
+            )
+            self._accel_region.setVisible(True)
+        if (
+            self._cruise_region is not None
+            and estimate.cruise_t0_s is not None
+            and estimate.cruise_t1_s is not None
+            and estimate.cruise_t1_s > estimate.cruise_t0_s
+        ):
+            self._cruise_region.setRegion(
+                (float(estimate.cruise_t0_s), float(estimate.cruise_t1_s))
+            )
+            self._cruise_region.setVisible(True)
 
     def export_png(self, path: str, title: Optional[str] = None) -> None:
         burn = self._title if title is None else str(title)
@@ -1354,12 +1587,11 @@ class UserTab(QWidget):
         layout.setSpacing(6)
 
         hint = QLabel(
-            "Yaskawa Sigma II Graphical Analysis (Tp−Tf → C00.06). "
-            "Enter motor J_M + rated torque, then BEGIN. Auto-lowers "
-            "MAX_ACCELERATION (~120 ms ramp); if accel torque is spiky, "
-            "auto-flatten runs a Pn402-style second pass. Writes C00.06 "
-            "only when quality is good. Prefer cycles=1 and F5000–F10000 "
-            "on linear axes.",
+            "Physics-fit inertia ID (J·ω̇ = T − friction, fitted over the "
+            "whole move → C00.06). Immune to A6 606C/6077 sample-and-hold. "
+            "Enter motor J_M + rated torque, then BEGIN. Writes C00.06 only "
+            "when quality is good. Linear axes: stroke ~40, F8000–F10000, "
+            "torque limit 0, cycles=1. Yaskawa Tp−Tf shown as cross-check.",
             page,
         )
         hint.setObjectName("lblParamHint")
@@ -1431,12 +1663,13 @@ class UserTab(QWidget):
             "feed",
             "Feed (G1 F)",
             1,
-            10.0,
-            60000.0,
+            5000.0,
+            10000.0,
             100.0,
             "",
-            "Target feed for the trapezoid move (unit/min). "
-            "Linear axes: F5000–F10000 for trusted T_A.",
+            "Target feed for the trapezoid (unit/min). "
+            "Linear axes REQUIRE F5000–F10000 — lower feeds make α tiny "
+            "and the ratio explode. (A-axis min is adjusted when selected.)",
         )
         add_spin(
             "cycles",
@@ -1456,9 +1689,9 @@ class UserTab(QWidget):
             300.0,
             5.0,
             " %",
-            "0 = auto-flatten may apply a Pn402-style clamp on a 2nd pass if "
-            "accel torque is spiky (Sigma II). Set explicitly to force that "
-            "limit as Tp (workbook: torque limit IS peak torque).",
+            "Leave 0 — the physics fit needs no flat torque plateau, and "
+            "clamps caused aborted/short ID moves in testing. (Kept for "
+            "Pn402-style experiments only.)",
         )
         layout.addLayout(form)
 
@@ -1561,6 +1794,14 @@ class UserTab(QWidget):
     def _load_inertia_spins_for_axis(self, axis: str) -> None:
         settings = self._inertia_settings.get(axis) or default_settings_for_axis(axis)
         self._inertia_settings[axis] = settings
+        feed_spin = self._inertia_spins.get("feed")
+        if feed_spin is not None:
+            # Linear axes: hard floor F5000 (low feed → bogus mega-ratios).
+            # A (rotary): allow slower deg/min feeds.
+            if axis == "A":
+                feed_spin.setRange(100.0, 60000.0)
+            else:
+                feed_spin.setRange(5000.0, 10000.0)
         mapping = {
             "motor_inertia_kgm2": settings.motor_inertia_kgm2,
             "rated_torque_nm": settings.rated_torque_nm,
@@ -2168,8 +2409,9 @@ class UserTab(QWidget):
             self.log_button.setObjectName("btnLog")
             self.log_button.setEnabled(True)
             self.log_button.setToolTip(
-                "Inertia torque/velocity plot arms automatically on BEGIN "
-                "and freezes when the campaign finishes."
+                "Inertia plot arms on BEGIN (live TQ% + VEL). When the "
+                "campaign finishes, the 1 kHz journal capture is shown with "
+                "Tp/Tf lines and α / cruise windows."
             )
         elif active:
             self.log_button.setText("STOP PLOT")
@@ -2573,9 +2815,8 @@ class UserTab(QWidget):
             f"Park mid-travel with clearance both ways.\n\n"
             f"Motor J_M = {settings.motor_inertia_kgm2:.6g} kg·m²\n"
             f"Rated torque = {settings.rated_torque_nm:.4g} N·m\n\n"
-            f"We sample torque (6077) + velocity (606C), compute "
-            f"Yaskawa Tp−Tf → C00.06, and WRITE it to the drive (RAM).\n"
-            f"Spiky accel torque may trigger an auto-flatten second pass.\n"
+            f"We sample torque (6077) + velocity (606C), fit "
+            f"J·ω̇ = T − friction → C00.06, and WRITE it to the drive (RAM).\n"
             f"Then switch back to GAINS and run ONE-CLICK.\n\n"
             f"Journal: logs/tuning/graphical_inertia/\n"
             f"Keep a hand near ESTOP.",
@@ -2658,6 +2899,9 @@ class UserTab(QWidget):
             QMessageBox.warning(self, "Inertia auto-tune", str(result))
             return
 
+        # Prefer the 1 kHz journal capture + analysis overlays over the live strip.
+        self._show_gi_analysis_plot(result)
+
         status = result.status
         est = result.estimate
         lines = [result.summary()]
@@ -2693,6 +2937,61 @@ class UserTab(QWidget):
                 else ""
             ),
         )
+
+    def _show_gi_analysis_plot(self, result) -> None:
+        """Load journal torque+velocity and draw Tp/Tf/α-window overlays."""
+        if not hasattr(self, "inertia_plot"):
+            return
+        times = getattr(result, "trace_t_s", None)
+        tq = getattr(result, "trace_torque_pct", None)
+        vel = getattr(result, "trace_vel_unit_per_min", None)
+        if not times or not tq or not vel:
+            journal = getattr(result, "journal_dir", None)
+            if journal:
+                csv_path = os.path.join(journal, "trace.csv")
+                if os.path.isfile(csv_path):
+                    try:
+                        times, tq, vel, _hz = load_trace_csv(csv_path)
+                    except Exception as exc:
+                        LOG.warning("inertia trace load failed: %s", exc)
+                        times = tq = vel = None
+        if not times or not tq or not vel:
+            return
+        axis = getattr(result, "axis", self._axis)
+        unit = axis_unit(axis)
+        self.inertia_plot.set_vel_unit(f"{unit}/min")
+        self.inertia_plot.load_trace(
+            times,
+            tq,
+            vel,
+            getattr(result, "estimate", None),
+            title=f"{axis} graphical analysis · TQ% + vel",
+        )
+        self.plot_stack.setCurrentWidget(self.inertia_plot)
+        # Refresh peak readout from the dense capture.
+        peak_tq = max((abs(v) for v in tq), default=0.0)
+        peak_vel = max((abs(v) for v in vel), default=0.0)
+        self.ferr_peak_label.setText(
+            f"PEAK: TQ {peak_tq:.1f}% · VEL {peak_vel:.0f} {unit}/min"
+        )
+        est = getattr(result, "estimate", None)
+        if est is not None:
+            err = getattr(est, "fit_err_frac", None)
+            fc = getattr(est, "coulomb_nm", None)
+            bits = [f"ratio={est.ratio_pct:.0f}% ({est.quality})"]
+            if err is not None:
+                bits.append(f"vel-fit err {err * 100:.0f}%")
+            if fc is not None:
+                bits.append(f"Fc={fc:.3f} Nm")
+            if est.alpha_rad_s2:
+                bits.append(
+                    f"Tp={est.t_peak_pct:.1f}% Tf={est.t_friction_pct:.1f}%"
+                )
+            self.ferr_scale_label.setText("  ".join(bits))
+        else:
+            self.ferr_scale_label.setText(
+                f"journal capture · physics-fit inputs ({axis})"
+            )
 
     def _set_gi_running(self, running: bool) -> None:
         widgets = [

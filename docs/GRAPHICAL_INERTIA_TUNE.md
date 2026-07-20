@@ -1,10 +1,8 @@
-# Graphical inertia auto-tune (Yaskawa Sigma II)
+# Graphical inertia auto-tune (physics fit + Yaskawa cross-check)
 
-**Inertia by Graphical Analysis** for this mill, matching the Yaskawa
-*Sigma II Parameter Calculator* worksheet (`Sigma II Parameter Calculator
-Rev 2.42.xls` in-repo). Servo Tuning **INERTIA** moves the edit axis, samples
-drive torque + velocity, solves for load/motor inertia ratio, and writes
-**C00.06** (A6 equivalent of Sigma II **Pn103**).
+Inertia identification for this mill. Servo Tuning **INERTIA** moves the edit
+axis, samples drive torque + velocity, solves for load/motor inertia ratio,
+and writes **C00.06** (A6 equivalent of Sigma II **Pn103**).
 
 Kept **separate** from one-click gain tuning and from the drive-internal
 **F30.10** path (`docs/INERTIA_TUNE.md` on branch
@@ -16,14 +14,48 @@ Kept **separate** from one-click gain tuning and from the drive-internal
 | Where | What |
 |-------|------|
 | Servo Tuning → panel **INERTIA** | Settings + BEGIN / CANCEL |
-| `probe_basic/python/a6_graphical_inertia.py` | Math + campaign (v0.5) |
+| `probe_basic/python/a6_graphical_inertia.py` | Math + campaign (v0.6.1) |
 | `config/tuning/inertia_settings.json` | Saved per-axis knobs (auto-written) |
 | `logs/tuning/graphical_inertia/` | Journals + `trace.csv` |
 | `test_a6_graphical_inertia.py` | Unit tests (no hardware) |
-| `Sigma II Parameter Calculator Rev 2.42.xls` | Source worksheet / Techniques |
+| `Sigma II Parameter Calculator Rev 2.42.xls` | Cross-check worksheet |
 
 **Related:** `SERVO_TUNING.md` (Phase 1), `ONE_CLICK_TUNING.md` (gains only),
 `A6_TUNING.md` (SDO map).
+
+---
+
+## Why v0.6 replaced the two-point rule
+
+The A6-EC PDOs **sample-and-hold**: 606C velocity holds for 17–36 ms and 6077
+torque for up to ~25 ms at our 1 kHz journal rate. Any method that computes
+\(\alpha = \Delta V/\Delta t\) from two cursor points — including the classic
+Sigma II worksheet — divides by a ΔV that may sit entirely inside one hold.
+On 37 real traces from 2026-07-14/15 the two-point answers swung from −100%
+to +104 000% depending on windowing. **This is a hardware artifact, not an
+operator error.**
+
+The v0.6 estimator never differentiates the velocity. It fits the rigid-body
+model
+
+\[
+J\dot\omega = T - F_c\,\mathrm{sgn}(\omega) - b\,\omega
+\]
+
+by **integrating the measured torque** through the model and choosing
+\((J, F_c, b)\) so the simulated velocity reproduces the measured profile
+(decimated to 250 Hz, Nelder–Mead on the RMS velocity error). Integration is
+immune to the stair-stepping. Then:
+
+\[
+J_L = J_{\mathrm{total}} - J_M,\qquad
+\mathrm{ratio\%} = 100\cdot\frac{J_L}{J_M}\;\rightarrow\;\text{C00.06}
+\]
+
+Replayed over every good recipe trace on file, the fit clusters X at
+**~100% (IQR 85–120%)** with run-to-run agreement of ±15% — consistent with
+the manual feel of ~120%. The two-point Sigma II analysis still runs as a
+**cross-check** and draws the Tp/Tf/α-window overlays when it succeeds.
 
 ---
 
@@ -33,73 +65,62 @@ Kept **separate** from one-click gain tuning and from the drive-internal
    (400 W XYZ: \(J_M=5.9\times10^{-5}\,\mathrm{kg\cdot m^2}\), \(1.27\,\mathrm{N\cdot m}\)).
 2. Servo Tuning → edit axis → **INERTIA**.
    Live plot shows **torque % + velocity**. Prefer **cycles = 1**.
-3. Set feed to **F5000–F10000** on linear axes (default X = F8000).
+3. Linear axes: **stroke ~40**, feed **F8000–F10000**, **torque limit 0**.
 4. Home, park **mid-travel**, machine ON.
 5. **BEGIN INERTIA AUTO-TUNE** → confirm.
-   - Campaign lowers `ini.*.max_acceleration` so 0→feed takes ~120 ms.
-   - If accel torque is spiky and **Torque limit = 0**, **auto-flatten**
-     runs a second pass with a CiA torque clamp (Sigma II Pn402 step).
-   - Fixed **Torque limit > 0** skips the probe and uses that clamp directly
-     (workbook: “the torque limit IS the peak torque”).
+   - Campaign lowers `ini.*.max_acceleration` so 0→feed takes ~100 ms
+     (physics fit prefers a softer ramp than the old two-point rule).
+   - The physics fit runs on the whole capture; torque-limit clamps are
+     unnecessary (they caused aborts/short strokes in testing — leave 0).
 6. If quality is **good**, C00.06 is written (RAM). Marginal/bad estimates are
    shown but **not** written.
 7. Switch to **GAINS** → **ONE-CLICK**.
 
 Factory C00.06 default is **100%** — that is not a measured load ratio.
-Manual feel on this X axis settled near **~120%**.
+Manual feel on this X axis settled near **~120%**; the physics fit lands
+**~85–120%** across good runs.
 
 ---
 
-## Method (v0.5 — Sigma II worksheet)
+## Quality gates (write only if good)
 
-Trapezoidal G1 under CSP. Sample:
+| Gate | Threshold | Why |
+|------|-----------|-----|
+| Velocity fit error (cruise-weighted) | ≤ 18% of peak → good; ≤ 27% still good if J-sensitivity ≥ 12% and ratio in 80–200%; ≤ 28% marginal; > 40% reject | Hard ramps leave PDO stair noise; don’t throw away a well-identified J |
+| J-sensitivity | ≥ 8% (good), ≥ 4% (marginal), else reject | Perturbing J ±40% must worsen the fit — otherwise friction dominates and J is unidentifiable |
+| Peak speed (linear) | ≥ 500 rpm good, ≥ 400 rpm to analyze at all | Slow moves (F2000) are friction-dominated → nonsense ratios |
+| Ratio band | 30–500% | Sanity for a C00.06 write |
 
-- torque = CiA **6077** (% rated) — closest PDO to SigmaWin “torque”
-- velocity = CiA **606C** → unit/min → motor RPM (10 mm/rev XYZ / 360°/rev A)
-
-Workbook math (verified against BIFF formulas on the Inertia sheet):
-
-\[
-T_a = T_p - T_f,\quad
-\alpha = \frac{\Delta V_{\mathrm{rpm}}\cdot 2\pi}{60\cdot(\Delta t_{\mathrm{ms}}/1000)},\quad
-J_L = \frac{T_a}{\alpha} - J_M,\quad
-\mathrm{ratio\%} = 100\cdot\frac{J_L}{J_M}
-\]
-
-| Symbol | How we measure it |
-|--------|-------------------|
-| \(T_p\) | Mean torque on the **flat** accel plateau (or the torque limit if clamped) |
-| \(T_f\) | **Cruise** mean torque (trapezoid). If no cruise: workbook triangle rule \(T_f=(T_{acc}+T_{dec})/2\) (signed) |
-| \(\Delta V,\Delta t\) | Only inside the **constant-torque** accel window (Sigma II vertical cursors) |
-
-**Two-pass flatten (Techniques / Example):** probe unconstrained → if accel
-torque CV is high, re-run with limit ≈ 90% of probe \(T_p\) (above \(T_f\)).
-
-**Quality gates (write only if good):**
-
-- Constant-torque accel window ≥ ~80 ms (A6 606C needs longer than the
-  Sigma II demo’s 3.34 ms)
-- Inertial \(T_a\) ≥ ~4% rated
-- Leg spread ≤ ~35% relative
-- Ratio inside ~30–500%
+Every one of tonight's known-bad traces (F2000 runs, aborted clamped moves,
+soft-ramp buried-Jα runs) is rejected or downgraded by these gates; every
+known-good recipe run passes.
 
 ---
 
-## What still differs from SigmaWin (honest gaps)
+## The analysis plot
 
-| Sigma II workbook | This mill |
-|-------------------|-----------|
-| Torque **reference** in SigmaWin TRACE | CiA **6077** torque actual (only PDO we have) |
-| Manual horizontal/vertical cursors | Auto plateau / cruise windows |
-| Pn402 / Pn403 | CiA 6072 / 60E0 / 60E1 (when writable) |
-| Speed or position amp with soft-start | LinuxCNC **CSP** G1 trapezoid |
-| Tuning sheet → Pn100/101/102 from rigidity | **Not** done here — use one-click / hand tune after C00.06 |
+After BEGIN finishes, the plot swaps to the **1 kHz journal capture**:
 
-**Back pocket (not implemented):** Sigma II Techniques also offer two
-alternate \(T_f\) measurements if cruise-from-trace is untrustworthy —
-(1) cumulative load while jogging at ~½ application speed, (2) torque-limit
-walk (won’t-move vs just-reaches-top-speed, then average). Worth revisiting
-if graphical cruise \(T_f\) proves noisy on hardware.
+- **TQ%** (orange, left axis) and **VEL** (blue, right axis)
+- **VEL fit** (violet dashed) — the fitted model's simulated velocity.
+  *This is the honesty check: if the dashed line hugs the blue one, the ratio
+  in the title is trustworthy.*
+- Dashed **Tp** / **Tf** horizontals + orange **α window** / blue **cruise**
+  bands when the Yaskawa cross-check succeeds
+- Title: ratio, quality, fit error, fitted Coulomb friction
+
+---
+
+## What the fit reports
+
+| Output | Meaning |
+|--------|---------|
+| ratio% | \(100\,(J_{\mathrm{total}}-J_M)/J_M\) → C00.06 |
+| \(F_c\) | Coulomb (sliding) friction, N·m — X measured ~0.05–0.08 N·m (4–6% rated) |
+| \(b\) | Viscous friction, N·m·s/rad |
+| fit err | RMS(sim vel − meas vel)/peak vel |
+| J-sensitivity | How much the fit degrades with J off ±40% (identifiability) |
+| cross-check | Two-point Sigma II ratio (display only, never written) |
 
 ---
 
@@ -107,11 +128,10 @@ if graphical cruise \(T_f\) proves noisy on hardware.
 
 | Choice | Reason |
 |--------|--------|
-| ~120 ms accel stretch | Native INI accel (~17 ms 0→F3000) makes 606C look stepped |
-| F5000–F10000 | On a 120 ms ramp, F3000 only produces ~2–3% rated \(T_a\) |
-| Cruise \(T_f\) (not v0.4 accel/decel cancel) | Matches Sigma II trapezoid worksheet |
-| Triangle fallback | Same workbook note when there is no cruise |
-| Auto-flatten | Matches Example steps 1→2 (Pn402 for flat \(T_p\)) |
+| ~100 ms accel stretch | Physics fit wants fewer 606C stair-steps during accel; hard ~60 ms ramps inflate velocity residual even when J is correct |
+| Stroke ~40 mm | Two clean accel/decel edges per direction without long friction-only cruise |
+| F8000–F10000 | Peak ~800–1000 rpm: inertia impulse ≫ friction noise |
+| Torque limit 0 | Clamps caused aborted/short moves (the two worst traces on file); the fit needs no flat plateau |
 | Write only if `good` | Avoids overwriting C00.06 with garbage |
 
 ---
@@ -122,9 +142,9 @@ if graphical cruise \(T_f\) proves noisy on hardware.
 |-------|-----|
 | Motor rotor inertia | Datasheet \(J_M\) — **required** |
 | Rated torque | Converts 6077 % → N·m — **required** |
-| Stroke / feed / cycles | ID move; prefer cycles=1, F5000–F10000 linear |
-| Torque limit % | 0 = auto-flatten may choose; >0 = fixed Pn402-style clamp |
-| ID accel | 0 = auto from feed (~120 ms ramp). Non-zero overrides. |
+| Stroke / feed / cycles | ID move; stroke ~40, F8000–F10000 linear, cycles=1 |
+| Torque limit % | Leave **0** (kept for compat; clamps not needed by the fit) |
+| ID accel | 0 = auto from feed (~100 ms ramp). Non-zero overrides. |
 
 ---
 
@@ -142,11 +162,11 @@ if graphical cruise \(T_f\) proves noisy on hardware.
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| quality `bad` / analysis fails, ~20 ms ramp | Accel stretch did not apply | Confirm LinuxCNC running; check journal `accel` events |
-| quality `marginal`, “not flat” | Spiky accel torque | Let auto-flatten run, or set Torque limit just below peak |
-| quality `marginal`, ratio ≫200%, low feed | \(T_a\) SNR too low | Raise feed to F5000–F10000 |
-| Live plot flat / empty before BEGIN | Plot arms only during the campaign | Press BEGIN — strip starts at t=0 with the move |
-| C00.06 unchanged after “ok” | Estimate was marginal | Gate skipped write — read status line / journal |
+| "physics fit untrustworthy" | Move aborted / clamped / non-rigid trace | Torque limit 0, stroke ~40, F8000+, re-run |
+| "J barely constrains the fit" | Friction-dominated move | Raise feed (and let ID accel stay auto) |
+| marginal, peak < 500 rpm | Feed too low | F8000–F10000 on linear axes |
+| VEL fit (dashed) diverges from VEL | Model mismatch (backlash, stiction event) | Re-run; if persistent, inspect trace.csv |
+| C00.06 unchanged after "ok" | Estimate was marginal | Gate skipped write — read status line / journal |
 
 ---
 
@@ -156,5 +176,8 @@ if graphical cruise \(T_f\) proves noisy on hardware.
 python3 probe_basic/python/test_a6_graphical_inertia.py
 ```
 
-Includes an exact replay of the Sigma II demo numbers (Tp=90%, Tf=4.5%,
-ΔV=1000 rpm, Δt=3.34 ms → Pn103≈138.24).
+Includes: a synthetic physically-consistent trace corrupted with real-style
+PDO holds (fit must recover J within ±25%), the exact Sigma II demo numbers
+for the cross-check formulas (Tp=90%, Tf=4.5%, ΔV=1000 rpm, Δt=3.34 ms →
+Pn103≈138.24), and a replay of every journaled X trace (good cluster must
+land 80–180%).

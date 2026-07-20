@@ -1,13 +1,18 @@
 (author: jayem)
 (date: 2026)
-(Sets laser start position + probe RPM.)
+(Store captured BEAM XY + probe RPM.)
 (Uses #5501-#5503 — NOT G30/toolsetter #5181-#5183.)
+(#1 = BEAM X G53 mm, #2 = BEAM Y G53 mm, #3 = probe RPM)
+(Prefer direct MDI #5501=... from the UI; this sub is a fallback.)
 
 o<laser_set_start_xy> sub
-    #5501 = #1
-    #5502 = #2
-    #5503 = #3
-    (DEBUG, LASER: start XY #5501/#5502, probe RPM #5503)
+    #<bx> = #1
+    #<by> = #2
+    #<rpm> = #3
+    #5501 = #<bx>
+    #5502 = #<by>
+    #5503 = #<rpm>
+    (DEBUG, LASER: BEAM XY #5501/#5502, probe RPM #5503)
 o<laser_set_start_xy> endsub
 
 M2

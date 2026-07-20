@@ -76,7 +76,7 @@
         <property name="minimumSize"><size><width>18</width><height>18</height></size></property>
         <property name="maximumSize"><size><width>18</width><height>18</height></size></property>
         <property name="text"><string/></property>
-        <property name="toolTip"><string>HAL laser-beam-broken: clear vs tool in beam</string></property>
+        <property name="toolTip"><string>HAL signal laser-beam-broken (halcmd gets laser-beam-broken)</string></property>
        </widget>
       </item>
       <item>
@@ -158,7 +158,7 @@
 
           <item row="0" column="0">
            <widget class="QLabel" name="lblStartXCap">
-            <property name="text"><string>START X</string></property>
+            <property name="text"><string>BEAM X</string></property>
            </widget>
           </item>
           <item row="0" column="1">
@@ -176,7 +176,7 @@
 
           <item row="1" column="0">
            <widget class="QLabel" name="lblStartYCap">
-            <property name="text"><string>START Y</string></property>
+            <property name="text"><string>BEAM Y</string></property>
            </widget>
           </item>
           <item row="1" column="1">
@@ -231,13 +231,13 @@
 
           <item row="4" column="0">
            <widget class="QLabel" name="lblBeamOffsetCap">
-            <property name="text"><string>BEAM OFFSET</string></property>
+            <property name="text"><string>START OFFSET</string></property>
            </widget>
           </item>
           <item row="4" column="1">
            <widget class="QLineEdit" name="leBeamOffset">
-            <property name="text"><string>10.0000</string></property>
-            <property name="toolTip"><string>Distance from START toward +X to the beam (tip-find XY)</string></property>
+            <property name="text"><string>15.0000</string></property>
+            <property name="toolTip"><string>+X from BEAM to clear START (away from toolsetter). Tip-find uses BEAM XY; diameter sweep starts at BEAM+offset and feeds −X.</string></property>
             <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
             <property name="minimumHeight"><number>28</number></property>
            </widget>
@@ -255,8 +255,8 @@
           </item>
           <item row="5" column="1">
            <widget class="QLineEdit" name="leMaxTravel">
-            <property name="text"><string>20.0000</string></property>
-            <property name="toolTip"><string>Max +X distance from START — stop looking before the far wall</string></property>
+            <property name="text"><string>30.0000</string></property>
+            <property name="toolTip"><string>Max −X distance from START through the beam — stop before the far wall / toolsetter</string></property>
             <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
             <property name="minimumHeight"><number>28</number></property>
            </widget>
@@ -271,8 +271,8 @@
 
         <item>
          <widget class="QPushButton" name="btnGetStartPos">
-          <property name="text"><string>CAPTURE START (CLEAR OF BEAM)</string></property>
-          <property name="toolTip"><string>Capture machine XY beside the beam — not over the beam center</string></property>
+          <property name="text"><string>CAPTURE BEAM (TOOL BLOCKING LIGHT)</string></property>
+          <property name="toolTip"><string>Jog until LASER LED shows broken, then capture BEAM X/Y. START = BEAM + START OFFSET (+X).</string></property>
           <property name="minimumHeight"><number>40</number></property>
          </widget>
         </item>
@@ -397,96 +397,26 @@
           <item row="1" column="0" colspan="3">
            <widget class="QPushButton" name="btnCalibrate">
             <property name="text"><string>CALIBRATE BEAM</string></property>
+            <property name="toolTip"><string>MEASURED BEAM WIDTH = MASTER PIN − last raw diameter. Applied to later diameter results.</string></property>
             <property name="minimumHeight"><number>36</number></property>
            </widget>
           </item>
 
-          <item row="2" column="0" colspan="3">
-           <widget class="QLabel" name="lblBeamOffsetsCap">
-            <property name="text"><string>BEAM OFFSETS</string></property>
-           </widget>
-          </item>
-
-          <item row="3" column="0">
-           <widget class="QLabel" name="lblBeamXCap">
-            <property name="text"><string>BEAM X</string></property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QLabel" name="lblBeamX">
-            <property name="text"><string>0.0000</string></property>
-            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
-           </widget>
-          </item>
-          <item row="3" column="2">
-           <widget class="QLabel" name="lblBeamXUnit">
-            <property name="text"><string>mm</string></property>
-           </widget>
-          </item>
-
-          <item row="4" column="0">
-           <widget class="QLabel" name="lblBeamYCap">
-            <property name="text"><string>BEAM Y</string></property>
-           </widget>
-          </item>
-          <item row="4" column="1">
-           <widget class="QLabel" name="lblBeamY">
-            <property name="text"><string>0.0000</string></property>
-            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
-           </widget>
-          </item>
-          <item row="4" column="2">
-           <widget class="QLabel" name="lblBeamYUnit">
-            <property name="text"><string>mm</string></property>
-           </widget>
-          </item>
-
-          <item row="5" column="0">
-           <widget class="QLabel" name="lblBeamZCap">
-            <property name="text"><string>BEAM Z</string></property>
-           </widget>
-          </item>
-          <item row="5" column="1">
-           <widget class="QLabel" name="lblBeamZ">
-            <property name="text"><string>0.0000</string></property>
-            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
-           </widget>
-          </item>
-          <item row="5" column="2">
-           <widget class="QLabel" name="lblBeamZUnit">
-            <property name="text"><string>mm</string></property>
-           </widget>
-          </item>
-
-          <item row="6" column="0">
-           <widget class="QLabel" name="lblZOffsetCap">
-            <property name="text"><string>Z OFFSET</string></property>
-           </widget>
-          </item>
-          <item row="6" column="1">
-           <widget class="QLabel" name="lblZOffset">
-            <property name="text"><string>0.0000</string></property>
-            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
-           </widget>
-          </item>
-          <item row="6" column="2">
-           <widget class="QLabel" name="lblZOffsetUnit">
-            <property name="text"><string>mm</string></property>
-           </widget>
-          </item>
-
-          <item row="7" column="0">
+          <item row="2" column="0">
            <widget class="QLabel" name="lblBeamDiaCap">
-            <property name="text"><string>BEAM DIA</string></property>
+            <property name="text"><string>MEASURED BEAM WIDTH</string></property>
            </widget>
           </item>
-          <item row="7" column="1">
-           <widget class="QLabel" name="lblBeamDia">
+          <item row="2" column="1">
+           <widget class="QLineEdit" name="leBeamWidth">
             <property name="text"><string>0.0000</string></property>
             <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+            <property name="minimumHeight"><number>28</number></property>
+            <property name="maximumWidth"><number>110</number></property>
+            <property name="toolTip"><string>Offset added to raw diameter (master − raw from CALIBRATE, or edit by hand). Persists as #5516.</string></property>
            </widget>
           </item>
-          <item row="7" column="2">
+          <item row="2" column="2">
            <widget class="QLabel" name="lblBeamDiaUnit">
             <property name="text"><string>mm</string></property>
            </widget>

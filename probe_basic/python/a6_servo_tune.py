@@ -709,7 +709,7 @@ PARAM_DEFS: List[Dict[str, Any]] = [
         "unit": "mm|deg",
         "min": 0.001,
         "max": 50.0,
-        "default": 1.0,
+        "default": 0.5,
         "decimals": 3,
     },
     {
@@ -841,7 +841,7 @@ class AxisTuneParams:
 
     @property
     def following_error(self) -> float:
-        return float(self.values.get("following_error", 1.0))
+        return float(self.values.get("following_error", 0.5))
 
     def get(self, key: str) -> float:
         default = PARAM_BY_KEY[key]["default"] if key in PARAM_BY_KEY else 0.0
@@ -1403,6 +1403,43 @@ def apply_axis_params(
             except Exception:
                 pass
         raise
+
+
+# Drive SDO 6065: production fault window vs wider window during auto-tune moves.
+FOLLOWING_ERROR_RUN = 0.5
+FOLLOWING_ERROR_TUNING = 2.0
+
+
+def _following_error_params(value: float) -> AxisTuneParams:
+    params = AxisTuneParams.__new__(AxisTuneParams)
+    params.values = {"following_error": float(value)}
+    return params
+
+
+def relax_following_error_for_tuning(axis: str) -> float:
+    """Raise 6065 for tuning stimulus. Returns prior drive value (best effort)."""
+    prior = FOLLOWING_ERROR_RUN
+    try:
+        params, _, _ = read_axis_params(axis)
+        if "following_error" in params.values:
+            prior = float(params.values["following_error"])
+    except Exception:
+        LOG.debug("could not read prior 6065 on %s", axis, exc_info=True)
+    apply_axis_params(
+        axis,
+        _following_error_params(FOLLOWING_ERROR_TUNING),
+        keys=["following_error"],
+    )
+    return prior
+
+
+def restore_following_error_run(axis: str) -> None:
+    """Restore production 0.5 mm/deg drive fault window (SDO 6065)."""
+    apply_axis_params(
+        axis,
+        _following_error_params(FOLLOWING_ERROR_RUN),
+        keys=["following_error"],
+    )
 
 
 def format_params_summary(params: AxisTuneParams, axis: str = "X") -> str:

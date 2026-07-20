@@ -123,6 +123,99 @@ def _stepped_accel_trace(
     return torque, vel
 
 
+def _held(values, hold_n):
+    """Apply PDO sample-and-hold (A6 606C/6077 style) to a sample list."""
+    out = []
+    for i in range(len(values)):
+        out.append(values[(i // hold_n) * hold_n])
+    return out
+
+
+def _physical_trace(
+    *,
+    j_total: float,
+    coulomb_nm: float,
+    viscous: float,
+    rated_nm: float,
+    peak_rpm: float,
+    accel_s: float,
+    cruise_s: float,
+    sample_hz: float = 1000.0,
+    vel_hold_ms: float = 20.0,
+    tq_hold_ms: float = 10.0,
+):
+    """Simulate a physically consistent trapezoid (both directions) and
+    corrupt it with PDO sample-and-hold, like the real A6 feedback."""
+    dt = 1.0 / sample_hz
+    w_peak = peak_rpm * 2.0 * math.pi / 60.0
+    alpha = w_peak / accel_s
+    n_acc = int(accel_s * sample_hz)
+    n_cru = int(cruise_s * sample_hz)
+    n_rest = int(0.05 * sample_hz)
+
+    omega: list = []
+    torque_nm: list = []
+
+    def _leg(sign: float) -> None:
+        w = 0.0
+        for _ in range(n_rest):
+            omega.append(0.0)
+            torque_nm.append(0.0)
+        for _ in range(n_acc):
+            w += sign * alpha * dt
+            fr = coulomb_nm * math.tanh(2.0 * w) + viscous * w
+            torque_nm.append(j_total * sign * alpha + fr)
+            omega.append(w)
+        for _ in range(n_cru):
+            fr = coulomb_nm * math.tanh(2.0 * w) + viscous * w
+            torque_nm.append(fr)
+            omega.append(w)
+        for _ in range(n_acc):
+            w -= sign * alpha * dt
+            fr = coulomb_nm * math.tanh(2.0 * w) + viscous * w
+            torque_nm.append(-j_total * sign * alpha + fr)
+            omega.append(w)
+        for _ in range(n_rest):
+            omega.append(0.0)
+            torque_nm.append(0.0)
+
+    _leg(+1.0)
+    _leg(-1.0)
+
+    tq_pct = [100.0 * t / rated_nm for t in torque_nm]
+    vel = [w * 60.0 / (2.0 * math.pi) * 10.0 for w in omega]  # X: 10 mm/rev
+    tq_pct = _held(tq_pct, max(1, int(tq_hold_ms * sample_hz / 1000.0)))
+    vel = _held(vel, max(1, int(vel_hold_ms * sample_hz / 1000.0)))
+    return tq_pct, vel
+
+
+def test_physics_fit_recovers_j_through_pdo_holds() -> None:
+    """Known J + friction + 606C/6077 holds → fit must recover the ratio.
+
+    This is exactly the condition that broke the two-point rule (ΔV inside
+    a hold window → α garbage). The physics fit integrates torque instead.
+    """
+    j_m = 5.9e-5
+    j_total = 2.2 * j_m  # ratio 120%
+    tq, vel = _physical_trace(
+        j_total=j_total,
+        coulomb_nm=0.06,
+        viscous=1e-3,
+        rated_nm=1.27,
+        peak_rpm=800.0,
+        accel_s=0.12,
+        cruise_s=0.25,
+    )
+    est = analyze_torque_velocity("X", tq, vel, 1000.0, j_m, 1.27)
+    truth = 100.0 * (j_total - j_m) / j_m
+    # ±25%: worst-case hold phasing skews torque/velocity alignment a bit,
+    # but nothing like the ×1000 blowups of the two-point dV/dt rule.
+    assert abs(est.ratio_pct - truth) / truth < 0.25, (est.ratio_pct, truth)
+    assert est.method == "physics-fit"
+    assert est.fit_err_frac is not None and est.fit_err_frac < 0.16, est
+    assert est.sim_vel_unit_per_min, "sim overlay missing"
+
+
 def test_unit_rpm() -> None:
     assert abs(unit_per_min_to_rpm("X", 3000.0) - 300.0) < 1e-9
     assert abs(unit_per_min_to_rpm("A", 3600.0) - 10.0) < 1e-9
@@ -173,24 +266,31 @@ def test_analyze_ideal_trace() -> None:
     )
 
 
-def test_analyze_short_stepped_rejected() -> None:
-    """Short stepped 606C ramps must not produce a trusted write."""
+def test_analyze_short_stepped_no_mega_ratio() -> None:
+    """Stepped 606C ramps must never explode into a mega-ratio.
+
+    The physics fit integrates torque instead of differentiating the
+    stair-stepped velocity, so a stepped trace either fails the fit gates
+    (honest rejection) or produces a bounded, sane ratio — never the old
+    104603%-style nonsense from a two-point dV/dt.
+    """
     j_m = 5.9e-5
     rated = 1.27
     tq, vel = _stepped_accel_trace(
         friction_pct=8.9,
         peak_pct=28.6,
-        peak_feed=3000.0,
-        mid_feed=2560.0,
+        peak_feed=8000.0,
+        mid_feed=4000.0,
         plateau_ms=21,
         cruise_ms=200,
         cycles=5,
     )
     try:
-        analyze_torque_velocity("X", tq, vel, 1000.0, j_m, rated)
-        raise AssertionError("expected short-ramp rejection")
-    except GraphicalInertiaError as exc:
-        assert "ms" in str(exc).lower() or "pair" in str(exc).lower(), exc
+        est = analyze_torque_velocity("X", tq, vel, 1000.0, j_m, rated)
+    except GraphicalInertiaError:
+        return  # honest rejection is fine
+    assert -100.0 < est.ratio_pct < 600.0, est
+    assert est.fit_err_frac is not None and est.fit_err_frac < 0.25, est
 
 
 def test_analyze_rejects_tiny_move() -> None:
@@ -406,16 +506,122 @@ def test_real_f10000_traces_cluster() -> None:
     assert (max(ratios) - min(ratios)) / med < 1.20, ratios
 
 
+def test_unused_torque_limit_not_forced_as_tp() -> None:
+    """Configured limit must not invent Tp when the plateau never rides it."""
+    j_m = 1.0e-4
+    j_l = 2.5e-4
+    rated = 1.27
+    tq, vel, truth = _trap_trace(
+        j_total=j_m + j_l,
+        j_motor=j_m,
+        rated_nm=rated,
+        friction_pct=5.0,
+        peak_rpm=800.0,
+        accel_s=0.15,
+        cruise_s=0.1,
+    )
+    # Peak on this ideal trace is well below 50% — limit must be ignored for Tp.
+    est = analyze_torque_velocity(
+        "X", tq, vel, 1000.0, j_m, rated, torque_limit_pct=50.0
+    )
+    assert est.t_peak_pct < 40.0, est
+    assert "unused" in " ".join(est.notes).lower(), est.notes
+    assert abs(est.ratio_pct - truth["ratio_pct"]) / truth["ratio_pct"] < 0.2, (
+        est.ratio_pct,
+        truth["ratio_pct"],
+    )
+    assert est.accel_t0_s is not None and est.accel_t1_s is not None
+    assert est.tp_plot_pct is not None and est.tf_plot_pct is not None
+
+
+def test_bogus_limit_on_real_journal_no_longer_explodes() -> None:
+    """Regression: 20260715_224143_X must not report ~100000% from unused 50% limit."""
+    root = os.path.abspath(os.path.join(HERE, "..", ".."))
+    path = os.path.join(
+        root,
+        "logs",
+        "tuning",
+        "graphical_inertia",
+        "20260715_224143_X",
+        "trace.csv",
+    )
+    if not os.path.isfile(path):
+        print("SKIP bogus_limit_journal (trace missing)")
+        return
+    from a6_graphical_inertia import load_trace_csv
+
+    _t, tq, vel, hz = load_trace_csv(path)
+    try:
+        est = analyze_torque_velocity(
+            "X", tq, vel, hz, 5.9e-5, 1.27, torque_limit_pct=50.0
+        )
+    except GraphicalInertiaError as exc:
+        # Honest rejection (Ta≈0 / Jα invisible) is fine — just not a fantasy mega-ratio.
+        msg = str(exc).lower()
+        assert "104" not in msg
+        assert (
+            "inertial" in msg
+            or "invisible" in msg
+            or "ta" in msg
+        ), exc
+        return
+    assert est.ratio_pct < 5000.0, est
+    assert est.t_peak_pct < 40.0, est
+    assert "unused" in " ".join(est.notes).lower() or est.delta_rpm > 50.0
+
+
+def test_soft_ramp_refuses_fake_cancel_when_ja_invisible() -> None:
+    """F10000 soft ramp with Tp < cruise must NOT invent ~6% via cancel."""
+    root = os.path.abspath(os.path.join(HERE, "..", ".."))
+    path = os.path.join(
+        root,
+        "logs",
+        "tuning",
+        "graphical_inertia",
+        "20260715_225733_X",
+        "trace.csv",
+    )
+    if not os.path.isfile(path):
+        # Fall back to the earlier soft-ramp journal.
+        path = os.path.join(
+            root,
+            "logs",
+            "tuning",
+            "graphical_inertia",
+            "20260715_224934_X",
+            "trace.csv",
+        )
+    if not os.path.isfile(path):
+        print("SKIP soft_ramp_ja_invisible (trace missing)")
+        return
+    from a6_graphical_inertia import load_trace_csv
+
+    _t, tq, vel, hz = load_trace_csv(path)
+    try:
+        est = analyze_torque_velocity("X", tq, vel, hz, 5.9e-5, 1.27)
+    except GraphicalInertiaError as exc:
+        msg = str(exc).lower()
+        assert "jα invisible" in msg or "ja invisible" in msg or "invisible" in msg, exc
+        return
+    # If analysis somehow succeeds, it must not be the bogus ~6% cancel result.
+    assert est.ratio_pct > 30.0, est
+    assert "cancel" not in " ".join(est.notes).lower() or est.ratio_pct > 30.0
+
+
 if __name__ == "__main__":
     failed = 0
     cases = [
+        ("physics_fit_pdo_holds", test_physics_fit_recovers_j_through_pdo_holds, False),
         ("rpm", test_unit_rpm, False),
         ("sigma_ii_worksheet", test_sigma_ii_worksheet_example, False),
         ("target_accel", test_target_id_accel, False),
         ("analyze", test_analyze_ideal_trace, False),
-        ("short_stepped", test_analyze_short_stepped_rejected, False),
+        ("short_stepped", test_analyze_short_stepped_no_mega_ratio, False),
         ("tiny", test_analyze_rejects_tiny_move, False),
         ("validate", test_settings_validate, False),
+        ("unused_limit", test_unused_torque_limit_not_forced_as_tp, False),
+        ("bogus_limit_journal", test_bogus_limit_on_real_journal_no_longer_explodes, False),
+        ("soft_ramp_ja", test_soft_ramp_refuses_fake_cancel_when_ja_invisible, False),
         ("tuner", test_tuner_writes_when_good, True),
         ("clamp_feed", test_tuner_clamps_feed, True),
         ("no_write_marginal", test_tuner_skips_write_when_marginal, True),

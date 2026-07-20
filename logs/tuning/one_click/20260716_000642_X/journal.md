@@ -1,0 +1,470 @@
+# One-click tune — axis X
+
+- started: 2026-07-16T00:06:42
+- engine: a6_auto_tune v1.0
+- profile: conservative
+- stimulus: 3x 0<->40 mm @ F3000 (~6.8s per measurement)
+- dry run: False
+
+**[     0.0s | setup | config]** campaign configuration
+```json
+{
+  "config": {
+    "allow_notch": true,
+    "axis": "X",
+    "backoff_ratio": 0.75,
+    "dry_run": false,
+    "ferr_abort_fallback": 0.8,
+    "ferr_abort_ratio": 0.8,
+    "gate_min_hz_cap": 120.0,
+    "gate_min_hz_factor": 6.0,
+    "gate_min_hz_floor": 25.0,
+    "hf_fail": 0.35,
+    "improvement_min_pct": 4.0,
+    "integral_improve_min_pct": 0.5,
+    "integral_min_ms": 3.0,
+    "integral_peak_guard_pct": 10.0,
+    "integral_skip_improved_pct": 30.0,
+    "integral_step_ratio": 0.7,
+    "keep_best_min_improve_pct": 1.0,
+    "max_stall_steps": 2,
+    "max_steps_per_phase": 6,
+    "min_meaningful_rms": 0.0005,
+    "min_prominence_ratio": 4.0,
+    "min_resonance_amplitude": 0.001,
+    "notch_depth_pct": 10.0,
+    "notch_width_pct": 5.0,
+    "pos_gain_max_rad_s": 250.0,
+    "pos_step_ratio": 1.2,
+    "pos_to_speed_ratio": 2.0,
+    "profile": "conservative",
+    "rescue_max_steps": 3,
+    "resonance_vs_rms": 0.1,
+    "ring_fail": 0.85,
+    "sample_hz": 1000.0,
+    "save_presets": true,
+    "speed_gain_max_hz": 120.0,
+    "speed_step_ratio": 1.15,
+    "speed_vs_filter_cap": 0.25,
+    "stimulus": {
+      "axis": "X",
+      "cycles": 3,
+      "dwell_s": 0.25,
+      "feed": 3000.0,
+      "settle_s": 0.5,
+      "stroke": 40.0
+    },
+    "verify_hf_margin": 0.12
+  }
+}
+```
+
+**[     0.0s | preflight | machine]** machine ready
+```json
+{
+  "feed_override": 1.0,
+  "homed": true,
+  "max_limit": 370.0,
+  "min_limit": -254.0,
+  "position": 136.64967346191406
+}
+```
+
+**[     0.0s | preflight | stimulus]** stimulus direction +40 mm
+```json
+{
+  "direction": 1.0,
+  "spec": "3x 0<->40 mm @ F3000 (~6.8s per measurement)"
+}
+```
+
+**[     1.6s | baseline | warning]** 2 SDO reads failed (they will never be written)
+```json
+{
+  "failed": [
+    "adaptive_notch_freq_hz",
+    "adaptive_notch_amp_pct"
+  ]
+}
+```
+
+**[     1.6s | baseline | params]** baseline snapshot (44 keys)
+```json
+{
+  "abort_ferr": 0.79998779296875,
+  "values": {
+    "adaptive_notch": 0.0,
+    "adaptive_notch_times": 0.0,
+    "damping_pct": 0.0,
+    "following_error": 0.9999847412109375,
+    "following_error_time_ms": 250.0,
+    "gain_sw_mode": 0.0,
+    "gain_sw_thresh": 10.0,
+    "gain_sw_time_ms": 5.0,
+    "gain_sw_width": 10.0,
+    "inertia_ratio_pct": 100.0,
+    "integral_2_ms": 3.0,
+    "integral_ms": 3.5,
+    "manual_mode": 0.0,
+    "notch1_depth_pct": 100.0,
+    "notch1_freq_hz": 8000.0,
+    "notch1_width_pct": 0.0,
+    "notch2_depth_pct": 100.0,
+    "notch2_freq_hz": 8000.0,
+    "notch2_width_pct": 0.0,
+    "notch3_depth_pct": 100.0,
+    "notch3_freq_hz": 8000.0,
+    "notch3_width_pct": 0.0,
+    "notch4_depth_pct": 100.0,
+    "notch4_freq_hz": 8000.0,
+    "notch4_width_pct": 0.0,
+    "notch5_depth_pct": 100.0,
+    "notch5_freq_hz": 8000.0,
+    "notch5_width_pct": 0.0,
+    "pdff_pct": 100.0,
+    "pos_gain_2_rad_s": 184.0,
+    "pos_gain_rad_s": 240.0,
+    "speed_fb_filter": 0.0,
+    "speed_fb_lpf_hz": 8000.0,
+    "speed_ff_filter_hz": 318.0,
+    "speed_ff_pct": 100.0,
+    "speed_ff_source": 1.0,
+    "speed_gain_2_hz": 115.0,
+    "speed_gain_hz": 100.0,
+    "stiffness_level": 18.0,
+    "torque_ff_filter_hz": 1000.0,
+    "torque_ff_pct": 120.0,
+    "torque_ff_source": 1.0,
+    "torque_filter_2_hz": 920.0,
+    "torque_filter_hz": 600.0
+  }
+}
+```
+
+**[     1.6s | baseline | backup]** baseline preset saved: pre_one_click_20260716_000644
+```json
+{
+  "path": "/home/jon/linuxcnc/configs/ethercat_mill/config/tuning/presets/X/pre_one_click_20260716_000644.json"
+}
+```
+
+**[     8.8s | measure | measurement]** baseline: peak=0.00427 rms=0.00060 score=0.00547 stable dom=26.7Hz
+```json
+{
+  "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20260716_000642_X/01_baseline.csv",
+  "fft": {
+    "gate_min_hz": 25.0,
+    "gate_reason": "peak at 26.7 Hz",
+    "gate_stable": false,
+    "hf_energy_ratio": 0.3341449042318512,
+    "n_samples": 1944,
+    "peak_abs": 0.0042724609375,
+    "peaks": [
+      {
+        "freq_hz": 26.74897119341564,
+        "magnitude": 0.0001697850734407772,
+        "prominence": 10.606696506990998
+      },
+      {
+        "freq_hz": 30.864197530864196,
+        "magnitude": 0.0001434866763125336,
+        "prominence": 8.96380110219029
+      },
+      {
+        "freq_hz": 34.97942386831276,
+        "magnitude": 0.00013329392704985088,
+        "prominence": 8.327046670188691
+      },
+      {
+        "freq_hz": 39.09465020576132,
+        "magnitude": 0.00011342676001060039,
+        "prominence": 7.0859186548185535
+      },
+      {
+        "freq_hz": 43.20987654320987,
+        "magnitude": 0.0001083114041702928,
+        "prominence": 6.766355657766685
+      }
+    ],
+    "ring_score": 0.5676281796264325,
+    "rms": 0.0006005970588113089
+  },
+  "gains": {
+    "integral_ms": 3.5,
+    "manual_mode": 0.0,
+    "notch3_depth_pct": 100.0,
+    "notch3_freq_hz": 8000.0,
+    "notch3_width_pct": 0.0,
+    "pos_gain_rad_s": 240.0,
+    "speed_gain_hz": 100.0
+  },
+  "meta": {
+    "abort_reason": "",
+    "aborted": false,
+    "position_drift": -0.000152587890625,
+    "tripped_ferr": null
+  }
+}
+```
+
+**[     8.8s | speed | start]** speed ladder from 100.0 Hz, cap 120.0 Hz
+
+**[     9.3s | speed | write]** SDO write speed_gain_hz=115
+```json
+{
+  "failed": [],
+  "skipped": [],
+  "written": [
+    "speed_gain_hz"
+  ]
+}
+```
+
+**[    16.5s | measure | measurement]** speed_115.0hz: peak=0.00412 rms=0.00058 score=0.00528 UNSTABLE dom=26.4Hz [HF energy 43%]
+```json
+{
+  "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20260716_000642_X/02_speed_115.0hz.csv",
+  "fft": {
+    "gate_min_hz": 25.0,
+    "gate_reason": "peak at 26.4 Hz; HF energy 43%",
+    "gate_stable": false,
+    "hf_energy_ratio": 0.428626958752434,
+    "n_samples": 1929,
+    "peak_abs": 0.004119873046875,
+    "peaks": [
+      {
+        "freq_hz": 26.438569206842924,
+        "magnitude": 0.00015954199318586647,
+        "prominence": 10.263601583023293
+      },
+      {
+        "freq_hz": 30.585795749092796,
+        "magnitude": 0.00015427839125483687,
+        "prominence": 9.924985322608503
+      },
+      {
+        "freq_hz": 38.88024883359254,
+        "magnitude": 0.0001385101165639624,
+        "prominence": 8.91058600461664
+      },
+      {
+        "freq_hz": 34.733022291342664,
+        "magnitude": 0.00013832786208451878,
+        "prominence": 8.898861271044137
+      },
+      {
+        "freq_hz": 43.02747537584241,
+        "magnitude": 0.00012714896460612094,
+        "prominence": 8.17970421675015
+      }
+    ],
+    "ring_score": 0.6402056896017835,
+    "rms": 0.000580564593725386
+  },
+  "gains": {
+    "integral_ms": 3.5,
+    "manual_mode": 0.0,
+    "notch3_depth_pct": 100.0,
+    "notch3_freq_hz": 8000.0,
+    "notch3_width_pct": 0.0,
+    "pos_gain_rad_s": 240.0,
+    "speed_gain_hz": 114.99999999999999
+  },
+  "meta": {
+    "abort_reason": "",
+    "aborted": false,
+    "position_drift": 0.0,
+    "tripped_ferr": null
+  }
+}
+```
+
+**[    16.5s | speed | backoff]** unstable at 115.0 Hz (HF energy 43%) — returning to 100.0 Hz
+
+**[    17.0s | speed | write]** SDO write speed_gain_hz=100
+```json
+{
+  "failed": [],
+  "skipped": [],
+  "written": [
+    "speed_gain_hz"
+  ]
+}
+```
+
+**[    17.0s | position | start]** position ladder from 240.0 rad/s toward ~200.0 (cap 240.0)
+
+**[    17.1s | position | skip]** already at/above cap — leaving it alone
+
+**[    17.1s | integral | start]** integral tighten from 3.50 ms toward 3.00 ms (lower = stronger)
+
+**[    17.6s | integral | write]** SDO write integral_ms=3
+```json
+{
+  "failed": [],
+  "skipped": [],
+  "written": [
+    "integral_ms"
+  ]
+}
+```
+
+**[    24.8s | measure | measurement]** integral_3.00ms: peak=0.00420 rms=0.00058 score=0.00535 stable dom=25.9Hz
+```json
+{
+  "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20260716_000642_X/03_integral_3.00ms.csv",
+  "fft": {
+    "gate_min_hz": 25.0,
+    "gate_reason": "peak at 25.9 Hz",
+    "gate_stable": false,
+    "hf_energy_ratio": 0.33408207104970344,
+    "n_samples": 1932,
+    "peak_abs": 0.0041961669921875,
+    "peaks": [
+      {
+        "freq_hz": 25.87991718426501,
+        "magnitude": 0.00017396071136751778,
+        "prominence": 11.215480116094424
+      },
+      {
+        "freq_hz": 30.020703933747413,
+        "magnitude": 0.00017192618530515298,
+        "prominence": 11.084311495210128
+      },
+      {
+        "freq_hz": 34.161490683229815,
+        "magnitude": 0.00015317061866171832,
+        "prominence": 9.875114986976014
+      },
+      {
+        "freq_hz": 38.302277432712216,
+        "magnitude": 0.0001432460898257914,
+        "prominence": 9.235267317085835
+      },
+      {
+        "freq_hz": 42.44306418219462,
+        "magnitude": 0.00011203100492903866,
+        "prominence": 7.222788975110628
+      }
+    ],
+    "ring_score": 0.6068954692772064,
+    "rms": 0.0005750958235231662
+  },
+  "gains": {
+    "integral_ms": 3.0,
+    "manual_mode": 0.0,
+    "notch3_depth_pct": 100.0,
+    "notch3_freq_hz": 8000.0,
+    "notch3_width_pct": 0.0,
+    "pos_gain_rad_s": 240.0,
+    "speed_gain_hz": 100.0
+  },
+  "meta": {
+    "abort_reason": "",
+    "aborted": false,
+    "position_drift": 0.000152587890625,
+    "tripped_ferr": null
+  }
+}
+```
+
+**[    24.8s | integral | accept]** 3.00 ms accepted (rms +4.2%, peak -1.8%)
+
+**[    24.8s | integral | done]** reached floor
+
+**[    32.0s | measure | measurement]** verify: peak=0.00427 rms=0.00059 score=0.00546 stable dom=26.9Hz
+```json
+{
+  "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20260716_000642_X/04_verify.csv",
+  "fft": {
+    "gate_min_hz": 25.0,
+    "gate_reason": "peak at 26.9 Hz; HF energy 42%",
+    "gate_stable": false,
+    "hf_energy_ratio": 0.41809764778230635,
+    "n_samples": 1934,
+    "peak_abs": 0.0042724609375,
+    "peaks": [
+      {
+        "freq_hz": 26.88728024819028,
+        "magnitude": 0.00016377523278882303,
+        "prominence": 10.753798774663998
+      },
+      {
+        "freq_hz": 31.023784901758017,
+        "magnitude": 0.0001454016632423274,
+        "prominence": 9.547354635884592
+      },
+      {
+        "freq_hz": 35.160289555325754,
+        "magnitude": 0.00012943271796097435,
+        "prominence": 8.49880278054563
+      },
+      {
+        "freq_hz": 39.29679420889349,
+        "magnitude": 0.00011715628682025482,
+        "prominence": 7.692708550604615
+      },
+      {
+        "freq_hz": 43.43329886246122,
+        "magnitude": 0.00011393328454400444,
+        "prominence": 7.481079982970266
+      }
+    ],
+    "ring_score": 0.6677312056214867,
+    "rms": 0.0005917388747270348
+  },
+  "gains": {
+    "integral_ms": 3.0,
+    "manual_mode": 0.0,
+    "notch3_depth_pct": 100.0,
+    "notch3_freq_hz": 8000.0,
+    "notch3_width_pct": 0.0,
+    "pos_gain_rad_s": 240.0,
+    "speed_gain_hz": 100.0
+  },
+  "meta": {
+    "abort_reason": "",
+    "aborted": false,
+    "position_drift": -0.000152587890625,
+    "tripped_ferr": null
+  }
+}
+```
+
+**[    32.0s | verify | ok]** verify: peak=0.00427 rms=0.00059 score=0.00546 stable dom=26.9Hz
+
+**[    32.0s | finalize | result]** campaign status: no-change
+```json
+{
+  "baseline_score": 0.005473655055122617,
+  "baseline_values": {
+    "integral_ms": 3.5,
+    "manual_mode": 0.0,
+    "notch3_depth_pct": 100.0,
+    "notch3_freq_hz": 8000.0,
+    "notch3_width_pct": 0.0,
+    "pos_gain_rad_s": 240.0,
+    "speed_gain_hz": 100.0
+  },
+  "final_score": 0.00545593868695407,
+  "final_values": {
+    "integral_ms": 3.0,
+    "manual_mode": 0.0,
+    "notch3_depth_pct": 100.0,
+    "notch3_freq_hz": 8000.0,
+    "notch3_width_pct": 0.0,
+    "pos_gain_rad_s": 240.0,
+    "speed_gain_hz": 100.0
+  },
+  "improvement_pct": 0.3236661424611995,
+  "measurements": 4,
+  "notch_applied": false,
+  "preset": null,
+  "reason": "no meaningful improvement found beyond the baseline"
+}
+```
+
+
+---
+
+**FINAL STATUS: NO-CHANGE** — 2026-07-16T00:07:14

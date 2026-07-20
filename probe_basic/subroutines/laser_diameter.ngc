@@ -1,93 +1,126 @@
 (author: jayem)
 (date: 2026)
-(Laser diameter — START is clear of beam; tip-find at START+beam_offset.)
-(Reads HAL pin laser-beam-broken — does NOT use motion.probe-input / G38.)
-(Prereqs: START X/Y + RPM #5501-#5503; Z-drop #5507; max travel #5508;)
-(        beam offset #5509 = distance from START toward +X to beam/tip-find)
-(START = operator capture beside the beam. Max travel = +X stop from START)
-(        (safe inside slot, before far wall). Measure feeds +X only.)
-(Sequence:)
-(  1. G53 Z0 → tip-find XY (START_X+offset, START_Y) → slow tip-find)
-(  2. Retract Z0 → START XY (clear side))
-(  3. Drop to tip_z − Z_DROP → feed +X until break (pre-touch))
-(  4. Retract X by 2 mm → M4 reverse spin-up (if RPM > 0))
-(  5. Feed +X break→clear for diameter (stop at START+max_travel))
-(Results: #5512 diameter, #5513/#5514 edges, #5515=1 on success, M68 E0/E1)
+(Laser diameter — CAPTURE stores BEAM XY; tool blocking light.)
+(START = BEAM_X + START_OFFSET; +X clear side away from toolsetter.)
+(Tip-find at BEAM XY; diameter sweep feeds -X from START through beam.)
+(M62 P0 ONLY around G38 — never during G0/G1 or "Probe tripped during non-probe move".)
+(M63 P0 restores contact mux. M66 P3 L0 for beam-at-START on digital-in-03.)
+(Prereqs: BEAM X/Y + RPM #5501-#5503; Z-drop #5507; max travel #5508;)
+(        start offset #5509 = +X from BEAM to clear START)
+(Results: #5512 raw diameter, #5513/#5514 edges, #5515=1 on success, M68 E0/E1)
+(#5516 beam-width offset: corrected = raw + #5516; set by CALIBRATE BEAM in UI)
+(Probe RPM >0: M3 during diameter sweep — custom.hal swaps M3/M4 to VFD reverse.)
 
 o<laser_diameter> sub
     o<400> if [#<_task> EQ 1]
 
     G21 G90
     M5
+    M63 P0
 
     #5515 = 0
     M68 E1 Q0
 
-    #<start_x> = #5501
-    #<start_y> = #5502
+    #<beam_x> = #5501
+    #<beam_y> = #5502
     #<probe_rpm> = #5503
     #<z_drop> = #5507
     #<max_travel> = #5508
-    #<beam_offset> = #5509
+    #<start_offset> = #5509
+    #<beam_z> = #5504
     #<max_z_travel> = #5506
-    #<fast_fr> = #3004
+    #<beam_cal> = #5516
     #<slow_fr> = #3005
-    #<step_z_coarse> = 0.20
-    #<step_z_fine> = 0.02
-    #<step_x> = 0.02
-    #<min_remain> = 0.50
+    #<tip_coarse_fr> = 1200
+    #<fast_x_fr> = 500
+    #<slow_x_fr> = 50
+    #<tip_retract_z> = 5.0
+    #<slow_z_fr> = 50
     #<x_backoff> = 2.0
+    #<min_remain> = 0.50
     #<z_safe> = 0
+    #<z_floor> = [#<_ini[AXIS_Z]MIN_LIMIT> + 1]
 
     o<diam_drop> if [#<z_drop> LE 0]
       #<z_drop> = 2
     o<diam_drop> endif
     o<diam_trav> if [#<max_travel> LE 0]
-      #<max_travel> = 20
+      #<max_travel> = 30
     o<diam_trav> endif
-    o<diam_off> if [#<beam_offset> LE 0]
-      #<beam_offset> = 10
+    o<diam_off> if [#<start_offset> LE 0]
+      #<start_offset> = 15
     o<diam_off> endif
     o<diam_ztrav> if [#<max_z_travel> LE 0]
       #<max_z_travel> = 30
     o<diam_ztrav> endif
-    o<diam_feeds> if [#<fast_fr> LE 0]
-      #<fast_fr> = 200
+    o<diam_feeds> if [#<slow_fr> LE 0]
       #<slow_fr> = 40
     o<diam_feeds> endif
+    o<diam_xfast> if [#<fast_x_fr> LE 0]
+      #<fast_x_fr> = 500
+    o<diam_xfast> endif
+    o<diam_xslow> if [#<slow_x_fr> LE 0]
+      #<slow_x_fr> = 50
+    o<diam_xslow> endif
+    o<diam_zslow> if [#<slow_z_fr> LE 0]
+      #<slow_z_fr> = 50
+    o<diam_zslow> endif
 
-    o<diam_check_xy> if [[#<start_x> EQ 0] AND [#<start_y> EQ 0]]
-      (DEBUG, LASER DIAM: set START X/Y first — clear of beam)
+    o<diam_check_xy> if [[#<beam_x> EQ 0] AND [#<beam_y> EQ 0]]
+      (DEBUG, LASER DIAM: set BEAM X/Y first — tool blocking light)
+      M63 P0
       o<laser_diameter> return
     o<diam_check_xy> endif
 
-    o<diam_off_vs_trav> if [#<beam_offset> GE #<max_travel>]
-      (DEBUG, LASER DIAM: BEAM OFFSET must be < MAX TRAVEL)
+    o<diam_off_vs_trav> if [#<start_offset> GE #<max_travel>]
+      (DEBUG, LASER DIAM: START OFFSET must be < MAX TRAVEL)
+      M63 P0
       o<laser_diameter> return
     o<diam_off_vs_trav> endif
 
-    #<tip_x> = [#<start_x> + #<beam_offset>]
-    #<x_stop> = [#<start_x> + #<max_travel>]
-    #<z_limit> = [#<z_safe> - #<max_z_travel>]
+    (Tip-find on beam; START clear is +X from beam; sweep toward -X)
+    #<tip_x> = #<beam_x>
+    #<tip_y> = #<beam_y>
+    #<start_x> = [#<beam_x> + #<start_offset>]
+    #<start_y> = #<beam_y>
+    #<x_stop> = [#<start_x> - #<max_travel>]
     #<max_ok_diam> = [#<max_travel> - #<min_remain>]
 
-    (DEBUG, LASER DIAM: tip-find at tip_x, measure START→x_stop)
-    G53 G0 Z#<z_safe>
-    G53 G0 X#<tip_x> Y#<start_y>
+    (Tip-find Z limit: BEAM Z minus travel when taught, else machine Z min)
+    o<z_lim_known> if [#<beam_z> GT 0]
+      #<z_limit> = [#<beam_z> - #<max_z_travel>]
+      o<z_lim_floor> if [#<z_limit> LT #<z_floor>]
+        #<z_limit> = #<z_floor>
+      o<z_lim_floor> endif
+    o<z_lim_known> else
+      #<z_limit> = #<z_floor>
+    o<z_lim_known> endif
 
-    (--- tip-find Z from Z0 at beam XY, spindle OFF ---)
-    o<tip_c> while [[#<_hal[laser-beam-broken]> EQ 0] AND [#<_abs_z> GT #<z_limit>]]
-      #<z_next> = [#<_abs_z> - #<step_z_coarse>]
-      o<tip_cc> if [#<z_next> LT #<z_limit>]
-        #<z_next> = #<z_limit>
-      o<tip_cc> endif
-      G53 G1 Z#<z_next> F#<slow_fr>
-    o<tip_c> endwhile
+    (tip-find at beam XY, then measure START to x_stop toward -X)
+    G0 G53 Z#<z_safe>
+    G0 G53 X#<tip_x> Y#<tip_y>
 
-    o<diam_miss_tip_c> if [#<_hal[laser-beam-broken]> EQ 0]
-      (DEBUG, LASER DIAM: no beam trip on tip-find — check offset / polarity)
-      G53 G0 Z#<z_safe>
+    (--- tip-find Z: approach with G1, probe only with G38 ---)
+    o<tip_known> if [#<beam_z> GT 0]
+      M66 P3 L0
+      o<tip_k_clear> if [#5399 EQ 0]
+        #<z_coarse_target> = [#<beam_z> + 2.0]
+        o<tip_k_down> if [#<_abs_z> GT #<z_coarse_target>]
+          G1 G53 Z#<z_coarse_target> F#<tip_coarse_fr>
+        o<tip_k_down> endif
+      o<tip_k_clear> endif
+    o<tip_known> endif
+
+    M62 P0
+    G91
+    G38.3 Z[#<z_limit> - #<_abs_z>] F#<tip_coarse_fr>
+    G90
+    M63 P0
+    o<diam_miss_tip_c> if [#5070 EQ 0]
+      (DEBUG, LASER DIAM: no beam trip on coarse tip-find — check BEAM XY / polarity)
+      G0 G53 Z#<z_safe>
       M5
+      M63 P0
       o<laser_diameter> return
     o<diam_miss_tip_c> endif
 
@@ -95,20 +128,18 @@ o<laser_diameter> sub
     o<tip_bo> if [#<z_backoff> GT #<z_safe>]
       #<z_backoff> = #<z_safe>
     o<tip_bo> endif
-    G53 G0 Z#<z_backoff>
+    G0 G53 Z#<z_backoff>
 
-    o<tip_f> while [[#<_hal[laser-beam-broken]> EQ 0] AND [#<_abs_z> GT #<z_limit>]]
-      #<z_next> = [#<_abs_z> - #<step_z_fine>]
-      o<tip_fc> if [#<z_next> LT #<z_limit>]
-        #<z_next> = #<z_limit>
-      o<tip_fc> endif
-      G53 G1 Z#<z_next> F#<slow_fr>
-    o<tip_f> endwhile
-
-    o<diam_miss_tip_f> if [#<_hal[laser-beam-broken]> EQ 0]
+    M62 P0
+    G91
+    G38.3 Z[#<z_limit> - #<_abs_z>] F#<slow_z_fr>
+    G90
+    M63 P0
+    o<diam_miss_tip_f> if [#5070 EQ 0]
       (DEBUG, LASER DIAM: fine tip-find missed after coarse trip)
-      G53 G0 Z#<z_safe>
+      G0 G53 Z#<z_safe>
       M5
+      M63 P0
       o<laser_diameter> return
     o<diam_miss_tip_f> endif
 
@@ -117,107 +148,113 @@ o<laser_diameter> sub
     #5519 = 1
     #<z_measure> = [#<tip_z> - #<z_drop>]
 
-    (Retract Z0, move to START (clear of beam), drop to measure height)
-    G53 G0 Z#<z_safe>
-    G53 G0 X#<start_x> Y#<start_y>
-    G53 G0 Z#<z_measure>
+    (Retract 5 mm above tip only, then move horizontally to START — mux OFF)
+    #<z_travel> = [#<tip_z> + #<tip_retract_z>]
+    o<tip_trav_cap> if [#<z_travel> GT #<z_safe>]
+      #<z_travel> = #<z_safe>
+    o<tip_trav_cap> endif
+    G1 G53 Z#<z_travel> F#<tip_coarse_fr>
+    G0 G53 X#<start_x> Y#<start_y>
+    G0 G53 Z#<z_measure>
 
-    o<diam_blocked> if [#<_hal[laser-beam-broken]> NE 0]
-      (DEBUG, LASER DIAM: beam already broken at START — move START farther from beam)
-      G53 G0 Z#<z_safe>
+    M66 P3 L0
+    o<diam_blocked> if [#5399 NE 0]
+      (DEBUG, LASER DIAM: beam already broken at START — raise START OFFSET)
+      G0 G53 Z#<z_safe>
       M5
+      M63 P0
       o<laser_diameter> return
     o<diam_blocked> endif
 
-    (--- pre-touch: feed +X until break, then back off 2 mm ---)
-    o<pre> while [[#<_hal[laser-beam-broken]> EQ 0] AND [#<_abs_x> LT #<x_stop>]]
-      #<x_next> = [#<_abs_x> + #<step_x>]
-      o<prec> if [#<x_next> GT #<x_stop>]
-        #<x_next> = #<x_stop>
-      o<prec> endif
-      G53 G1 X#<x_next> F#<slow_fr>
-    o<pre> endwhile
-
-    o<diam_miss_pre> if [#<_hal[laser-beam-broken]> EQ 0]
+    (--- pre-touch: G38 -X until break, then back off +X by 2 mm ---)
+    M62 P0
+    G91
+    G38.3 X[#<x_stop> - #<_abs_x>] F#<fast_x_fr>
+    G90
+    M63 P0
+    o<diam_miss_pre> if [#5070 EQ 0]
       (DEBUG, LASER DIAM: pre-touch never broke before MAX TRAVEL)
-      G53 G0 Z#<z_safe>
+      G0 G53 Z#<z_safe>
       M5
+      M63 P0
       o<laser_diameter> return
     o<diam_miss_pre> endif
 
     #<x_pre> = #<_abs_x>
-    #<x_clear_start> = [#<x_pre> - #<x_backoff>]
-    o<pre_xmin> if [#<x_clear_start> LT #<start_x>]
+    #<x_clear_start> = [#<x_pre> + #<x_backoff>]
+    o<pre_xmax> if [#<x_clear_start> GT #<start_x>]
       #<x_clear_start> = #<start_x>
-    o<pre_xmin> endif
-    G53 G0 X#<x_clear_start>
+    o<pre_xmax> endif
+    G0 G53 X#<x_clear_start>
 
-    o<pre_still> if [#<_hal[laser-beam-broken]> NE 0]
+    M66 P3 L0
+    o<pre_still> if [#5399 NE 0]
       (DEBUG, LASER DIAM: still in beam after 2 mm X backoff)
-      G53 G0 Z#<z_safe>
+      G0 G53 Z#<z_safe>
       M5
+      M63 P0
       o<laser_diameter> return
     o<pre_still> endif
 
     o<diam_spin> if [#<probe_rpm> GT 0]
-      M4 S#<probe_rpm>
-      G4 P1.0
+      (spindle reverse M3 — custom.hal swaps M3/M4 to VFD)
+      M3 S#<probe_rpm>
+      G4 P2.0
     o<diam_spin> endif
 
-    (--- edge 1: feed +X until beam breaks ---)
-    o<e1> while [[#<_hal[laser-beam-broken]> EQ 0] AND [#<_abs_x> LT #<x_stop>]]
-      #<x_next> = [#<_abs_x> + #<step_x>]
-      o<e1c> if [#<x_next> GT #<x_stop>]
-        #<x_next> = #<x_stop>
-      o<e1c> endif
-      G53 G1 X#<x_next> F#<slow_fr>
-    o<e1> endwhile
-
-    o<diam_miss_e1> if [#<_hal[laser-beam-broken]> EQ 0]
+    (--- edge 1: G38 -X until beam breaks ---)
+    M62 P0
+    G91
+    G38.3 X[#<x_stop> - #<_abs_x>] F#<slow_x_fr>
+    G90
+    M63 P0
+    o<diam_miss_e1> if [#5070 EQ 0]
       (DEBUG, LASER DIAM: never broke beam before MAX TRAVEL)
-      G53 G0 Z#<z_safe>
+      G0 G53 Z#<z_safe>
       M5
+      M63 P0
       o<laser_diameter> return
     o<diam_miss_e1> endif
 
     #<x_break> = #<_abs_x>
     #5513 = #<x_break>
 
-    #<remain> = [#<x_stop> - #<x_break>]
+    #<remain> = [#<_abs_x> - #<x_stop>]
     o<diam_risk> if [#<remain> LT #<min_remain>]
       (DEBUG, LASER DIAM: after break, remaining travel too small — raise MAX TRAVEL or smaller tool)
-      G53 G0 Z#<z_safe>
+      G0 G53 Z#<z_safe>
       M5
+      M63 P0
       o<laser_diameter> return
     o<diam_risk> endif
 
-    (--- edge 2: continue +X until beam clears ---)
-    o<e2> while [[#<_hal[laser-beam-broken]> NE 0] AND [#<_abs_x> LT #<x_stop>]]
-      #<x_next> = [#<_abs_x> + #<step_x>]
-      o<e2c> if [#<x_next> GT #<x_stop>]
-        #<x_next> = #<x_stop>
-      o<e2c> endif
-      G53 G1 X#<x_next> F#<slow_fr>
-    o<e2> endwhile
-
-    o<diam_miss_e2> if [#<_hal[laser-beam-broken]> NE 0]
+    (--- edge 2: G38.5 -X until beam clears — loss of contact ---)
+    M62 P0
+    G91
+    G38.5 X[#<x_stop> - #<_abs_x>] F#<slow_x_fr>
+    G90
+    M63 P0
+    o<diam_miss_e2> if [#5070 EQ 0]
       (DEBUG, LASER DIAM: never cleared before MAX TRAVEL — tool too big / stop too short)
-      G53 G0 Z#<z_safe>
+      G0 G53 Z#<z_safe>
       M5
+      M63 P0
       o<laser_diameter> return
     o<diam_miss_e2> endif
 
     #<x_clear> = #<_abs_x>
     #5514 = #<x_clear>
-    #<diameter> = [ABS[#<x_clear> - #<x_break>]]
-    #5512 = #<diameter>
+    #<raw_diam> = [ABS[#<x_clear> - #<x_break>]]
+    #5512 = #<raw_diam>
+    #<diameter> = [#<raw_diam> + #<beam_cal>]
 
-    o<diam_too_big> if [#<diameter> GT #<max_ok_diam>]
+    o<diam_too_big> if [#<raw_diam> GT #<max_ok_diam>]
       (DEBUG, LASER DIAM: measured diameter exceeds travel window — reject)
-      G53 G0 Z#<z_safe>
+      G0 G53 Z#<z_safe>
       M5
-      M68 E0 Q#<diameter>
+      M68 E0 Q#<raw_diam>
       M68 E1 Q0
+      M63 P0
       o<laser_diameter> return
     o<diam_too_big> endif
 
@@ -225,10 +262,11 @@ o<laser_diameter> sub
     M68 E0 Q#<diameter>
     M68 E1 Q1
 
-    G53 G0 Z#<z_safe>
+    G0 G53 Z#<z_safe>
     M5
+    M63 P0
 
-    (DEBUG, LASER DIAM: break X=#5513 clear X=#5514 diameter=#5512)
+    (done: break X=#5513 clear X=#5514 raw=#5512 corr=#<diameter> cal=#5516)
     o<400> endif
 o<laser_diameter> endsub
 

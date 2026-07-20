@@ -1,28 +1,31 @@
 (author: jayem)
 (date: 2026)
-(Laser tool length — Z seek onto beam via laser-beam-broken (no G38 / probe-input).)
-(Prereqs: START X/Y + RPM #5501-#5503; BEAM Z #5504)
+(Laser tool length — G38 Z seek onto beam via motion.probe-input.)
+(M62 P0 ONLY around G38 — never during G0/G1.)
+(M63 P0 restores contact mux.)
+(Prereqs: BEAM X/Y + RPM #5501-#5503; BEAM Z #5504)
+(Tip-find at captured BEAM XY. START OFFSET #5509 is unused here.)
 (Results: #5510 tip Z, #5511 length=beam_z-trip_z, #5515=1 on success, M68 E0/E1)
 
 o<laser_length> sub
     o<400> if [#<_task> EQ 1]
 
     G21 G90
+    M63 P0
 
     #5515 = 0
     M68 E1 Q0
 
-    #<start_x> = #5501
-    #<start_y> = #5502
+    #<beam_x> = #5501
+    #<beam_y> = #5502
     #<probe_rpm> = #5503
     #<beam_z> = #5504
     #<approach> = #5505
     #<max_travel> = #5506
-    #<beam_offset> = #5509
     #<fast_fr> = #3004
     #<slow_fr> = #3005
-    #<step_z_coarse> = 0.20
-    #<step_z_fine> = 0.02
+    #<tip_coarse_fr> = 1200
+    #<slow_z_fr> = 50
 
     o<len_defaults> if [#<approach> LE 0]
       #<approach> = 10
@@ -30,73 +33,82 @@ o<laser_length> sub
     o<len_travel> if [#<max_travel> LE 0]
       #<max_travel> = 30
     o<len_travel> endif
-    o<len_off> if [#<beam_offset> LE 0]
-      #<beam_offset> = 10
-    o<len_off> endif
     o<len_feeds> if [#<fast_fr> LE 0]
-      #<fast_fr> = 200
+      #<fast_fr> = #<tip_coarse_fr>
       #<slow_fr> = 40
     o<len_feeds> endif
+    o<len_slow> if [#<slow_fr> LE 0]
+      #<slow_fr> = 40
+    o<len_slow> endif
+    o<len_zslow> if [#<slow_z_fr> LE 0]
+      #<slow_z_fr> = 50
+    o<len_zslow> endif
 
-    o<len_check_xy> if [[#<start_x> EQ 0] AND [#<start_y> EQ 0]]
-      (DEBUG, LASER LENGTH: set START X/Y first)
+    o<len_check_xy> if [[#<beam_x> EQ 0] AND [#<beam_y> EQ 0]]
+      (DEBUG, LASER LENGTH: set BEAM X/Y first — tool blocking light)
+      M63 P0
       o<laser_length> return
     o<len_check_xy> endif
 
     o<len_check_beam> if [#<beam_z> EQ 0]
-      (DEBUG, LASER LENGTH: set BEAM Z (#5504) first — use CALIBRATE)
+      (DEBUG, LASER LENGTH: set BEAM Z #5504 first — teach via MDI)
+      M63 P0
       o<laser_length> return
     o<len_check_beam> endif
 
-    #<tip_x> = [#<start_x> + #<beam_offset>]
+    #<tip_x> = #<beam_x>
+    #<tip_y> = #<beam_y>
     #<z_approach> = [#<beam_z> + #<approach>]
     #<z_limit> = [#<beam_z> - #<max_travel>]
 
-    (DEBUG, LASER LENGTH: seek at tip_x = START + BEAM OFFSET)
-    G53 G0 Z#<z_approach>
-    G53 G0 X#<tip_x> Y#<start_y>
+    (seek at captured BEAM XY)
+    G0 G53 Z#<z_approach>
+    G0 G53 X#<tip_x> Y#<tip_y>
 
     o<len_spin> if [#<probe_rpm> GT 0]
       M3 S#<probe_rpm>
       G4 P1.0
     o<len_spin> endif
 
-    (Coarse seek toward beam)
-    o<len_c> while [[#<_hal[laser-beam-broken]> EQ 0] AND [#<_abs_z> GT #<z_limit>]]
-      #<z_next> = [#<_abs_z> - #<step_z_coarse>]
-      o<len_cc> if [#<z_next> LT #<z_limit>]
-        #<z_next> = #<z_limit>
-      o<len_cc> endif
-      G53 G1 Z#<z_next> F#<fast_fr>
-    o<len_c> endwhile
+    (Coarse: one G1 to just above beam plane when clear, then G38 down)
+    M66 P3 L0
+    o<len_approach> if [#5399 EQ 0]
+      #<z_coarse_target> = [#<beam_z> + 1.0]
+      o<len_k_down> if [#<_abs_z> GT #<z_coarse_target>]
+        G1 G53 Z#<z_coarse_target> F#<tip_coarse_fr>
+      o<len_k_down> endif
+    o<len_approach> endif
 
-    o<len_miss_fast> if [#<_hal[laser-beam-broken]> EQ 0]
-      (DEBUG, LASER LENGTH: no beam trip on coarse seek — check XY / BEAM Z / polarity)
-      G53 G0 Z#<z_approach>
+    M62 P0
+    G91
+    G38.3 Z[#<z_limit> - #<_abs_z>] F#<tip_coarse_fr>
+    G90
+    M63 P0
+    o<len_miss_fast> if [#5070 EQ 0]
+      (DEBUG, LASER LENGTH: no beam trip on coarse seek — check BEAM XY / BEAM Z / polarity)
+      G0 G53 Z#<z_approach>
       M5
+      M63 P0
       o<laser_length> return
     o<len_miss_fast> endif
 
-    (Absolute backoff — never G91 inch-ambiguous retract)
+    (Backoff with G0 G53 — absolute machine Z, mux OFF)
     #<z_backoff> = [#<_abs_z> + 1]
     o<len_bo> if [#<z_backoff> GT #<z_approach>]
       #<z_backoff> = #<z_approach>
     o<len_bo> endif
-    G53 G0 Z#<z_backoff>
+    G0 G53 Z#<z_backoff>
 
-    (Fine seek)
-    o<len_f> while [[#<_hal[laser-beam-broken]> EQ 0] AND [#<_abs_z> GT #<z_limit>]]
-      #<z_next> = [#<_abs_z> - #<step_z_fine>]
-      o<len_fc> if [#<z_next> LT #<z_limit>]
-        #<z_next> = #<z_limit>
-      o<len_fc> endif
-      G53 G1 Z#<z_next> F#<slow_fr>
-    o<len_f> endwhile
-
-    o<len_miss_slow> if [#<_hal[laser-beam-broken]> EQ 0]
+    M62 P0
+    G91
+    G38.3 Z[#<z_limit> - #<_abs_z>] F#<slow_z_fr>
+    G90
+    M63 P0
+    o<len_miss_slow> if [#5070 EQ 0]
       (DEBUG, LASER LENGTH: no beam trip on fine seek)
-      G53 G0 Z#<z_approach>
+      G0 G53 Z#<z_approach>
       M5
+      M63 P0
       o<laser_length> return
     o<len_miss_slow> endif
 
@@ -111,10 +123,11 @@ o<laser_length> sub
     M68 E0 Q#<tool_length>
     M68 E1 Q1
 
-    G53 G0 Z#<z_approach>
+    G0 G53 Z#<z_approach>
     M5
+    M63 P0
 
-    (DEBUG, LASER LENGTH: trip Z=#5510  length=#5511 (beam_z - trip_z))
+    (done: trip Z=#5510 length=#5511 = beam_z - tip_z)
     o<400> endif
 o<laser_length> endsub
 

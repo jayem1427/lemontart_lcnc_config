@@ -2,8 +2,8 @@
 (date: 2026)
 (Store diameter-measure params.)
 (#1 = Z drop below tip mm)
-(#2 = max horizontal travel from START toward +X mm — stop looking)
-(#3 = beam offset from START toward +X mm — tip-find XY)
+(#2 = max horizontal travel from START toward −X mm — stop looking)
+(#3 = start offset from BEAM toward +X mm — clear START for diameter sweep)
 
 o<laser_set_diam_params> sub
     #5507 = #1
@@ -13,7 +13,7 @@ o<laser_set_diam_params> sub
     o<sdp_off> if [#3 GT 0]
       #5509 = #3
     o<sdp_off> endif
-    (DEBUG, LASER: Z-drop=#5507 max-travel=#5508 beam-offset=#5509)
+    (DEBUG, LASER: Z-drop=#5507 max-travel=#5508 start-offset=#5509)
 o<laser_set_diam_params> endsub
 
 M2

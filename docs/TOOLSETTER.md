@@ -156,7 +156,7 @@ Custom dialog: [`probe_basic/toolchange_dialog.py`](../probe_basic/toolchange_di
 
 ## Teach before first use
 
-1. Jog over the setter platter → **SET TOOL TOUCH OFF POS** (`#5181`–`#5183`)
+1. Jog over the setter platter (XY) → **SET TOOL TOUCH OFF POS** (`#5181`–`#5183`). Z may be home; if `#5183` is ~0, M600 approaches from **G53 Z0** and probes down with G38 (does not rapid to a guessed plate height).
 2. Load a **cutter** (not the touch probe) → **PROBE SPINDLE NOSE ZERO** → `#3010`
    - `probe_spindle_nose.ngc` **aborts** if `T#3014` is in the spindle — HAL routes `motion.probe-input` to the touch probe in that state, so a G38 on the contact setter would never trip (Z crash risk).
 3. Set probe feeds / retract in Tool Setter screen → **UPDATE** (`tool_setter_param_update.ngc`)

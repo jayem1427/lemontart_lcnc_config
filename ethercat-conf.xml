@@ -4,8 +4,8 @@
     <slave idx="0" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <!-- 6065: position deviation limit (encoder counts). 13107 = 1.0 mm @ 13107.2 counts/mm (was 0.1 mm — too tight, Er47.0) -->
-      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="33 33 00 00"/></sdoConfig>
+      <!-- 6065: position deviation limit (encoder counts). 6554 = 0.5 mm @ 13107.2 counts/mm -->
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="9A 19 00 00"/></sdoConfig>
       <!-- 6066: ms deviation must persist before Er47.0 (250 ms) -->
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="FA 00"/></sdoConfig>
       <!-- DO NOT push C00/C01 loop gains here. lcec sdoConfig runs on EVERY
@@ -45,8 +45,8 @@
     <slave idx="1" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <!-- 6065: position deviation limit (encoder counts). 13107 = 1.0 mm @ 13107.2 counts/mm (was 0.1 mm — too tight, Er47.0) -->
-      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="33 33 00 00"/></sdoConfig>
+      <!-- 6065: position deviation limit (encoder counts). 6554 = 0.5 mm @ 13107.2 counts/mm -->
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="9A 19 00 00"/></sdoConfig>
       <!-- 6066: ms deviation must persist before Er47.0 (250 ms) -->
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="FA 00"/></sdoConfig>
       <!-- DO NOT push C00/C01 loop gains here. lcec sdoConfig runs on EVERY
@@ -86,8 +86,8 @@
     <slave idx="2" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <!-- 6065: position deviation limit (encoder counts). 13107 = 1.0 mm @ 13107.2 counts/mm (was 0.1 mm — too tight, Er47.0) -->
-      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="33 33 00 00"/></sdoConfig>
+      <!-- 6065: position deviation limit (encoder counts). 6554 = 0.5 mm @ 13107.2 counts/mm -->
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="9A 19 00 00"/></sdoConfig>
       <!-- 6066: ms deviation must persist before Er47.0 (250 ms) -->
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="FA 00"/></sdoConfig>
       <!-- DO NOT push C00/C01 loop gains here. lcec sdoConfig runs on EVERY
@@ -127,8 +127,8 @@
     <slave idx="3" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <!-- 6065: position deviation limit (encoder counts). 364 = 1.0 deg @ 364.09 counts/deg (was 0.1 deg — too tight, Er47.0) -->
-      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="6C 01 00 00"/></sdoConfig>
+      <!-- 6065: position deviation limit (encoder counts). 182 = 0.5 deg @ 364.09 counts/deg -->
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="B6 00 00 00"/></sdoConfig>
       <!-- 6066: ms deviation must persist before Er47.0 (250 ms) -->
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="FA 00"/></sdoConfig>
       <!-- DO NOT push C00/C01 loop gains here. lcec sdoConfig runs on EVERY
