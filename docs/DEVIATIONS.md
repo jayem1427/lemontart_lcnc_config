@@ -4,7 +4,8 @@ This document lists deliberate differences between **this config** and typical u
 
 Stock references:
 
-- [Probe Basic INI template](../probe_basic/pb_required_ini_settings.ini) and [stock hallib](../probe_basic/hallib/)
+- [Probe Basic INI template](../probe_basic/pb_required_ini_settings.ini)
+- Upstream Probe Basic **sim hallib** (not shipped here — this mill uses EtherCAT HAL only)
 - [LinuxCNC tool change](https://linuxcnc.org/docs/html/config/ini-config.html#sub:emcio-section)
 - [RS274NGC remapping](https://linuxcnc.org/docs/html/remap/remap.html)
 
@@ -245,13 +246,17 @@ Upstream `probe_*.ngc` in this tree include **machine-specific fixes** not in st
 
 ## Probe Basic UI
 
-### `probe_basic_postgui.hal` vs stock `hallib/`
+### `probe_basic_postgui.hal` vs stock Probe Basic sim
 
-| Stock hallib | This repo `probe_basic/probe_basic_postgui.hal` |
-|--------------|--------------------------------------------------|
+Stock Probe Basic sim hallib (upstream package; removed from this repo) differs from our postgui:
+
+| Stock Probe Basic sim | This repo `probe_basic/probe_basic_postgui.hal` |
+|-----------------------|--------------------------------------------------|
 | `net probe-in => qtpyvcp.probe-in.out` (sim loopback) | **Not connected** — avoids duplicate driver on `motion.probe-input` |
 | `scale_to_rpm.out` → spindle RPM widget | **`spindle-speed-in`** from VFD (`custom.hal`) |
 | `not.0` on `halui.program.is-idle` | Uses **`pdnt.program.is-idle`** net (shared with WHB) |
+
+No `BASE_PERIOD` / `base-thread` here — those exist only for software stepgen / sim encoders.
 
 ### Custom DRO display
 
