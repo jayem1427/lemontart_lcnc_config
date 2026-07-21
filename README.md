@@ -179,10 +179,44 @@ git checkout <branch>
 - INI `FERROR` values are intentionally wide for bring-up — tighten for production
   ([DEVIATIONS.md](docs/DEVIATIONS.md)).
 
-Slave / DI map and spindle at-speed delay details: see older sections in git
-history or ask in an issue if you need the full pin table restored inline.
 Deep hardware notes still live in [DEVIATIONS.md](docs/DEVIATIONS.md) and
 [GETTING_STARTED.md](docs/GETTING_STARTED.md).
+
+### Slave / DI wiring (this mill)
+
+Home and limit switches are active-low NC and inverted in HAL (`not.*`). Contact
+probe inputs are NC (NPN) and wired direct (no inversion). Source of truth:
+[`ethercat_mill.hal`](ethercat_mill.hal).
+
+| Slave | HAL pin | DI | DB15 pin | Signal use |
+|-------|---------|----|----------|------------|
+| 0 (X/Y IO) | `lcec.0.0.di-4` | DI4 | 7 | X home |
+| 0 (X/Y IO) | `lcec.0.0.di-1` | DI1 | 10 | X limit chain (±) |
+| 0 (X/Y IO) | `lcec.0.0.di-5` | DI5 | 11 | Y home |
+| 0 (X/Y IO) | `lcec.0.0.di-2` | DI2 | 9 | Y limit chain (±) |
+| 1 (Z/probe IO) | `lcec.0.1.di-4` | DI4 | 7 | Z home (+Z) |
+| 1 (Z/probe IO) | `lcec.0.1.di-2` | DI2 | 9 | Contact toolsetter (gated when not T99) |
+| 1 (Z/probe IO) | `lcec.0.1.di-5` | DI5 | 11 | Touch probe (gated when T99) |
+| 2 (Z/laser IO) | `lcec.0.2.di-5` | DI5 | 11 | Laser DS-5V-M (`laser-beam-broken`) |
+| 2 (Z/laser IO) | `lcec.0.2.di-2` | DI2 | 9 | Free (Z− limit commented out in HAL) |
+| 3 (A/estop IO) | `lcec.0.3.di-1` | DI1 | 10 | Software E-stop NC |
+| 3 (A/estop IO) | `lcec.0.3.di-3` | DI3 | 8 | A home (planned; commented out in HAL) |
+
+### A6 CN1 / DB15 input map
+
+Every StepperOnline A6 EtherCAT drive uses the same CN1 DB15 pinout. HAL names
+are `lcec.0.<slave>.di-N`. The table above is this mill’s assignment; the
+connector map below is the same on every slave:
+
+| A6 input | CN1 / DB15 pin | Typical/default label |
+|----------|----------------|------------------------|
+| DI1 | 10 | Positive limit / user input |
+| DI2 | 9 | Negative limit / user input |
+| DI3 | 8 | Home input |
+| DI4 | 7 | TouchProbe2 |
+| DI5 | 11 | TouchProbe1 |
+| DI common | 13 | COM+ |
+| 24 V output | 15 | Internal +24 V supply |
 
 ### Spindle at-speed 
 
