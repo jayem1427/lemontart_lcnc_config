@@ -37,6 +37,7 @@ If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page 
 | Copy tool-change onto another mill | **[INSTALL_TOOL_CHANGE.md](docs/INSTALL_TOOL_CHANGE.md)** |
 | Tweak Probe Basic UI / SET Z / abort dialog | **[PROBE_BASIC_UI.md](docs/PROBE_BASIC_UI.md)** |
 | Log following error / tune servos | [SIGNAL_LOGGING](docs/SIGNAL_LOGGING.md) · [A6_TUNING](docs/A6_TUNING.md) · [ONE_CLICK_TUNING](docs/ONE_CLICK_TUNING.md) |
+| See how config files connect | **[FILE_MAP.md](docs/FILE_MAP.md)** |
 
 Full list of guides lives under [`docs/`](docs/).
 
@@ -74,6 +75,9 @@ The staged path (sim → EtherCAT → Probe Basic → CAM) is spelled out in
 | `nc_files/` | Programs (includes `m600_tool_change_test.ngc`) |
 | `linuxcnc-djr.cps` | Fusion post (M600, XYZA, G93) |
 | `docs/` | Everything you’re reading about |
+
+**Who loads whom:** see **[docs/FILE_MAP.md](docs/FILE_MAP.md)** (diagram of how these
+files connect).
 
 These files talk to each other a lot. An AI coding assistant helps when you point
 it at several of them at once. Add one feature at a time, and rigorously test before moving on to the next feature.
