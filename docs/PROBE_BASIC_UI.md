@@ -71,10 +71,10 @@ net spindle-current => mult2.7.in0
 net spindle-load-percent mult2.7.out => qtpyvcp.spindle-load-indicator.in-f
 ```
 
-- **RPM** comes from VFD feedback (`custom.hal` → `spindle-speed-in`), not from the sim hallib `scale_to_rpm` block.
+- **RPM** comes from VFD feedback (`custom.hal` → `spindle-speed-in`), not from a sim `scale_to_rpm` block.
 - **Load %** assumes ~4.2 A max motor current (`mult2.7.in1 = 23.81`). Tune if your spindle current scale differs.
 
-Stock hallib also loops `probe-in` through QtPyVCP for simulation. This config **leaves that disconnected** so only `ethercat_mill.hal` drives `motion.probe-input`.
+Stock Probe Basic sim loops `probe-in` through QtPyVCP. This config **leaves that disconnected** so only `ethercat_mill.hal` drives `motion.probe-input`.
 
 ---
 

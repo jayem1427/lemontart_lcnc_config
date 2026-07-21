@@ -197,7 +197,7 @@ ethercat_mill.ini
 | Pendant Z jog blocked | Homing flags — see `xhc-whb04b-6.hal` machine.is-on tie-in |
 | Spindle runs wrong direction | `custom.hal` M3/M4 swap comment — `REVERT` line |
 | Fusion post missing M600 / 4th axis | Cached post — [TOOLSETTER.md](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps) |
-| Probe Basic spindle RPM blank | `probe_basic_postgui.hal` must net `spindle-speed-in` (already done here; stock hallib uses `scale_to_rpm` from sim) |
+| Probe Basic spindle RPM blank | `probe_basic_postgui.hal` must net `spindle-speed-in` (already done here; stock Probe Basic sim uses `scale_to_rpm`) |
 
 **Useful commands**
 
