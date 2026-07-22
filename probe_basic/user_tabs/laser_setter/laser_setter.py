@@ -32,7 +32,7 @@ from qtpyvcp.utilities import logger
 
 LOG = logger.getLogger(__name__)
 MM_PER_INCH = 25.4
-IMAGE_DISPLAY_SCALE = 0.92  # fill the tighter image slot after layout densify
+IMAGE_DISPLAY_SCALE = 0.92  # display scale inside the doubled image slot
 PB_FONT = "BebasKai"
 PB_FONT_PATH = "/usr/share/fonts/truetype/BebasKai.ttf"
 HAL_LASER_BROKEN = "laser-beam-broken"
@@ -139,12 +139,26 @@ class UserTab(QWidget):
         palette = self.palette()
         palette.setColor(self.backgroundRole(), panel)
         self.setPalette(palette)
-        for group_name in ('grpMeasure', 'grpResults', 'grpCalibration', 'headerBar', 'footerBar'):
+        for group_name in ('grpMeasure', 'grpResults', 'grpCalibration', 'headerBar'):
             widget = getattr(self, group_name, None)
             if widget is not None:
                 widget.setAttribute(Qt.WA_StyledBackground, True)
 
         self._load_stylesheet(here)
+        # Force panel titles to 28pt — Probe Basic's app QSS otherwise keeps them at body size.
+        title_font = QFont(PB_FONT, 28)
+        for group_name in ('grpMeasure', 'grpResults', 'grpCalibration'):
+            group = getattr(self, group_name, None)
+            if group is not None:
+                group.setFont(title_font)
+        body = getattr(self, 'bodyLayout', None)
+        if body is not None:
+            # Controls stay compact on the left; image column takes leftover space.
+            body.setStretch(0, 0)
+            body.setStretch(1, 1)
+        btn_cal = getattr(self, 'btnCalibrate', None)
+        if btn_cal is not None and hasattr(btn_cal, 'setWordWrap'):
+            btn_cal.setWordWrap(True)
         self._tool_setter_pixmap = None
         self._load_tool_setter_image(here)
 
@@ -170,7 +184,7 @@ class UserTab(QWidget):
         self._beam_timer.timeout.connect(self._poll_beam_led)
         self._beam_timer.start()
         self._poll_beam_led()
-        self._set_status("Ready")
+        self._set_status("")
 
     def _var_file_path(self):
         """Config-dir linuxcnc.var (PARAMETER_FILE)."""
@@ -324,7 +338,7 @@ class UserTab(QWidget):
             LOG.warning("laser_setter: image %s missing", image_path)
             return
         lbl.setAutoFillBackground(False)
-        lbl.setAlignment(Qt.AlignCenter)
+        lbl.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         pixmap = QPixmap(image_path)
         if pixmap.isNull():
             LOG.warning("laser_setter: failed to load image %s", image_path)
@@ -533,7 +547,7 @@ class UserTab(QWidget):
             "2. LASER LED follows HAL signal laser-beam-broken "
             "(halcmd gets laser-beam-broken).\n"
             "3. Jog until the tool blocks the beam (LED = broken) → "
-            "CAPTURE BEAM.\n"
+            "Capture Current XY as Beam-Blocked.\n"
             "4. Set START OFFSET (+X from BEAM to clear START, default 15), "
             "MAX TRAVEL (−X from START through beam), Z DROP.\n"
             "5. PROBE RPM: 0 = static; >0 = M3 reverse on diameter pass "
@@ -555,6 +569,9 @@ class UserTab(QWidget):
         btn = getattr(self, 'btnGetStartPos', None)
         if btn is None:
             return
+        # Two-line label in .ui; word-wrap keeps it readable if font metrics differ.
+        if hasattr(btn, "setWordWrap"):
+            btn.setWordWrap(True)
         btn.clicked.connect(self._capture_start_xy)
 
     def _init_units(self):
@@ -653,7 +670,9 @@ class UserTab(QWidget):
             return False
         x_pos, y_pos, rpm = setup
         if abs(x_pos) < 1e-6 and abs(y_pos) < 1e-6:
-            self._set_status("ERROR: BEAM X/Y is 0,0 — press CAPTURE BEAM first")
+            self._set_status(
+                "ERROR: BEAM X/Y is 0,0 — Capture Current XY as Beam-Blocked first"
+            )
             return False
         if not self._mdi_set_numbered_params(
             ((5501, x_pos), (5502, y_pos), (5503, rpm))

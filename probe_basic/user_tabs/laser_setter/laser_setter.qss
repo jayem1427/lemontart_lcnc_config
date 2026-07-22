@@ -2,19 +2,23 @@
  * Laser Tool Setter — Probe Basic dark theme
  * Font: BebasKai (Qt family name — not "Bebas Kai")
  * Base: #2e3436  |  Panels: #363b3d
- * Type scale: 13pt body / 14pt inputs / 14pt panel titles / 20pt header
+ * Panel type: unified 14pt (labels, units, inputs, buttons, titles)
  * ============================================================ */
 
 QWidget#LASER_SETTER {
     background-color: #2e3436;
     color: rgb(238, 238, 236);
-    font: 13pt "BebasKai";
+    font: 14pt "BebasKai";
+}
+
+QWidget#controlsCluster,
+QWidget#middleColumn {
+    background: transparent;
 }
 
 /* ---------- Header / footer ---------- */
 
-QFrame#headerBar,
-QFrame#footerBar {
+QFrame#headerBar {
     background-color: #363b3d;
     border: 1px solid #8a8484;
     border-radius: 6px;
@@ -35,15 +39,16 @@ QLabel#lblTitle {
 
 QLabel#lblStatus {
     color: #f5c211;
-    font: 13pt "BebasKai";
-    padding-left: 4px;
+    font: 14pt "BebasKai";
+    padding-left: 12px;
+    min-width: 120px;
 }
 
 QLabel#lblLedLaser,
 QLabel#lblActiveTool,
 QLabel#lblUnitsCap {
     color: rgb(238, 238, 236);
-    font: 13pt "BebasKai";
+    font: 14pt "BebasKai";
     letter-spacing: 1px;
 }
 
@@ -60,28 +65,35 @@ QGroupBox {
     border: 1px solid #8a8484;
     border-radius: 6px;
     margin-top: 0px;
-    padding-top: 20px;
-    font: 14pt "BebasKai";
+    padding-top: 48px;
 }
 
 QGroupBox#grpMeasure,
 QGroupBox#grpResults,
 QGroupBox#grpCalibration {
     background-color: #363b3d;
+    /* Title inherits this; child labels/inputs stay 14pt via rules below */
+    font: 28pt "BebasKai";
 }
 
-QGroupBox::title {
+QGroupBox#grpMeasure::title,
+QGroupBox#grpResults::title,
+QGroupBox#grpCalibration::title {
     subcontrol-origin: padding;
     subcontrol-position: top center;
     left: 0px;
     top: 2px;
-    padding: 0 8px;
+    padding: 0 12px;
     color: white;
-    font: 14pt "BebasKai";
-    letter-spacing: 1px;
+    font: 28pt "BebasKai";
+    letter-spacing: 2px;
 }
 
-/* ---------- Buttons ---------- */
+QWidget#imageSlot {
+    background: transparent;
+}
+
+/* ---------- Buttons (Probe Basic chrome) ---------- */
 
 QPushButton {
     color: white;
@@ -98,12 +110,28 @@ QPushButton {
         stop:0.86 rgba(82, 82, 83, 255),
         stop:1 rgba(213, 218, 216, 255)
     );
-    font: 13pt "BebasKai";
+    font: 14pt "BebasKai";
     letter-spacing: 1px;
 }
 
 QPushButton#btnGetStartPos {
-    font: 13pt "BebasKai";
+    font: 14pt "BebasKai";
+    letter-spacing: 0px;
+    min-height: 52px;
+    padding: 6px 8px;
+}
+
+QPushButton#btnMeasureLength,
+QPushButton#btnMeasureDiameter {
+    font: 14pt "BebasKai";
+    min-height: 40px;
+}
+
+QPushButton#btnCalibrate {
+    font: 14pt "BebasKai";
+    letter-spacing: 0px;
+    min-height: 56px;
+    padding: 6px 8px;
 }
 
 QPushButton#btnHelp {
@@ -154,7 +182,7 @@ QLineEdit:focus {
     background-color: rgb(245, 245, 255);
 }
 
-/* ---------- Field labels & units (unified 13pt) ---------- */
+/* ---------- Field labels & units (same 14pt as inputs) ---------- */
 
 QLabel#lblToolSetterImage {
     background: transparent;
@@ -165,7 +193,7 @@ QLabel#lblToolSetterImage {
 
 QGroupBox QLabel {
     color: rgb(238, 238, 236);
-    font: 13pt "BebasKai";
+    font: 14pt "BebasKai";
     letter-spacing: 1px;
 }
 
@@ -180,9 +208,9 @@ QGroupBox#grpResults QLabel#lblResDiamCap,
 QGroupBox#grpCalibration QLabel#lblMasterPinCap,
 QGroupBox#grpCalibration QLabel#lblBeamDiaCap {
     color: rgb(238, 238, 236);
-    font: 13pt "BebasKai";
+    font: 14pt "BebasKai";
     letter-spacing: 1px;
-    min-width: 120px;
+    min-width: 118px;
 }
 
 QGroupBox#grpMeasure QLabel#lblStartXUnit,
@@ -195,13 +223,13 @@ QGroupBox#grpResults QLabel#lblResLengthUnit,
 QGroupBox#grpResults QLabel#lblResDiamUnit,
 QGroupBox#grpCalibration QLabel#lblMasterPinUnit,
 QGroupBox#grpCalibration QLabel#lblBeamDiaUnit {
-    color: #d6dadc;
-    font: 13pt "BebasKai";
+    color: rgb(238, 238, 236);
+    font: 14pt "BebasKai";
     letter-spacing: 0px;
-    min-width: 28px;
+    min-width: 32px;
 }
 
-/* ---------- Value readouts (DRO-style; after group QLabel rules) ---------- */
+/* ---------- Value readouts (DRO-style; same 14pt) ---------- */
 
 QLabel#lblResLength,
 QLabel#lblResDiam {
@@ -212,19 +240,14 @@ QLabel#lblResDiam {
     padding: 4px 10px;
     font: 14pt "BebasKai";
     letter-spacing: 0px;
-    min-width: 100px;
+    min-width: 110px;
     min-height: 28px;
 }
 
 QGroupBox#grpMeasure QLineEdit,
 QGroupBox#grpCalibration QLineEdit {
     font: 14pt "BebasKai";
-    max-width: 130px;
-}
-
-QGroupBox#grpCalibration QPushButton#btnCalibrate {
-    font: 13pt "BebasKai";
-    min-height: 40px;
+    max-width: 120px;
 }
 
 QComboBox#cmbUnits {
@@ -243,7 +266,7 @@ QComboBox#cmbUnits {
         stop:0.86 rgba(82, 82, 83, 255),
         stop:1 rgba(213, 218, 216, 255)
     );
-    font: 13pt "BebasKai";
+    font: 14pt "BebasKai";
 }
 
 QComboBox#cmbUnits:hover {
@@ -263,5 +286,5 @@ QComboBox#cmbUnits QAbstractItemView {
     background-color: #363b3d;
     border: 1px solid black;
     selection-background-color: rgb(85, 85, 238);
-    font: 13pt "BebasKai";
+    font: 14pt "BebasKai";
 }
