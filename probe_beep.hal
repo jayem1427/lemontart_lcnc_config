@@ -1,0 +1,16 @@
+# =========================================================
+# Probe / toolsetter audible feedback
+# =========================================================
+# Plays beep.mp3 on the rising edge of probe-in (touch probe,
+# contact toolsetter, or laser trip → motion.probe-input).
+#
+# Requires: scripts/probe_beep.py, beep.mp3 at config root,
+# and an MP3 player (mpg123 preferred; ffplay / gst-play-1.0 also ok).
+#
+# Disable: comment out HALFILE = probe_beep.hal in ethercat_mill.ini.
+# Must load AFTER ethercat_mill.hal (creates net probe-in).
+
+loadusr -Wn probe-beep python3 scripts/probe_beep.py
+
+# Add a reader on the existing probe-in signal (already drives motion.probe-input).
+net probe-in => probe-beep.trigger
