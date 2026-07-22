@@ -2,12 +2,13 @@
  * Laser Tool Setter — Probe Basic dark theme
  * Font: BebasKai (Qt family name — not "Bebas Kai")
  * Base: #2e3436  |  Panels: #363b3d
+ * Type scale: 13pt body / 14pt inputs / 14pt panel titles / 20pt header
  * ============================================================ */
 
 QWidget#LASER_SETTER {
     background-color: #2e3436;
     color: rgb(238, 238, 236);
-    font: 12pt "BebasKai";
+    font: 13pt "BebasKai";
 }
 
 /* ---------- Header / footer ---------- */
@@ -28,14 +29,14 @@ QFrame#headerDivider4 {
 
 QLabel#lblTitle {
     color: white;
-    font: 24pt "BebasKai";
+    font: 20pt "BebasKai";
     letter-spacing: 1px;
 }
 
 QLabel#lblStatus {
     color: #f5c211;
-    font: 11pt "BebasKai";
-    padding-left: 8px;
+    font: 13pt "BebasKai";
+    padding-left: 4px;
 }
 
 QLabel#lblLedLaser,
@@ -49,7 +50,7 @@ QLabel#lblUnitsCap {
 QLabel#ledLaserHealthy {
     background-color: #4a4f51;
     border: 1px solid #2a2a2a;
-    border-radius: 9px;
+    border-radius: 8px;
 }
 
 /* ---------- Panels ---------- */
@@ -59,8 +60,8 @@ QGroupBox {
     border: 1px solid #8a8484;
     border-radius: 6px;
     margin-top: 0px;
-    padding-top: 24px;
-    font: 16pt "BebasKai";
+    padding-top: 20px;
+    font: 14pt "BebasKai";
 }
 
 QGroupBox#grpMeasure,
@@ -73,10 +74,10 @@ QGroupBox::title {
     subcontrol-origin: padding;
     subcontrol-position: top center;
     left: 0px;
-    top: 4px;
+    top: 2px;
     padding: 0 8px;
     color: white;
-    font: 16pt "BebasKai";
+    font: 14pt "BebasKai";
     letter-spacing: 1px;
 }
 
@@ -97,7 +98,7 @@ QPushButton {
         stop:0.86 rgba(82, 82, 83, 255),
         stop:1 rgba(213, 218, 216, 255)
     );
-    font: 15pt "BebasKai";
+    font: 13pt "BebasKai";
     letter-spacing: 1px;
 }
 
@@ -106,12 +107,12 @@ QPushButton#btnGetStartPos {
 }
 
 QPushButton#btnHelp {
-    font: 18pt "BebasKai";
+    font: 16pt "BebasKai";
     padding: 0;
-    min-width: 36px;
-    max-width: 36px;
-    min-height: 36px;
-    max-height: 36px;
+    min-width: 32px;
+    max-width: 32px;
+    min-height: 32px;
+    max-height: 32px;
 }
 
 QPushButton:hover {
@@ -144,8 +145,8 @@ QLineEdit {
     border: 1px solid rgb(160, 160, 160);
     border-radius: 5px;
     padding: 4px 8px;
-    font: 15pt "BebasKai";
-    min-height: 30px;
+    font: 14pt "BebasKai";
+    min-height: 28px;
 }
 
 QLineEdit:focus {
@@ -153,7 +154,7 @@ QLineEdit:focus {
     background-color: rgb(245, 245, 255);
 }
 
-/* ---------- Value readouts (DRO-style) ---------- */
+/* ---------- Field labels & units (unified 13pt) ---------- */
 
 QLabel#lblToolSetterImage {
     background: transparent;
@@ -162,6 +163,46 @@ QLabel#lblToolSetterImage {
     margin: 0;
 }
 
+QGroupBox QLabel {
+    color: rgb(238, 238, 236);
+    font: 13pt "BebasKai";
+    letter-spacing: 1px;
+}
+
+QGroupBox#grpMeasure QLabel#lblStartXCap,
+QGroupBox#grpMeasure QLabel#lblStartYCap,
+QGroupBox#grpMeasure QLabel#lblProbeRpmCap,
+QGroupBox#grpMeasure QLabel#lblZDropCap,
+QGroupBox#grpMeasure QLabel#lblBeamOffsetCap,
+QGroupBox#grpMeasure QLabel#lblMaxTravelCap,
+QGroupBox#grpResults QLabel#lblResLengthCap,
+QGroupBox#grpResults QLabel#lblResDiamCap,
+QGroupBox#grpCalibration QLabel#lblMasterPinCap,
+QGroupBox#grpCalibration QLabel#lblBeamDiaCap {
+    color: rgb(238, 238, 236);
+    font: 13pt "BebasKai";
+    letter-spacing: 1px;
+    min-width: 120px;
+}
+
+QGroupBox#grpMeasure QLabel#lblStartXUnit,
+QGroupBox#grpMeasure QLabel#lblStartYUnit,
+QGroupBox#grpMeasure QLabel#lblProbeRpmUnit,
+QGroupBox#grpMeasure QLabel#lblZDropUnit,
+QGroupBox#grpMeasure QLabel#lblBeamOffsetUnit,
+QGroupBox#grpMeasure QLabel#lblMaxTravelUnit,
+QGroupBox#grpResults QLabel#lblResLengthUnit,
+QGroupBox#grpResults QLabel#lblResDiamUnit,
+QGroupBox#grpCalibration QLabel#lblMasterPinUnit,
+QGroupBox#grpCalibration QLabel#lblBeamDiaUnit {
+    color: #d6dadc;
+    font: 13pt "BebasKai";
+    letter-spacing: 0px;
+    min-width: 28px;
+}
+
+/* ---------- Value readouts (DRO-style; after group QLabel rules) ---------- */
+
 QLabel#lblResLength,
 QLabel#lblResDiam {
     color: black;
@@ -169,60 +210,21 @@ QLabel#lblResDiam {
     border: 1px solid rgb(160, 160, 160);
     border-radius: 5px;
     padding: 4px 10px;
-    font: 17pt "BebasKai";
-    min-width: 96px;
-    min-height: 30px;
-}
-
-/* ---------- Field labels ---------- */
-
-QGroupBox#grpResults QLabel#lblResLengthCap,
-QGroupBox#grpResults QLabel#lblResDiamCap {
-    color: rgb(238, 238, 236);
-    font: 15pt "BebasKai";
-    letter-spacing: 1px;
-    min-width: 88px;
-}
-
-QGroupBox#grpResults QLabel#lblResLengthUnit,
-QGroupBox#grpResults QLabel#lblResDiamUnit {
-    color: #d6dadc;
-    font: 15pt "BebasKai";
-    min-width: 28px;
-}
-
-QGroupBox#grpMeasure QLabel#lblStartXCap,
-QGroupBox#grpMeasure QLabel#lblStartYCap,
-QGroupBox#grpMeasure QLabel#lblProbeRpmCap,
-QGroupBox#grpCalibration QLabel#lblMasterPinCap,
-QGroupBox#grpCalibration QLabel#lblBeamDiaCap {
-    color: rgb(238, 238, 236);
     font: 14pt "BebasKai";
-    letter-spacing: 1px;
-    min-width: 140px;
-}
-
-QGroupBox#grpMeasure QLabel#lblStartXUnit,
-QGroupBox#grpMeasure QLabel#lblStartYUnit,
-QGroupBox#grpMeasure QLabel#lblProbeRpmUnit,
-QGroupBox#grpCalibration QLabel#lblMasterPinUnit,
-QGroupBox#grpCalibration QLabel#lblBeamDiaUnit {
-    color: #d6dadc;
-    font: 14pt "BebasKai";
-    min-width: 28px;
+    letter-spacing: 0px;
+    min-width: 100px;
+    min-height: 28px;
 }
 
 QGroupBox#grpMeasure QLineEdit,
 QGroupBox#grpCalibration QLineEdit {
-    font: 15pt "BebasKai";
-    max-width: 120px;
+    font: 14pt "BebasKai";
+    max-width: 130px;
 }
 
 QGroupBox#grpCalibration QPushButton#btnCalibrate {
-    font: 15pt "BebasKai";
-    min-height: 38px;
-    margin-top: 2px;
-    margin-bottom: 2px;
+    font: 13pt "BebasKai";
+    min-height: 40px;
 }
 
 QComboBox#cmbUnits {
@@ -230,7 +232,7 @@ QComboBox#cmbUnits {
     border: 2px solid black;
     border-radius: 5px;
     padding: 4px 8px;
-    min-width: 68px;
+    min-width: 64px;
     background: qlineargradient(
         spread:pad, x1:0, y1:1, x2:0, y2:0,
         stop:0 rgba(213, 218, 216, 255),
