@@ -2,7 +2,7 @@
 
 High-level scope for the **plot-to-LLM** semi-auto loop on this machine. Builds on the Servo Tuning tab, signal logging, and `SERVO_TUNING.md`.
 
-**Branch context:** `servo-tuning-gui`  
+**Status:** merged on `main` (Servo Tuning + Logging tabs ship with the mill config).  
 **Related docs:** `SERVO_TUNING.md` (human procedure), `SERVO_TUNING_LLM.md` (LLM playbook), `A6_TUNING.md` (tooling pin), `SIGNAL_LOGGING.md`
 
 ---
