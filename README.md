@@ -66,6 +66,7 @@ The staged path (sim → EtherCAT → Probe Basic → CAM) is spelled out in
 | `ethercat_mill.ini` | Main INI |
 | `ethercat_loadusr.hal` | Loads `lcec_conf` once (TWOPASS-safe) |
 | `ethercat_mill.hal` | Joints, CiA 402, limits, probe mux, laser pin |
+| `probe_beep.hal` | Audible beep on probe/toolsetter/laser trip (`beep.mp3`) |
 | `ethercat-conf.xml` | EtherCAT slaves + drive SDOs |
 | `custom.hal` | VFD Modbus, at-speed delay, faults |
 | `h100.mb2hal` | VFD register map |

@@ -143,6 +143,8 @@ Laser **M62 P0** muxes `laser-beam-broken` onto `motion.probe-input` for G38 mea
 
 Uses `and2` + `or2`, not `mux2` (float-only). **`#3014` does not update HAL** — renumbering requires editing `setp probe-tool-num.value`.
 
+Audible feedback: `probe_beep.hal` watches the same `probe-in` net and plays `beep.mp3` via `scripts/probe_beep.py` (userspace; not realtime). Optional — comment out the HALFILE to disable.
+
 See [README.md](../README.md#contact-probe-vs-toolsetter-hal) and [TOOLSETTER.md](TOOLSETTER.md#touch-probe-tool-number-setup-and-renumbering).
 
 ### Tool change HAL loop broken on purpose
