@@ -119,7 +119,8 @@ readings.
 You could replace the contact toolsetter entirely, but the U-slot of this sensor accepts a maximum of 9mm tools, which I find too restricting. 
 So I have both types on my machine.
 
-**Full guide:** [docs/LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md)
+**Full guide** (measure flow, **wiring + installation**, HAL mux, params):
+[docs/LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md)
 
 ### Tool Diameter Measurement
 
