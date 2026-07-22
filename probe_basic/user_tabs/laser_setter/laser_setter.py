@@ -32,7 +32,7 @@ from qtpyvcp.utilities import logger
 
 LOG = logger.getLogger(__name__)
 MM_PER_INCH = 25.4
-IMAGE_DISPLAY_SCALE = 0.624  # 20% larger than prior 0.52 setting
+IMAGE_DISPLAY_SCALE = 0.92  # fill the tighter image slot after layout densify
 PB_FONT = "BebasKai"
 PB_FONT_PATH = "/usr/share/fonts/truetype/BebasKai.ttf"
 HAL_LASER_BROKEN = "laser-beam-broken"
