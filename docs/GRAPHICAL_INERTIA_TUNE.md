@@ -18,7 +18,7 @@ Kept **separate** from one-click gain tuning and from the drive-internal
 | `config/tuning/inertia_settings.json` | Saved per-axis knobs (auto-written) |
 | `logs/tuning/graphical_inertia/` | Journals + `trace.csv` |
 | `test_a6_graphical_inertia.py` | Unit tests (no hardware) |
-| `Sigma II Parameter Calculator Rev 2.42.xls` | Cross-check worksheet |
+| `docs/reference/Sigma II Parameter Calculator Rev 2.42.xls` | Cross-check worksheet |
 
 **Related:** `SERVO_TUNING.md` (Phase 1), `ONE_CLICK_TUNING.md` (gains only),
 `A6_TUNING.md` (SDO map).

@@ -27,7 +27,7 @@ Stock references:
 | A axis homing | Real switch sequence | **Disabled** — `HOME_SEQUENCE = 3` (after Z/X/Y), zero search vel |
 | Z− limit | Usually wired | **Commented out** in HAL (pin free) |
 | Feed override max | 100–200% | **250%** (`MAX_FEED_OVERRIDE = 2.5`) |
-| Fusion post | Stock `linuxcnc.cps`, `M6`, preload `T` | **`linuxcnc-djr.cps`**, M600 default, no preload |
+| Fusion post | Stock `linuxcnc.cps`, `M6`, preload `T` | **`post-processor/linuxcnc-djr.cps`**, M600 default, no preload |
 | `PROGRAM_PREFIX` | Relative to config | **Absolute path** in committed INI — change on clone |
 | Joint following error | Tight (e.g. ~2 mm / 1 mm) | **Relaxed** `FERROR = 1270`, `MIN_FERROR = 254` for bench — tighten later |
 | M600 collet pause | Often same as setter / G30 | **Separate tool-load XY** (default G53 270, 100) vs taught setter `#5181–#5183` |
@@ -276,15 +276,16 @@ Replaces stock QtPyVCP dialog with **ABORT CYCLE** button. See [PROBE_BASIC_UI.m
 
 Most PB machine params still live in `linuxcnc.var` / Probe screens.
 
-### `launch.sh`
+### Qt Quick rendering
 
-Forces `QT_QUICK_BACKEND=software` — workaround for some Qt Quick + GPU combinations.
+If Probe Basic fails to render on your GPU, launch with
+`QT_QUICK_BACKEND=software linuxcnc ethercat_mill.ini`.
 
 ---
 
 ## CAM / post processor
 
-`linuxcnc-djr.cps` fork of Autodesk LinuxCNC post:
+`post-processor/linuxcnc-djr.cps` fork of Autodesk LinuxCNC post:
 
 - Default **`toolChangeMode: "M600"`**
 - **`preloadTool: false`**

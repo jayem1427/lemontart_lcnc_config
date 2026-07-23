@@ -110,7 +110,7 @@ To relocate the collet-change spot:
 
 1. Jog to the new pause position; note G53 X/Y/Z.
 2. Edit `#<tool_load_*>` in `tool_touch_off.ngc` and matching coords in `go_to_g30.ngc` / `abort_tool_change.ngc`.
-3. Re-run [`nc_files/m600_tool_change_test.ngc`](../nc_files/m600_tool_change_test.ngc) on air.
+3. Re-run an air M600 sequence (`T3 M600`, then another tool) to confirm the new park spot.
 
 ### Abort / cancel during M600
 
@@ -164,11 +164,11 @@ Custom dialog: [`probe_basic/toolchange_dialog.py`](../probe_basic/toolchange_di
 
 ### Air-test program
 
-[`nc_files/m600_tool_change_test.ngc`](../nc_files/m600_tool_change_test.ngc) — machine homed, setter taught, tools in the table. Run in AUTO; each `T<n> M600` pauses at tool-load for the dialog, then probes on the setter. This machine’s Z soft limit is low — the program uses `G53 Z0`, not a high work Z.
+MDI or a short AUTO program: machine homed, setter taught, tools in the table. Run `T<n> M600` for a few tools; each pause is at tool-load for the dialog, then probes on the setter. This machine’s Z soft limit is low — approach from `G53 Z0`, not a high work Z.
 
 ## CAM / post processor (`linuxcnc-djr.cps`)
 
-Fusion post for this config. Install in Fusion **Posts** folder (replace the old file completely — Fusion caches posts).
+Fusion post for this config: [`post-processor/linuxcnc-djr.cps`](../post-processor/linuxcnc-djr.cps). Install in Fusion **Posts** folder (replace the old file completely — Fusion caches posts).
 
 **Post engine 45702+ required** (current Fusion). Post dialog groups: **Tool Change**, **Multi-Axis Setup**, etc.
 
