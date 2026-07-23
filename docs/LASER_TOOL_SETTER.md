@@ -6,6 +6,9 @@ U-slot laser beam sensor — without messing up your contact toolsetter.
 **See also:** [TOOLSETTER.md](TOOLSETTER.md) (contact M600 length) ·
 [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) · [README](../README.md)
 
+**Install / wire the sensor:** [Hardware](#hardware) · [Installation](#installation)
+(mount, electrical wiring, HAL/INI, smoke test).
+
 ---
 
 ## ELI5: what is this?
@@ -124,15 +127,134 @@ smoke tests. **Not** a spindle-nose TLO replacement — keep using the contact s
 
 ---
 
-## Hardware / wiring (this mill)
+## Hardware
 
-| Item | Note |
-|------|------|
-| Sensor | Kexin **DS-5V-M** |
+| Item | Spec / note |
+|------|-------------|
+| Sensor | Kexin **DS-5V-M** U-slot beam-break |
 | Spec tool range | Ø 0.05–8 mm (bigger tools may still trip; MAX TRAVEL limits the sweep) |
-| Power | **5 V** only — never feed 24 V into the sensor |
-| Select | Tie to **GND** (0 V = ON) |
-| Signal | Slave **2** `lcec.0.2.di-5` — DB15 **pin 11**, level-shift 5 V → 24 V |
+| Output | HCMOS **5 V push-pull** — typically clear ≈ 5 V, broken ≈ 0 V at the sensor |
+| Select (enable) | Separate from power: **0 V = ON**, float/5 V = OFF → **hardwire Select to GND** |
+| Power | **5 V** / 0 V only — **never** feed A6 **24 V** into the sensor |
+| Level shift | Required **5 V → 24 V** before any StepperOnline A6 digital input |
+| Body LED | Factory housing LED: red ON when clear, OFF when broken — informational only |
+
+The Probe Basic tab LED mirrors HAL `laser-beam-broken` (clear vs broken). Do not
+treat the sensor’s body LED colors as the UI contract.
+
+Some reseller pages list “DS-5V” as 24 V. On **this mill the DS-5V-M is wired as a
+5 V HCMOS sensor** — check the label on *your* unit before powering it.
+
+---
+
+## Installation
+
+How to mount, wire, and enable the Laser Setter on this mill (or adapt it to
+another Probe Basic / EtherCAT machine).
+
+### 1. Physical mount
+
+1. Bolt the U-slot body to the table / fixture so the **slot runs along Y** and
+   the beam crosses the slot in **X** (this mill’s layout).
+2. Leave enough **−X** clearance past the beam for `MAX TRAVEL` without hitting
+   the far wall or the contact toolsetter body.
+3. Height: the beam should sit where tips of the tools you care about can enter
+   the slot safely from **G53 Z0**.
+4. Cable exit: keep the harness clear of X/Y travel and coolant splash if you
+   can.
+
+After mount, teach BEAM XY with the tool **blocking** the light — see
+[Your machine layout](#your-machine-layout-important) and
+[Measure diameter](#measure-diameter-happy-path).
+
+### 2. Electrical wiring (this mill)
+
+| Sensor lead | Connection |
+|-------------|------------|
+| **+5 V** | Regulated **5 V** supply (not A6 CN1 pin 15 / 24 V) |
+| **GND / 0 V** | Common with the level-shifter and A6 DI COM |
+| **Select** | Tie to **GND** (sensor permanently ON) |
+| **Signal (OUT)** | Into a **5 V → 24 V** level shifter, then to A6 |
+
+| After level shift | Connection on this mill |
+|-------------------|-------------------------|
+| Shifted signal | Slave **2** CN1 **DB15 pin 11** = DI5 = `lcec.0.2.di-5` |
+| DI common | CN1 **DB15 pin 13** (COM+) per A6 map in [README](../README.md#a6-cn1--db15-input-map) |
+
+```
+DS-5V-M (5 V)
+  +5V ──► 5 V supply
+  GND ──► common GND
+  SEL ──► GND  (hardwired ON)
+  OUT ──► level shift 5 V → 24 V ──► A6 Slave 2 DI5 (DB15 pin 11)
+                                         │
+                                         ▼
+                                   lcec.0.2.di-5
+                                         │
+                                         ▼
+                                 laser-beam-broken
+```
+
+**Polarity contract:** HAL signal `laser-beam-broken` must be **TRUE when the tool
+blocks the beam**. On this mill the level shift already lands that way — DI5 is
+netted straight to `laser-beam-broken` (no `not`). If your shifter inverts, insert
+a `not` between DI5 and the signal.
+
+Bring-up check (LinuxCNC running, Select tied to GND, 5 V on):
+
+```bash
+# Beam clear → expect FALSE; block beam with a tool/finger-safe stick → TRUE
+halcmd getp lcec.0.2.di-5
+halcmd gets laser-beam-broken
+halcmd getp motion.digital-in-03
+```
+
+### 3. Software / config install
+
+Copy into your machine config (paths relative to the config root):
+
+```text
+probe_basic/user_tabs/laser_setter/     # tab (.ui / .py / .qss / PNG)
+probe_basic/subroutines/laser_diameter.ngc
+probe_basic/subroutines/laser_length.ngc
+probe_basic/subroutines/laser_set_start_xy.ngc
+probe_basic/subroutines/laser_set_diam_params.ngc
+probe_basic/subroutines/laser_set_beam_z.ngc
+```
+
+Also keep **`on_abort.ngc`** issuing **`M63 P0`** so an abort cannot leave the laser
+muxed onto `motion.probe-input`.
+
+#### INI
+
+```ini
+[DISPLAY]
+USER_TABS_PATH = probe_basic/user_tabs/
+
+[RS274NGC]
+SUBROUTINE_PATH = .:probe_basic/subroutines
+```
+
+Probe Basic loads **every** folder under `USER_TABS_PATH` — remove leftover empty
+tab folders from other branches or startup will crash.
+
+#### Motion / I/O
+
+This repo loads `motmod` with `num_aio=4` so macros can publish results via
+`M68 E0` / `M68 E1`. Digital outs for **M62/M63 P0** (`motion.digital-out-00`) and
+digital in **P3** (`motion.digital-in-03`) must exist — defaults are usually enough;
+confirm with `halcmd show pin motion.digital-out-00` / `motion.digital-in-03`.
+
+#### HAL (`ethercat_mill.hal`)
+
+Port (or keep) the laser + probe-mux block:
+
+1. `net laser-beam-broken lcec.0.2.di-5 => motion.digital-in-03 and2.7.in0`
+2. **M62 P0** (`motion.digital-out-00`) gates laser onto `motion.probe-input` and
+   gates **off** the contact probe / toolsetter path while laser mode is on.
+3. **M63 P0** restores contact-only routing.
+
+Adapt the `lcec.0.N.di-M` pin if your free DI is on a different slave.
 
 ### HAL picture
 
@@ -169,16 +291,21 @@ lcec.0.2.di-5          (pin — Slave 2 DI5 / DB15 pin 11)
  motion.digital-in-03  (live G-code reads via M66 P3)
 ```
 
-This mill’s level shift is **TRUE when broken** — no invert. If the LED is
-backwards (on when clear / off when blocked), insert a `not` between DI5 and
-`laser-beam-broken`.
-
 **Do not** use `#<_hal[laser-beam-broken]>` in the measure loops — that value is
 frozen at program start. G38 uses `motion.probe-input` while **M62 P0** is on;
 **M66 P3** / `#5399` is still used for beam-at-START safety checks.
 
 Results publish with `M68 E0` (corrected diameter or length) and `M68 E1` (1 = success).
 `#5512` always stores the **raw** shadow width.
+
+### 4. Smoke test after install
+
+1. Restart LinuxCNC after HAL / tab / INI changes.
+2. Open **Laser Setter** — LED flips when you break/clear the beam by hand.
+3. Jog a known pin into the beam → **CAPTURE BEAM** → set START OFFSET / MAX TRAVEL
+   → **MEASURE DIAMETER**.
+4. Confirm contact toolsetter / touch probe still work after a laser measure
+   (mux restored — if not, MDI **M63 P0**).
 
 ---
 
@@ -193,6 +320,7 @@ Results publish with `M68 E0` (corrected diameter or length) and `M68 E1` (1 = s
 | `laser_set_diam_params.ngc` | Z DROP / MAX TRAVEL / START OFFSET |
 | `laser_set_beam_z.ngc` | BEAM Z for length |
 | `ethercat_mill.hal` | `laser-beam-broken` + M62/M63 probe mux |
+| `on_abort.ngc` | Issues **M63 P0** so abort cannot leave laser muxed |
 
 ---
 
@@ -225,7 +353,7 @@ tab rewrites the file sorted when it saves `#5516` / `#5517`.
 
 | What you see | Try this |
 |--------------|----------|
-| LED never changes | `halcmd gets laser-beam-broken` and `halcmd getp lcec.0.2.di-5`; Select tied to GND? 5 V power? |
+| LED never changes | Wiring bring-up: Select→GND, **5 V** power, level shift, then `halcmd gets laser-beam-broken` / `getp lcec.0.2.di-5` — [Installation](#installation) |
 | LED frozen mid-measure | Restart Probe Basic so the tab’s non-blocking MDI wait is loaded |
 | Tip-find never trips / never stops | Restart after HAL change; measure needs **M62 P0** + G38 on `motion.probe-input` (not `#<_hal[]>`) |
 | Tip-find never trips | BEAM XY wrong, or polarity (DI invert) |
