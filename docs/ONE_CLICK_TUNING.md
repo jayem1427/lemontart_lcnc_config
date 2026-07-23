@@ -49,7 +49,7 @@ restored to its baseline value.
   and rely on you having confirmed clearance.
 - **FERR watchdog.** A 1 kHz sampler watches drive 60F4 during every move
   and aborts motion when |FERR| crosses **80% of the drive 6065 window**
-  (1.0 mm / 1.0° on this machine → abort at 0.8). An unstable gain step is
+  (0.5 mm / 0.5° on this machine → abort at 0.4). An unstable gain step is
   therefore stopped by software *before* the drive faults with Er47.0.
 - **Writes reuse the hardened APPLY path** (`apply_axis_params`): machine
   OFF → SDO download + read-back verify with retries → machine ON. Only keys
@@ -196,7 +196,7 @@ the folder somewhere safe or paste `journal.md` into an issue/LLM chat.
 | `improved` (verify/backoff failed) | Ladder found a strong stable step; verify tripped on HF harmonics or a late integral stress but engine kept `_best_values` | `verify/keep-best` event lists the restored gains | try the axis; store EEPROM if happy — journal explains why verify failed |
 | `no-change` | Ladder found nothing ≥3% better than baseline | accepted vs stalled steps | baseline may already be good; try AGGRESSIVE, or tune stimulus feed up so tracking error dominates noise |
 | `cancelled` | You pressed CANCEL / Ctrl+C | — | baseline was restored; journal keeps everything measured so far |
-| Watchdog trips at the *first* speed step | Baseline is closer to instability than it looks, or 6065 window is tight | `tripped_ferr` value in the measure meta | verify 6065 (should be ~1.0 mm), start from a softer baseline preset |
+| Watchdog trips at the *first* speed step | Baseline is closer to instability than it looks, or 6065 window is tight | `tripped_ferr` value in the measure meta | verify 6065 (should be ~0.5 mm), start from a softer baseline preset |
 | Gains end up lower than your hand tune | The gate is stricter than your ears, or the stimulus excites a mode your NGC didn't | FFT peaks in the last stalled/unstable step | that peak frequency is real information — consider a manual notch there, then rerun |
 
 4. If the behavior looks like an engine bug, reproduce it in the simulator:

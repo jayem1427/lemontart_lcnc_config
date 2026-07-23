@@ -70,7 +70,7 @@ Backend: `probe_basic/python/resonance_analysis.py`.
 | **ONE-CLICK TUNE** per axis (auto gain ladder + notch + journal) | New — sim-tested; see `ONE_CLICK_TUNING.md` for hardware bring-up |
 | Read-only SDOs skipped (C01.10, C01.38) | Working — no longer abort the whole APPLY |
 | Startup C00/C01 SDOs in `ethercat-conf.xml` | **Removed** — was overwriting RAM tuning every bus claim |
-| Startup 6065/6066 fault windows | Still set (1.0 mm / 1.0° / 250 ms) |
+| Startup 6065/6066 fault windows | Still set (0.5 mm / 0.5° / 250 ms) |
 | Logging tab default sample rate | **1000 Hz** via in-process `hal.get_value` |
 | Bench presets incl. `one_click_best_20260712` (X/Y), `10um`, `20um_y_axis`, `Z/20um`, `Z/no_buzz` | Under `config/tuning/presets/` — combo starts on **(none)** |
 
@@ -86,7 +86,7 @@ These are operational, not “final tuned gains”:
 
 | Change | Why | Where |
 |--------|-----|--------|
-| Drive **6065** XYZ **1.0 mm**, A **1.0°**; **6066** **250 ms** | 0.1 mm Er47.0 amp faults during moves | `ethercat-conf.xml`, presets, `a6_servo_tune` defaults |
+| Drive **6065** XYZ **0.5 mm**, A **0.5°**; **6066** **250 ms** | 0.1 mm Er47.0 amp faults during moves | `ethercat-conf.xml`, presets, `a6_servo_tune` defaults |
 | Host INI `FERROR` left at main’s relaxed values after rebase | Avoid fighting toolchange / jog | `ethercat_mill.ini` |
 | Z soft **MAX_LIMIT = 400 mm** | Unhomed absolute encoder can sit ~300+ mm → jog blocked if soft max is lower | `ethercat_mill.ini` |
 
@@ -137,7 +137,7 @@ Still written at startup (fault windows only):
 
 | SDO | Meaning | XYZ | A |
 |-----|---------|-----|---|
-| `6065h` | Max position deviation (counts) | 13107 ≈ **1.0 mm** | 364 ≈ **1.0°** |
+| `6065h` | Max position deviation (counts) | 6554 ≈ **0.5 mm** | 182 ≈ **0.5°** |
 | `6066h` | Fault persistence (ms) | **250** | **250** |
 | `6060h` | Modes of operation | CSP (8) | CSP (8) |
 

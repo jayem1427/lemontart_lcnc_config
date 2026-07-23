@@ -1,18 +1,17 @@
 o<abort_tool_change> sub
 ; Clean cancel after program.abort during M600 / toolsetter / job.
-; Retract Z, then park at tool-load XY (same as tool_touch_off load position).
+; Retract Z, then park at tool-load XY (same as go_to_g30 / tool_touch_off).
 
 M73
 M5
 M9
+M63 P0 (Restore contact probe mux — same as on_abort)
 M50 P1
 G90
 G40
 G49
 
-G53 G0 Z0
-G53 G0 X270 Y100
-G53 G0 Z0
+o<go_to_g30> call
 
 o<abort_tool_change> endsub
 M2

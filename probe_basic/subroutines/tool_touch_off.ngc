@@ -331,8 +331,8 @@ o<200> do
 
   ;-110- 3. Probe approach Z then G38 probe cycle
   ; Safe top on this mill is G53 Z0 (home). Never command probe-start above that —
-  ; AXIS_Z MAX_LIMIT is intentionally loose (~50) for unhomed jog and must NOT be
-  ; used as the approach ceiling (that drove Z into the hard stop after tool load).
+  ; AXIS_Z MAX_LIMIT is 400.0 mm and must NOT be used as the approach ceiling
+  ; (that drove Z into the hard stop after tool load when an old soft limit was assumed).
   ; When #5183 is unset (~0), known-tool math gives +length above home — clamp to
   ; Z0 and probe down with G38 (never rapid to a guessed plate height).
   o<110> if [#<use_tool_table> EQ 1 AND #<tool_length_old> GT 0]

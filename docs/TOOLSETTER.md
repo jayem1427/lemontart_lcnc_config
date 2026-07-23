@@ -18,7 +18,7 @@ Semi-automatic tool length measurement for a **manual collet spindle**, based on
 - `probe_basic_postgui.hal` — `qtpyvcp_manualtoolchange` wired for M6 OK dialog (tool number + remark)
 - `ethercat_mill.hal` — removed `tool-change` → `tool-changed` auto-loop; operator must confirm via dialog
 - `ethercat_mill.hal` — touch probe (DI5) vs contact toolsetter (DI2) gated onto `motion.probe-input` by `halui.tool.number` (T99 → probe only; any other tool → toolsetter only). See **Touch probe vs toolsetter routing** in [README.md](../README.md).
-- `custom.hal` — VFD fault OR uses `or2.1`; `or2.0` is probe routing in `ethercat_mill.hal` (`loadrt or2 count=2` — do not add a second `or2` load with `names=`)
+- `custom.hal` — VFD fault OR uses `or2.1`; `or2.0` / `or2.3` are probe routing in `ethercat_mill.hal` (`loadrt or2 count=4` — do not add a second `or2` load with `names=`)
 
 Probe Basic touch-probe tool number: `#3014` in `linuxcnc.var` (must match the tool table slot and HAL). See **[Touch probe tool number](#touch-probe-tool-number-setup-and-renumbering)** below.
 
@@ -164,7 +164,7 @@ Custom dialog: [`probe_basic/toolchange_dialog.py`](../probe_basic/toolchange_di
 
 ### Air-test program
 
-[`nc_files/m600_tool_change_test.ngc`](../nc_files/m600_tool_change_test.ngc) — machine homed, setter taught, tools in the table. Run in AUTO; each `T<n> M600` pauses at tool-load for the dialog, then probes on the setter. This machine’s Z soft limit is low — the program uses `G53 Z0`, not a high work Z.
+[`nc_files/m600_tool_change_test.ngc`](../nc_files/m600_tool_change_test.ngc) — machine homed, setter taught, tools in the table. Run in AUTO; each `T<n> M600` pauses at tool-load for the dialog, then probes on the setter. Approach/retract use **G53 Z0** (machine home), not a guessed work Z above the soft limit.
 
 ## CAM / post processor (`linuxcnc-djr.cps`)
 

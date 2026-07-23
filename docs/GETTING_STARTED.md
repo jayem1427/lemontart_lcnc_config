@@ -129,7 +129,7 @@ Before trusting CAM:
 5. Confirm HAL routing: `halcmd show pin halui.tool.number` and trip each sensor.
 6. Optional: Laser Setter diameter smoke test — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md).
 
-**EtherCAT note:** committed INI `FERROR` values are wide for bring-up (1270 / 254 mm); drives also set SDO `6065`/`6066` (~1.0 mm / 250 ms). Tighten both after motion is stable — [DEVIATIONS.md](DEVIATIONS.md#relaxed-ferror--min_ferror) and [A6_TUNING.md](A6_TUNING.md).
+**EtherCAT note:** committed INI `FERROR` values are wide for bring-up (1270 / 254 mm); drives also set SDO `6065`/`6066` (~0.5 mm / 250 ms). Tighten both after motion is stable — [DEVIATIONS.md](DEVIATIONS.md#relaxed-ferror--min_ferror) and [A6_TUNING.md](A6_TUNING.md).
 
 ## How the config fits together
 

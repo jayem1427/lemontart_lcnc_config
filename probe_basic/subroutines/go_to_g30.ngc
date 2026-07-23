@@ -1,6 +1,7 @@
 o<go_to_g30> sub
 ;Version date: 2026-07-09
 ; Tool-load / collet-change position (G53). Setter stays on #5181-#5183.
+; Keep XY in sync with tool_touch_off.ngc #<tool_load_x/y_coords> (270, 100).
 ; Z clears first, then XY, then Z to load height.
 
 M73 (save caller state in current call context, restore on return or endsub)
