@@ -3,6 +3,9 @@
 Measure tool **diameter** (and optionally experiment with length) using a cheap
 U-slot laser beam sensor — without messing up your contact toolsetter.
 
+**Laser only (no contact pad)?** Start with **[LASER_ONLY_SETUP.md](LASER_ONLY_SETUP.md)** —
+what to skip, how to handle tool length, and CAM without M600.
+
 **See also:** [TOOLSETTER.md](TOOLSETTER.md) (contact M600 length) ·
 [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) · [README](../README.md)
 
@@ -123,7 +126,8 @@ into `linuxcnc.var` in **ascending parameter order** (required by LinuxCNC).
 **MEASURE LENGTH** — seeks down onto the beam at captured **BEAM XY** and reports
 `beam_z − tip_z` (needs `#5504` taught via MDI `#5504=<G53 Z>`). Useful for polarity /
 smoke tests. **Not** a spindle-nose TLO replacement — keep using the contact setter
-+ M600 for real tool lengths.
++ M600 for real tool lengths, or see [LASER_ONLY_SETUP.md](LASER_ONLY_SETUP.md) if you
+have no contact pad.
 
 ---
 

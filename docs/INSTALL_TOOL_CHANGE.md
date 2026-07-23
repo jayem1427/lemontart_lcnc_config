@@ -26,6 +26,9 @@ Built-in LinuxCNC M6 motion is **disabled**; macros own retract and park. Tool-l
 - A contact toolsetter on `motion.probe-input` (and optionally a separate touch probe)
 - Manual collet (or similar) — this config hides the ATC tab (`ATC_TAB_DISPLAY=0`)
 
+**No contact toolsetter?** Do not follow this guide for length probing. Use
+**[LASER_ONLY_SETUP.md](LASER_ONLY_SETUP.md)** (diameter + manual / future laser TLO).
+
 ---
 
 ## 1. Copy macros
