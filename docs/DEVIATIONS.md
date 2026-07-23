@@ -32,7 +32,7 @@ Stock references:
 | Joint following error | Tight (e.g. ~2 mm / 1 mm) | **Relaxed** `FERROR = 1270`, `MIN_FERROR = 254` for bench — tighten later |
 | M600 collet pause | Often same as setter / G30 | **Separate tool-load XY** (default G53 270, 100) vs taught setter `#5181–#5183` |
 | Manual Tool Change dialog | Stock QtPyVCP; Esc cancels | **Custom dialog** with **ABORT**; Esc/close ignored — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
-| Drive position deviation | Drive defaults | **SDO 6065/6066** ≈ 1.0 mm / 1.0° / 250 ms — [A6_TUNING](A6_TUNING.md) |
+| Drive position deviation | Drive defaults | **SDO 6065/6066** ≈ 0.5 mm / 0.5° / 250 ms — [A6_TUNING](A6_TUNING.md) |
 | Laser tool setter | M62 P0 mux to `motion.probe-input` for G38 | [LASER_TOOL_SETTER](LASER_TOOL_SETTER.md) |
 | Pocket probe traverse feed | `#3017` from Probe Basic | **Local fix** — several `probe_*.ngc` had bare `[3017]` (3017 mm/min literal) |
 | PROBE SPINDLE NOSE ZERO | Runs on setter input | **Aborts if T#3014 loaded** — HAL routes touch probe only when that tool is in spindle |
@@ -103,7 +103,7 @@ MIN_FERROR = 254.0
 
 Stock servo configs often use ~2 mm / 1 mm. These values are **intentionally wide** so LinuxCNC does not fault during jog / homing / bench bring-up while EtherCAT following error is still being tuned.
 
-**For production:** tighten per axis after drive tuning and confirm no false trips under cutting loads. Drive-side windows (SDO 6065/6066 ≈ **1.0 mm / 1.0° / 250 ms**) are separate — see [A6_TUNING.md](A6_TUNING.md) and [CiA 402 following error](https://linuxcnc.org/docs/html/config/ini-config.html#sub:joint-section).
+**For production:** tighten per axis after drive tuning and confirm no false trips under cutting loads. Drive-side windows (SDO 6065/6066 ≈ **0.5 mm / 0.5° / 250 ms**) are separate — see [A6_TUNING.md](A6_TUNING.md) and [CiA 402 following error](https://linuxcnc.org/docs/html/config/ini-config.html#sub:joint-section).
 
 ---
 
@@ -166,7 +166,7 @@ Physical master estop cuts mains. Software NC estop on Slave 3 DI1 gates `iocont
 | M3/M4 ↔ VFD direction **swapped** | Comment `REVERT: fwd->sel0 rev->sel1` |
 | At-speed | `near.0` (50 RPM) + **`timedelay.0` 5 s** |
 | Critical faults | Modbus fault reg `0x000A` codes 64 / 92 → `halui.estop.activate` |
-| `or2.1` reserved | Do not load another `or2` with `names=` — conflicts with probe `or2.0` |
+| `or2.1` reserved | Do not load another `or2` with `names=` — conflicts with probe `or2.0` / laser merge `or2.3` (`loadrt or2 count=4`) |
 
 ### Pendant homed-gate override
 
@@ -176,6 +176,17 @@ net machine.is-on ... whb.halui.joint.z.is-homed ...
 ```
 
 WHB normally requires per-axis homed for MPG jog. Tied to **machine on** so bench mode without Z homing still allows Z jog.
+
+### Pendant MDI buttons
+
+`halui.mdi-command-XX` is **0-based**. This config wires pendant button **N** → `mdi-command-N` (Safe-Z → `03`, W-Home → `04`, Probe-Z → `08`, macro-1 → `01`), so INI index `00` is an unused placeholder. Current bindings:
+
+| Button | HAL pin | MDI |
+|--------|---------|-----|
+| Safe-Z | `mdi-command-03` | `G0 G53 Z0` |
+| W-Home | `mdi-command-04` | `o<go_to_zero> call` |
+| Probe-Z | `mdi-command-08` | `o<probe_z_minus_wco> call` |
+| Macro-1/2 | `01` / `02` | `G10 L20 P0 X0` / `Y0` |
 
 ---
 
@@ -307,7 +318,7 @@ Full property table: [TOOLSETTER.md](TOOLSETTER.md#cam--post-processor-linuxcnc-
 
 This **split** (Y command on slave 1, Z on slave 2) is wiring-specific — not a linuxcnc-ethercat default.
 
-PDO template matches StepperOnline A6 EtherCAT module (`vid/pid` in XML). SDO `2004` subindexes zero inputs per drive config tool.
+PDO template matches StepperOnline A6 EtherCAT module (`vid/pid` in XML). SDO `2004` subindexes zero DI function selects on **all four** slaves (including slave 3, whose DI1 is the software E-stop — factory P-OT mapping must not remain).
 
 ---
 

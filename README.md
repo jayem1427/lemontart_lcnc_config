@@ -175,7 +175,7 @@ git checkout <branch>
 - Custom Manual Tool Change dialog with **ABORT** (Esc/close ignored).
 - REF ALL order: Z → X → Y → A.
 - Software E-stop: Slave 3 DI1 (DB15 pin 10).
-- Drive position-deviation windows (SDO 6065/6066): about **1.0 mm / 1.0° / 250 ms**
+- Drive position-deviation windows (SDO 6065/6066): about **0.5 mm / 0.5° / 250 ms**
   — see [A6_TUNING.md](docs/A6_TUNING.md).
 - INI `FERROR` values are intentionally wide for bring-up — tighten for production
   ([DEVIATIONS.md](docs/DEVIATIONS.md)).

@@ -135,6 +135,13 @@
            bus claim and was overwriting bench tuning (pos/speed/integral/inertia).
            Tune via Servo Tuning tab (or ethercat download) and store to EEPROM
            on the drive if you want values to survive power loss. See docs/A6_TUNING.md. -->
+      <!-- Clear DI function selects (same as XYZ). DI1 is software E-stop input;
+           leaving factory P-OT/limit mapping would trip the A drive independently. -->
+      <sdoConfig idx="2004" subIdx="01"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="05"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="09"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="0d"><sdoDataRaw data="00 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="11"><sdoDataRaw data="00 00"/></sdoConfig>
       <syncManager idx="2" dir="out">
         <pdo idx="1600">
           <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word" halType="u32"/>

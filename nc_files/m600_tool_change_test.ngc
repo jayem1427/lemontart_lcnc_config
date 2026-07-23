@@ -2,7 +2,7 @@
 ( Loads T3, jogs left on X, then T9, then T10. )
 ( Homed machine, toolsetter taught, cutters in the changer. Run in AUTO. )
 ( Each M600 stops at G30 for the M6 OK dialog, then probes on the setter. )
-( Z soft MAX_LIMIT is 3.048 mm - use G53 Z0, not work Z25. )
+( Z soft MAX_LIMIT is 400.0 mm - still use G53 Z0 for retract, not a guessed work Z. )
 
 G21 G90 G17 G40 G49
 M5

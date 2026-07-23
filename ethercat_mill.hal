@@ -217,9 +217,9 @@ net y-limit      and2.5.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in
 net z-home-raw   lcec.0.1.di-4 => not.7.in
 net z-home       not.7.out => joint.2.home-sw-in
 # Z - limit on Slave 2 DI2 (DB15 pin 9) — disabled; pin free if needed later.
-# When re-enabling, use not.9 (not.8 is Y homing limit gate).
-# net z-limit-raw  lcec.0.2.di-2 => not.9.in
-# net z-limit      not.9.out => joint.2.neg-lim-sw-in
+# When re-enabling, use not.10 (not.8 = Y homing gate; not.9 = laser mux).
+# net z-limit-raw  lcec.0.2.di-2 => not.10.in
+# net z-limit      not.10.out => joint.2.neg-lim-sw-in
 
 # --- A still on breakout (no homing yet) ---
 # A axis home on slave 3 DI3:
