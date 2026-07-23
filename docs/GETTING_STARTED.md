@@ -128,6 +128,7 @@ Before trusting CAM:
 4. MDI metrology: `o<probe_z_repeat_stats> call [10]` — [metrology README](../probe_basic/subroutines/metrology/README.md).
 5. Confirm HAL routing: `halcmd show pin halui.tool.number` and trip each sensor.
 6. Optional: Laser Setter diameter smoke test — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md).
+   No contact toolsetter? Use [LASER_ONLY_SETUP.md](LASER_ONLY_SETUP.md) instead of M600 length teach.
 
 **EtherCAT note:** committed INI `FERROR` values are wide for bring-up (1270 / 254 mm); drives also set SDO `6065`/`6066` (~1.0 mm / 250 ms). Tighten both after motion is stable — [DEVIATIONS.md](DEVIATIONS.md#relaxed-ferror--min_ferror) and [A6_TUNING.md](A6_TUNING.md).
 
@@ -151,6 +152,7 @@ ethercat_mill.ini
 | Motion + EtherCAT | `ethercat_mill.ini`, `ethercat_mill.hal`, `ethercat-conf.xml` | [README](../README.md), [DEVIATIONS](DEVIATIONS.md) |
 | Toolsetter + touch probe | `tool_touch_off.ngc`, `m600.ngc`, HAL probe gating | [TOOLSETTER.md](TOOLSETTER.md) |
 | Laser tool setter | `laser_*.ngc`, Laser Setter tab | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
+| Laser only (no contact pad) | Skip M600 length; diameter + manual TLO | [LASER_ONLY_SETUP.md](LASER_ONLY_SETUP.md) |
 | Probe Basic UI | `probe_basic/`, custom DRO, abort dialog | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Metrology macros | `probe_z_three_samples.ngc`, etc. | [probe_basic/subroutines/metrology/README.md](../probe_basic/subroutines/metrology/README.md) |
 | CAM | `linuxcnc-djr.cps` | [TOOLSETTER.md](TOOLSETTER.md) |
@@ -175,6 +177,7 @@ ethercat_mill.ini
 | Cancel mid M600 | **ABORT** on Manual Tool Change dialog |
 | Multi-tool air test | `nc_files/m600_tool_change_test.ngc` |
 | Measure diameter (laser) | Laser Setter tab — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
+| Laser only (no contact pad) | Diameter + manual lengths; skip M600 — [LASER_ONLY_SETUP.md](LASER_ONLY_SETUP.md) |
 | Load touch probe only | **LOAD SPINDLE** with probe tool — skips M600 |
 | Set WCO Z after shim touch-off | XYZA DRO **SET Z** field → [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Touch-off without CAM | **TOUCH OFF CURRENT TOOL** |

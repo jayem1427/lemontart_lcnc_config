@@ -34,6 +34,7 @@ If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page 
 | Understand “why doesn’t this behave like stock?” | **[DEVIATIONS.md](docs/DEVIATIONS.md)** |
 | Change tools and probe length (contact setter) | **[TOOLSETTER.md](docs/TOOLSETTER.md)** |
 | Measure diameter with the laser | **[LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md)** |
+| Laser only (no contact toolsetter) | **[LASER_ONLY_SETUP.md](docs/LASER_ONLY_SETUP.md)** |
 | Copy tool-change onto another mill | **[INSTALL_TOOL_CHANGE.md](docs/INSTALL_TOOL_CHANGE.md)** |
 | Tweak Probe Basic UI / SET Z / abort dialog | **[PROBE_BASIC_UI.md](docs/PROBE_BASIC_UI.md)** |
 | Log following error / tune servos | [SIGNAL_LOGGING](docs/SIGNAL_LOGGING.md) · [A6_TUNING](docs/A6_TUNING.md) · [ONE_CLICK_TUNING](docs/ONE_CLICK_TUNING.md) |
