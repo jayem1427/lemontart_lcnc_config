@@ -2,23 +2,23 @@
 
 Conservative **fault-window** SDOs (6065/6066) at EtherCAT startup, plus a **Servo Tuning** Probe Basic tab for C00/C01 loop gains. **Loop gains are NOT written from `ethercat-conf.xml`** — that was wiping bench tuning on every LinuxCNC start. **LinuxCNC `joint.N.f-error` / INI `FERROR` are left alone** — plot the drive’s own following error (CiA **60F4**) as a separate Logging signal (**DRIVE**).
 
-Based on the [kalico sota-motion](https://github.com/dderg/kalico/tree/sota-motion) approach (SDO object dictionary instead of StepperOnline GUI). Logging tab + Servo Tuning live on this branch together.
+Based on the [kalico sota-motion](https://github.com/dderg/kalico/tree/sota-motion) approach (SDO object dictionary instead of StepperOnline GUI). Logging tab + Servo Tuning ship on `main` with the EtherCAT mill config.
 
 ---
 
-## Status — active tuning branch
+## Status (on `main`)
 
-**Branch:** `servo-tuning-gui`  
-Rebased onto current `main`. Servo Tuning UI + APPLY path hardened; loop gains no longer wiped on every LinuxCNC start.
+Servo Tuning, Logging, one-click tune, and graphical inertia ID are merged into
+the main mill config. You do **not** need a feature branch to use them.
 
-### Resume checklist
+### First launch checklist
 
 ```bash
-cd /home/jon/linuxcnc/configs/ethercat_mill
-git checkout servo-tuning-gui
-# Clear leftover user tabs from other feature branches (Probe Basic loads every folder):
-rm -rf probe_basic/user_tabs/laser_setter
-ls probe_basic/user_tabs/   # expect: signal_monitor, servo_tuner, templates
+git clone https://github.com/jayem1427/lemontart_lcnc_config.git
+cd lemontart_lcnc_config
+# Probe Basic loads every folder under user_tabs/ — remove incomplete tabs:
+ls probe_basic/user_tabs/
+# expect: laser_setter, servo_tuner, signal_monitor, template_*
 ./launch.sh
 ```
 
@@ -30,6 +30,9 @@ auto notch + journaled revert paths) — see **`ONE_CLICK_TUNING.md`**.
 
 Before one-click, set inertia via the **INERTIA** panel
 (`GRAPHICAL_INERTIA_TUNE.md`) when C00.06 is unknown.
+
+**Switching git branches?** Leftover `user_tabs/` folders from other features
+can crash startup — see [README § branch switching](../README.md#dev-notes-switching-feature-branches).
 
 ### Clipboard → LLM
 
@@ -70,7 +73,7 @@ Backend: `probe_basic/python/resonance_analysis.py`.
 | **ONE-CLICK TUNE** per axis (auto gain ladder + notch + journal) | New — sim-tested; see `ONE_CLICK_TUNING.md` for hardware bring-up |
 | Read-only SDOs skipped (C01.10, C01.38) | Working — no longer abort the whole APPLY |
 | Startup C00/C01 SDOs in `ethercat-conf.xml` | **Removed** — was overwriting RAM tuning every bus claim |
-| Startup 6065/6066 fault windows | Still set (1.0 mm / 1.0° / 250 ms) |
+| Startup 6065/6066 fault windows | Still set (**0.5 mm / 0.5° / 250 ms** in `ethercat-conf.xml`) |
 | Logging tab default sample rate | **1000 Hz** via in-process `hal.get_value` |
 | Bench presets incl. `one_click_best_20260712` (X/Y), `10um`, `20um_y_axis`, `Z/20um`, `Z/no_buzz` | Under `config/tuning/presets/` — combo starts on **(none)** |
 
@@ -86,7 +89,7 @@ These are operational, not “final tuned gains”:
 
 | Change | Why | Where |
 |--------|-----|--------|
-| Drive **6065** XYZ **1.0 mm**, A **1.0°**; **6066** **250 ms** | 0.1 mm Er47.0 amp faults during moves | `ethercat-conf.xml`, presets, `a6_servo_tune` defaults |
+| Drive **6065** XYZ **0.5 mm**, A **0.5°**; **6066** **250 ms** | Stock 0.1 mm Er47.0 amp faults during moves; one-click temporarily raises 6065 to **2.0** | `ethercat-conf.xml`, `a6_servo_tune.FOLLOWING_ERROR_*` |
 | Host INI `FERROR` left at main’s relaxed values after rebase | Avoid fighting toolchange / jog | `ethercat_mill.ini` |
 | Z soft **MAX_LIMIT = 400 mm** | Unhomed absolute encoder can sit ~300+ mm → jog blocked if soft max is lower | `ethercat_mill.ini` |
 
@@ -97,14 +100,6 @@ These are operational, not “final tuned gains”:
 3. Optional: inertia ratio (C00.06) after a real load measurement.
 4. Optional: feedforward / carrier / system ID (Tier 2 — not started).
 5. If push-buzz persists, set gain switchover on the drive panel (C01.38 is read-only over SDO here).
-### Related branches
-
-| Branch | Role |
-|--------|------|
-| `servo-tuning-gui` | **This pin** — Logging tab + A6 SDO Servo Tuning + drive FERR + clipboard LLM flow |
-| `cursor/laser-setter-1afc` | Laser tool setter UI (remove its tab folder when on this branch) |
-
-See also branch-switching notes in README when present; otherwise use the `rm -rf` lines in the resume checklist above.
 
 ---
 
@@ -137,9 +132,13 @@ Still written at startup (fault windows only):
 
 | SDO | Meaning | XYZ | A |
 |-----|---------|-----|---|
-| `6065h` | Max position deviation (counts) | 13107 ≈ **1.0 mm** | 364 ≈ **1.0°** |
+| `6065h` | Max position deviation (counts) | `0x199A` = 6554 ≈ **0.5 mm** @ 13107.2 counts/mm | `0x00B6` = 182 ≈ **0.5°** @ 364.09 counts/deg |
 | `6066h` | Fault persistence (ms) | **250** | **250** |
 | `6060h` | Modes of operation | CSP (8) | CSP (8) |
+
+During **one-click** or manual tune stimulus, Python temporarily writes **6065 =
+2.0 mm / 2.0°** (`FOLLOWING_ERROR_TUNING` in `a6_servo_tune.py`) and restores
+**0.5** afterward (`FOLLOWING_ERROR_RUN`).
 
 Former catalog startup gains (for reference / `default` preset only — **not auto-applied**):
 
@@ -277,6 +276,8 @@ A6 vendor objects often lack SDO dictionary info, so **`-t uint16` / `-t uint32`
 
 ---
 
-## Branch
+## History
 
-`servo-tuning-gui` — Logging + Servo Tuning + Tune Trial; rebased onto current `main`.
+Servo tuning tabs were developed on feature branches (`servo-tuning-gui`, etc.) and
+merged into `main` with the EtherCAT mill. See [docs/README.md](README.md) for the
+current doc map.
