@@ -117,7 +117,7 @@ Details: **[Touch probe tool number](TOOLSETTER.md#touch-probe-tool-number-setup
 - Do not end programs with `T0 M600`.
 - Keep the touch-probe tool out of CAM tool-change lists.
 
-Post notes: **[TOOLSETTER.md](TOOLSETTER.md)** (Fusion / `linuxcnc-djr.cps` section).
+Post notes: **[TOOLSETTER.md](TOOLSETTER.md)** (Fusion / `post-processor/linuxcnc-djr.cps` section).
 
 ---
 

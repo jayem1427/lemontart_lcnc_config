@@ -12,7 +12,7 @@ Operator guide for the **clipboard → LLM** loop on the Servo Tuning tab: run a
 2. **LLM never writes SDOs** — suggestions go into Pending → you press **APPLY TO DRIVE** (motors cycle OFF→ON as usual).
 3. **Tune on drive 60F4** — the plot is CiA following error via `tune-drive-ferr.*`, not LinuxCNC `joint.f-error` / INI `FERROR`.
 4. **Abort** with the normal LinuxCNC Abort button if anything looks wrong.
-5. **Same NGC all campaign** — do not edit `nc_files/*_tuning.ngc` mid-compare or plots lie.
+5. **Same NGC all campaign** — do not edit the frozen stimulus mid-compare or plots lie.
 
 ---
 
@@ -41,14 +41,16 @@ Optional: **SAVE AS PRESET** / **LOAD** for named snapshots (combo starts on `(n
 
 ## Frozen stimuli
 
-| Axis | File | Intent |
-|------|------|--------|
-| X | `nc_files/x_tuning.ngc` | 10× 0↔80 mm @ F1000 |
-| Y | `nc_files/y_tuning.ngc` | 10× 0↔15 mm @ F30000 |
-| Z | `nc_files/z_tuning.ngc` | 1× 0↔15 mm @ F10000 |
-| A | `nc_files/a_tuning.ngc` | 10× 0↔90° @ F3600 |
+Keep one NGC per axis under your `PROGRAM_PREFIX` directory and reuse it for the whole campaign:
 
-`y_tuning_85.ngc` is an alternate — use it only if you intentionally change the campaign.
+| Axis | Intent (example envelope) |
+|------|--------|
+| X | 10× 0↔80 mm @ F1000 |
+| Y | 10× 0↔15 mm @ F30000 |
+| Z | 1× 0↔15 mm @ F10000 |
+| A | 10× 0↔90° @ F3600 |
+
+If you intentionally change stroke or feed, treat that as a new campaign — do not mix plots.
 
 ---
 

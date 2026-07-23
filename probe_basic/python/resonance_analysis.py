@@ -319,7 +319,7 @@ def format_resonance_text(report: ResonanceReport) -> str:
         )
     lines.append("")
     lines.append(
-        "Stimulus: nc_files/x_resonance.ngc (or axis equivalent). "
+        "Stimulus: short high-accel reversals on the edit axis. "
         "Nyquist limited by FERR sample rate (~500 Hz @ 1 kHz)."
     )
     return "\n".join(lines)

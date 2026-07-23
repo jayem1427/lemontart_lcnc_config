@@ -51,7 +51,7 @@ Removed from the UI (by design): Tune Trial / Cancel Trial, Auto Cycle Start, Lo
 | SDO auto-read / apply / presets | `a6_servo_tune.py`, Servo Tuning tab |
 | HAL telemetry (60F4, torque, vel) | `custom.hal`, Logging tab |
 | CSV logger + summaries | `hal_signal_logger.py`, `config/logging/signals.json` |
-| Excitation programs | `nc_files/*_tuning.ngc` |
+| Excitation programs | Frozen NGC under your `PROGRAM_PREFIX` |
 | Clipboard helpers | `tune_trial.py` (`format_tuning_text`, plot PNG copy) |
 | Manual + LLM procedures | `SERVO_TUNING.md`, `SERVO_TUNING_LLM.md` |
 
