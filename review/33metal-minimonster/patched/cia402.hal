@@ -1,0 +1,166 @@
+loadrt [KINS]KINEMATICS
+loadrt [EMCMOT]EMCMOT servo_period_nsec=[EMCMOT]SERVO_PERIOD num_joints=[KINS]JOINTS num_spindles=1
+
+loadusr -W lcec_conf ethercat-conf.xml
+loadrt lcec
+loadrt cia402 count=4
+loadrt encoder_filter count=4
+loadrt not count=1
+
+
+
+
+
+setp cia402.0.csp-mode 1
+setp cia402.0.pos-scale 3400.33333
+
+setp cia402.1.csp-mode 1
+setp cia402.1.pos-scale 104857.6
+
+setp cia402.2.csp-mode 1
+setp cia402.2.pos-scale 104857.6
+
+setp cia402.3.csp-mode 1
+setp cia402.3.pos-scale -104857.6
+
+
+
+
+
+
+setp encoder-filter.0.tolerance 5000
+setp encoder-filter.1.tolerance 5000
+setp encoder-filter.2.tolerance 5000
+setp encoder-filter.3.tolerance 5000
+setp encoder-filter.0.enable 1
+setp encoder-filter.1.enable 1
+setp encoder-filter.2.enable 1
+setp encoder-filter.3.enable 1
+
+
+addf lcec.read-all servo-thread
+
+addf not.0 servo-thread
+
+
+
+addf cia402.0.read-all servo-thread
+addf cia402.1.read-all servo-thread
+addf cia402.2.read-all servo-thread
+addf cia402.3.read-all servo-thread
+
+
+
+addf encoder-filter.0.update servo-thread
+addf encoder-filter.1.update servo-thread
+addf encoder-filter.2.update servo-thread
+addf encoder-filter.3.update servo-thread
+
+
+addf motion-command-handler servo-thread
+addf motion-controller servo-thread
+
+addf cia402.0.write-all servo-thread
+addf cia402.1.write-all servo-thread
+addf cia402.2.write-all servo-thread
+addf cia402.3.write-all servo-thread
+
+addf lcec.write-all servo-thread
+
+
+
+
+
+# =========================
+# Z AXIS - Slave 0 G5-200W
+# =========================
+
+net z-statusword lcec.0.G5-200W.statusword => cia402.1.statusword
+net z-actual-pos lcec.0.G5-200W.pos-fb => cia402.1.drv-actual-position
+
+#net z-raw-pos lcec.0.G5-200W.pos-fb => encoder-filter.1.in
+#net z-actual-pos encoder-filter.1.out => cia402.1.drv-actual-position
+
+net z-pos-cmd joint.2.motor-pos-cmd => cia402.1.pos-cmd
+net z-pos-fb joint.2.motor-pos-fb <= cia402.1.pos-fb
+
+net z-enable joint.2.amp-enable-out => cia402.1.enable
+net z-fault joint.2.amp-fault-in <= cia402.1.drv-fault
+
+net z-controlword cia402.1.controlword => lcec.0.G5-200W.ctrl-word
+net z-target-pos cia402.1.drv-target-position => lcec.0.G5-200W.pos-cmd
+
+
+
+# =========================
+# X AXIS - Slave 1 G5-200WZ
+# =========================
+
+net x-statusword lcec.0.G5-200WZ.statusword => cia402.2.statusword
+net x-actual-pos lcec.0.G5-200WZ.pos-fb => cia402.2.drv-actual-position
+
+#net x-raw-pos lcec.0.G5-200WZ.pos-fb => encoder-filter.2.in
+#net x-actual-pos encoder-filter.2.out => cia402.2.drv-actual-position
+
+net x-pos-cmd joint.0.motor-pos-cmd => cia402.2.pos-cmd
+net x-pos-fb joint.0.motor-pos-fb <= cia402.2.pos-fb
+
+net x-enable joint.0.amp-enable-out => cia402.2.enable
+net x-fault joint.0.amp-fault-in <= cia402.2.drv-fault
+
+net x-controlword cia402.2.controlword => lcec.0.G5-200WZ.ctrl-word
+net x-target-pos cia402.2.drv-target-position => lcec.0.G5-200WZ.pos-cmd
+
+
+# =========================
+# Y AXIS - Slave 2 G5-400W
+# =========================
+
+net y-statusword lcec.0.G5-400W.statusword => cia402.3.statusword
+net y-actual-pos lcec.0.G5-400W.pos-fb => cia402.3.drv-actual-position
+
+#net y-raw-pos lcec.0.G5-400W.pos-fb => encoder-filter.3.in
+#net y-actual-pos encoder-filter.3.out => cia402.3.drv-actual-position
+
+net y-pos-cmd joint.1.motor-pos-cmd => cia402.3.pos-cmd
+net y-pos-fb joint.1.motor-pos-fb <= cia402.3.pos-fb
+
+net y-enable joint.1.amp-enable-out => cia402.3.enable
+net y-fault joint.1.amp-fault-in <= cia402.3.drv-fault
+
+net y-controlword cia402.3.controlword => lcec.0.G5-400W.ctrl-word
+net y-target-pos cia402.3.drv-target-position => lcec.0.G5-400W.pos-cmd
+
+
+
+# =========================
+# A AXIS - L6N-100
+# =========================
+
+net a-statusword lcec.0.L6N-100.statusword => cia402.0.statusword
+net a-actual-pos lcec.0.L6N-100.pos-fb => cia402.0.drv-actual-position
+
+#net a-raw-pos lcec.0.L6N-100.pos-fb => encoder-filter.0.in
+#net a-actual-pos encoder-filter.0.out => cia402.0.drv-actual-position
+
+net a-pos-cmd joint.3.motor-pos-cmd => cia402.0.pos-cmd
+net a-pos-fb joint.3.motor-pos-fb <= cia402.0.pos-fb
+
+net a-enable joint.3.amp-enable-out => cia402.0.enable
+net a-fault joint.3.amp-fault-in <= cia402.0.drv-fault
+
+net a-controlword cia402.0.controlword => lcec.0.L6N-100.ctrl-word
+net a-target-pos cia402.0.drv-target-position => lcec.0.L6N-100.pos-cmd
+
+
+# Dummy estop loop (no physical switch in this dump). Prefer single net direction.
+net estop-out iocontrol.0.user-enable-out => iocontrol.0.emc-enable-in
+
+# ---------------------------------------------------------------------------
+# MPG / pendant: not present in the uploaded dump.
+# minimonster.ini loads custom.hal next — that file was missing. If custom.hal
+# (or a separate xhc-whb04b-6.hal) wires a WHB04B-6:
+#   - Put the USB dongle on a motherboard port (no hub) if buttons are flaky.
+#   - If jog dies until homed, tie whb.halui.joint.*.is-homed to machine-on
+#     (same pattern as Lemontart xhc-whb04b-6.hal) while NO_FORCE_HOMING=1.
+# ---------------------------------------------------------------------------
