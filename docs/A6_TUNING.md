@@ -88,7 +88,7 @@ These are operational, not “final tuned gains”:
 |--------|-----|--------|
 | Drive **6065** XYZ **1.0 mm**, A **1.0°**; **6066** **250 ms** | 0.1 mm Er47.0 amp faults during moves | `ethercat-conf.xml`, presets, `a6_servo_tune` defaults |
 | Host INI `FERROR` left at main’s relaxed values after rebase | Avoid fighting toolchange / jog | `ethercat_mill.ini` |
-| Z soft **MAX_LIMIT = 400 mm** | Unhomed absolute encoder can sit ~300+ mm → jog blocked if soft max is lower | `ethercat_mill.ini` |
+| Z soft **MAX_LIMIT = 400 mm** | Band-aid if a leftover `POSITION_FILE` marks joints homed while abs feedback sits ~300+ mm | `ethercat_mill.ini` — prefer deleting `position.txt` / keeping `POSITION_FILE` off |
 
 ### Open / next when you return
 

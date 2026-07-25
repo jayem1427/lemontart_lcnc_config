@@ -24,6 +24,7 @@ Stock references:
 | Spindle feedback | Encoder or sim `scale_to_rpm` | **VFD Modbus** freq → `spindle.0.speed-in` |
 | At-speed | `near` or drive ready bit | **`near` + 5 s `timedelay`** after RPM match |
 | Homing required | Default (forced) | **`NO_FORCE_HOMING = 1`** (bench — revert for production) |
+| Startup position restore | Often `POSITION_FILE` | **Disabled** — conflicts with absolute encoders / soft limits |
 | A axis homing | Real switch sequence | **Disabled** — `HOME_SEQUENCE = 3` (after Z/X/Y), zero search vel |
 | Z− limit | Usually wired | **Commented out** in HAL (pin free) |
 | Feed override max | 100–200% | **250%** (`MAX_FEED_OVERRIDE = 2.5`) |
@@ -51,6 +52,21 @@ NO_FORCE_HOMING = 1
 Stock LinuxCNC blocks motion until all joints with `HOME_SEQUENCE > 0` are homed. This flag relaxes that for bench work.
 
 **Revert for production:** comment out the line and confirm Home All behavior on all four joints.
+
+### No `POSITION_FILE` (absolute encoders)
+
+```ini
+# ethercat_mill.ini [TRAJ]
+# POSITION_FILE = position.txt   # intentionally commented out
+```
+
+`POSITION_FILE` writes joint positions on exit and, on the next start, restores them and marks every joint **homed**. Soft limits then apply immediately.
+
+With absolute-encoder EtherCAT drives the feedback can sit far outside `MIN_LIMIT`/`MAX_LIMIT` until a real switch home (REF ALL). Startup then looks “auto-homed” and jogging past/into that soft-limit violation is blocked.
+
+This mill keeps **switch-based** homing (Z→X→Y→A). Absolute encoders retain *drive* position across power loss; they do not replace REF ALL for G53 machine zero. Do not re-enable `POSITION_FILE` unless you also adopt `HOME_ABSOLUTE_ENCODER` and calibrate drive absolute zero to machine home.
+
+**On a stuck machine right now:** quit LinuxCNC, delete `position.txt` next to the INI, relaunch, Machine On, jog if needed, then **REF ALL**.
 
 ### REF ALL sequence
 
@@ -313,7 +329,7 @@ PDO template matches StepperOnline A6 EtherCAT module (`vid/pid` in XML). SDO `2
 
 ## Files that are intentionally local / ignored
 
-Large manuals, QtPyVCP pickles, and personal scratch notes stay out of git. Keep your own `linuxcnc.var` / `position.txt` backups when you clone.
+Large manuals, QtPyVCP pickles, and personal scratch notes stay out of git. Keep your own `linuxcnc.var` backups when you clone. `position.txt` is not used (see [No POSITION_FILE](#no-position_file-absolute-encoders)); delete any leftover copy if soft limits jam startup.
 
 ---
 
@@ -322,6 +338,7 @@ Large manuals, QtPyVCP pickles, and personal scratch notes stay out of git. Keep
 | Goal | Action |
 |------|--------|
 | Force homing | Remove `NO_FORCE_HOMING` |
+| Restore last-session joint coords | Uncomment `POSITION_FILE` — **not** with absolute encoders / switch homing |
 | Real A homing | Uncomment A home in HAL; set `HOME_SEQUENCE` and search/latch vels |
 | Full limits on Z/A | Comment `za-lims-gagged`; uncomment `lims-home-all-off` or wire real switches |
 | Stock M6 motion | Set `TOOL_CHANGE_AT_G30=1`, wire `tool-change` → `tool-changed`, remove M600 remap |
