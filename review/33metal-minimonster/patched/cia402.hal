@@ -157,10 +157,7 @@ net a-target-pos cia402.0.drv-target-position => lcec.0.L6N-100.pos-cmd
 net estop-out iocontrol.0.user-enable-out => iocontrol.0.emc-enable-in
 
 # ---------------------------------------------------------------------------
-# MPG / pendant: not present in the uploaded dump.
-# minimonster.ini loads custom.hal next — that file was missing. If custom.hal
-# (or a separate xhc-whb04b-6.hal) wires a WHB04B-6:
-#   - Put the USB dongle on a motherboard port (no hub) if buttons are flaky.
-#   - If jog dies until homed, tie whb.halui.joint.*.is-homed to machine-on
-#     (same pattern as Lemontart xhc-whb04b-6.hal) while NO_FORCE_HOMING=1.
+# MPG / pendant: custom.hal is spindle-only; no WHB/XHC is loaded by this INI.
+# If they use a wireless pendant, add HALFILE = xhc-whb04b-6.hal (or similar).
+# Soft-limit / FERROR fixes for flaky jog live in patched/minimonster.ini.
 # ---------------------------------------------------------------------------

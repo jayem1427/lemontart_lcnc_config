@@ -8,28 +8,39 @@ Symptoms reported:
 - X died for a while while Y/Z still jogged
 - Pendant could still move X when cursors could not
 
-## Missing files (blocks full pendant diagnosis)
+## `custom.hal` arrived — and it has no MPG
 
-`minimonster.ini` loads:
+`minimonster.ini` loads only:
 
 ```ini
 HALFILE = cia402.hal
 HALFILE = custom.hal
 ```
 
-**`custom.hal` was not in the dump.** That is almost certainly where spindle, IO, and any XHC/MPG pendant wiring live. Without it we cannot audit button nets, debounce, or `jog-enable` gating. Ask for `custom.hal` and any `xhc-*.hal` / pendant HALFILE.
+`custom.hal` is **spindle Modbus only** (`mb2hal` + `mux4` + `mult2`). There is:
 
-Also absent: the real `HALFILE` list may load a pendant file that never made it into this zip.
+- no `xhc-whb04b-6` / pendant `loadusr`
+- no `axis.*.jog-*` nets
+- no physical jog-button debounce
+- no `halui.jog` wiring
+
+So **this LinuxCNC config does not wire an MPG at all.** Whatever they call “MPG buttons” is one of:
+
+1. **Probe Basic on-screen jog** (continuous / step) — most likely given KEYBOARD_JOG in the INI
+2. A pendant started **outside** these HAL files (manual `loadusr`, another INI, desktop helper)
+3. A hardware MPG on drive DIs that was never connected in HAL (would feel completely dead, not half-time)
+
+Ask them: *is the flaky control a wireless XHC pendant, or the GUI jog pad?* If it is an XHC, the HALFILE for it is simply missing from the machine config they sent.
 
 ## What the symptoms actually imply
 
 | Observation | What it rules in / out |
 |-------------|------------------------|
 | Y/Z cursors worked, X cursors did not | Not “GUI lost focus” (that kills all arrow keys) |
-| Pendant could still move X | X drive + EtherCAT path were alive — not a dead servo |
-| Intermittent / half-time buttons | Input path or inhibit (limits / mode / wireless), not a permanent HAL typo |
+| “MPG” could still move X | X drive + EtherCAT path were alive — not a dead servo |
+| Intermittent / half-time buttons | Soft-limit / ferror inhibit, GUI mode, or an external pendant — **not** something in `custom.hal` |
 
-So: **axis-selective inhibit** (soft limits, joint fault, or jog-enable), plus a **separately flaky input device** for the pendant buttons.
+Primary story remains **axis-selective inhibit** (soft limits + following error). Pendant button flakiness is **not explained by any HAL in this dump**.
 
 ## Finding 1 — Soft limits at 0 with `NO_FORCE_HOMING` (high confidence)
 
@@ -80,24 +91,27 @@ A drive-side window that tight will fault **one axis** (statusword → `cia402.*
 
 **Bring-up fix:** widen host `FERROR`/`MIN_FERROR` (patched INI), and open `6065` to something like 1 mm of counts (`104858` ≈ `0x1A000` for the 104857.6 scale) until tuning is done.
 
-## Finding 3 — Flaky MPG buttons (likely hardware + missing HAL)
+## Finding 3 — Flaky “MPG buttons” (not in this HAL tree)
 
-The dump has **no pendant HAL**. Common WHB04B-6 failure modes when that file exists:
+Confirmed: **no pendant component is loaded.** Treat “MPG” as Probe Basic jog UI unless they produce another HALFILE.
+
+If it really is a WHB04B-6 elsewhere:
 
 1. **Wireless dongle** — USB hub / shared bus / low power → missed button packets (“half the time”)
-2. **Axis rotary between detents** — no axis selected → wheel and some buttons do nothing
-3. **WHB `is-homed` gate** — component refuses jog until `whb.halui.joint.*.is-homed` is true; with `NO_FORCE_HOMING` and unfinished home, axes randomly refuse until those pins are tied to `halui.machine.is-on` (see Lemontart `xhc-whb04b-6.hal`)
-4. **No debounce** on button → MDI / mode toggles
+2. **Axis rotary between detents** — no axis selected → wheel/buttons do nothing
+3. **WHB `is-homed` gate** — refuses jog until `whb.halui.joint.*.is-homed`; with `NO_FORCE_HOMING` tie those to `halui.machine.is-on` (Lemontart `xhc-whb04b-6.hal` pattern)
+4. They need an actual `HALFILE = xhc-whb04b-6.hal` — it is not present today
 
-**Check live (once pendant HAL is loaded):**
+If it is **GUI jog buttons** feeling flaky, soft limits + FERROR (findings 1–2) already explain “works half the time / one axis dies,” especially near limit 0 or after a fast jog.
+
+**Check live:**
 
 ```bash
-halcmd watch whb.button.reset whb.button.stop whb.button.start-pause
-halcmd watch whb.axis.x.jog-enable axis.x.jog-enable
-halcmd getp whb.halui.joint.x.is-homed
+# Is any WHB even loaded?
+halcmd show comp | grep -i whb
+# Soft-limit / fault path for X
+halcmd getp joint.0.pos-fb joint.0.amp-fault-in cia402.2.drv-fault
 ```
-
-If button pins flicker without a press → USB/wireless. If pins stay solid but `jog-enable` stays false → homed-gate or mode.
 
 ## Finding 4 — Estop dummy loop is written oddly
 
@@ -132,14 +146,23 @@ Unlikely to cause X-only flakiness, but worth cleaning so enable state is unambi
 2. **Watch faults:**
    `halcmd getp cia402.2.drv-fault` (X), `lcec.0.G5-200WZ.error-code`, `joint.0.amp-fault-in`.
 3. **Widen soft limits + FERROR** using `patched/minimonster.ini`, open drive `6065`, retest cursors vs MPG.
-4. **Send `custom.hal` + pendant HAL** — then audit button nets / homed gates / USB placement (dongle on motherboard port, no hub).
+4. Confirm what “MPG” is. If XHC: add a real pendant HALFILE. If GUI: findings 1–2 are the fix.
+
+## `custom.hal` notes (spindle only — unrelated to jog)
+
+| Item | Note |
+|------|------|
+| `mux4` stop code `6` | Unusual; confirm against their VFD register map |
+| `mult2.spindle_freq_out.in0 = 15` fixed × `speed-out-rps` | Odd scaling vs the Lemontart RPM→0.1 Hz path — verify spindle commanded Hz |
+| Pin names `mb2hal.00.spindle_start_stop.float` | Must match their mb2hal build; mismatch = silent spindle fails, not jog |
 
 ## Patched files in this folder
 
 | File | What changed |
 |------|----------------|
 | `patched/minimonster.ini` | Wider soft limits for unhomed abs encoders; sane FERROR/MIN_FERROR; notes |
-| `patched/cia402.hal` | Clean estop dummy; comments pointing at missing pendant / custom.hal |
+| `patched/cia402.hal` | Clean estop dummy; comments that pendant is absent |
 | `patched/ethercat-conf.xml` | Larger G5 `6065` follow-error window for bring-up (~1 mm) |
+| `patched/custom.hal` | As uploaded (spindle only) + header note: no MPG here |
 
 These are **review suggestions**, not a drop-in for the Lemontart mill.

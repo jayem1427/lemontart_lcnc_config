@@ -1,0 +1,44 @@
+# ---------------------------
+# MB2HAL Modbus Spindle Control
+# ---------------------------
+
+
+
+# Load MB2HAL with your working config
+loadusr -W mb2hal config="mb2hal_config.ini"
+
+# Load mult2 for spindle frequency control
+loadrt mult2 names=mult2.spindle_freq_out
+
+
+# Use mux4 to manage spindle start/stop and direction
+loadrt mux4 names=mux4.spindle_mode
+addf mux4.spindle_mode servo-thread
+
+# Set the input values for stop, reverse, and forward
+setp mux4.spindle_mode.in0 6    # Stop (M5)
+setp mux4.spindle_mode.in1 1    # Reverse (M4)
+setp mux4.spindle_mode.in2 6    # Stop (M5)
+setp mux4.spindle_mode.in3 2    # Forward (M3)
+
+
+net spindle-cmd-on          spindle.0.on       => mux4.spindle_mode.sel0				
+net spindle-cmd-fwd              spindle.0.forward   =>   mux4.spindle_mode.sel1				
+net spindle-runmode    		mux4.spindle_mode.out	=>	mb2hal.00.spindle_start_stop.float
+
+##############################################################################################################################
+# Send Spindle Frequency	Transaction:01	frequency_input
+##############################################################################################################################
+addf 	mult2.spindle_freq_out			servo-thread
+
+
+#40000rpm as a percent
+setp	mult2.spindle_freq_out.in0 		15
+
+
+net 	spindle-cmd-rpm					spindle.0.speed-out-rps   =>   mult2.spindle_freq_out.in1
+net 	spindle-frequency-real 			mult2.spindle_freq_out.out		=>   mb2hal.01.spindle_frequency_set.float
+
+
+
+

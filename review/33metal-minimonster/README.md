@@ -8,4 +8,4 @@ Someone else's LinuxCNC dump (Probe Basic + Omron G5 + Leadshine L6N).
 | [`original/`](original/) | Files as uploaded |
 | [`patched/`](patched/) | Suggested bring-up fixes (soft limits, FERROR, drive 6065, estop net) |
 
-**Still needed from them:** `custom.hal` (referenced by the INI, not in the dump) and any pendant `xhc-*.hal`.
+**`custom.hal` is in** — spindle Modbus only; **no pendant**. If they truly have an XHC, that HALFILE is still missing from the machine.
