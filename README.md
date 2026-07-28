@@ -1,7 +1,7 @@
 # Lemontart LinuxCNC config
 
 A working Linuxcnc/ethercat config I am currently running on my Lemontart CNC Mill. Highlights include:
-Probe Basic UI, 4x Stepperonline A6 servos, XHC-4 axis pendant, modbus-controlled H100 VFD, a contact toolsetter (TooTall18T's custom manual tool change overrides), and a non-contact laser tool setter for diameter measuremnts. 
+Probe Basic UI, 4x Stepperonline A6 servos, XHC-4 axis pendant, modbus-controlled H100 VFD, a contact toolsetter (TooTall18T's custom manual tool change overrides), a non-contact laser tool setter for diameter measuremnts, and a Servo Tuning tab with semi-auto + one-click auto-tune. 
 
 Any deviations from stock configuration of probe basic or the components are captured in docs/DEVIATIONS.md.
 
@@ -22,7 +22,7 @@ If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page 
 | Spindle | H100 VFD over Modbus (`mb2hal`) |
 | Tool length | Contact toolsetter via **M600** (TooTall18T-style flow) |
 | Tool diameter | Kexin DS-5V-M **laser** diameter / length tab |
-| Metrics | Signal logging + servo tuning tabs |
+| Metrics | Signal logging + **Servo Tuning** (semi-auto, one-click, inertia WIP) |
 
 ---
 
@@ -36,7 +36,7 @@ If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page 
 | Measure diameter with the laser | **[LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md)** |
 | Copy tool-change onto another mill | **[INSTALL_TOOL_CHANGE.md](docs/INSTALL_TOOL_CHANGE.md)** |
 | Tweak Probe Basic UI / SET Z / abort dialog | **[PROBE_BASIC_UI.md](docs/PROBE_BASIC_UI.md)** |
-| Log following error / tune servos | [SIGNAL_LOGGING](docs/SIGNAL_LOGGING.md) · [A6_TUNING](docs/A6_TUNING.md) · [ONE_CLICK_TUNING](docs/ONE_CLICK_TUNING.md) |
+| Log following error / tune servos | **[Servo auto-tuning](#servo-tuning--auto-tune)** · [SIGNAL_LOGGING](docs/SIGNAL_LOGGING.md) · [A6_TUNING](docs/A6_TUNING.md) · [SEMI_AUTO_TUNING](docs/SEMI_AUTO_TUNING.md) · [ONE_CLICK_TUNING](docs/ONE_CLICK_TUNING.md) · [GRAPHICAL_INERTIA_TUNE](docs/GRAPHICAL_INERTIA_TUNE.md) |
 
 Full list of guides lives under [`docs/`](docs/).
 
@@ -88,6 +88,7 @@ it at several of them at once. Add one feature at a time, and rigorously test be
 | Load a cutter and probe its length | **LOAD SPINDLE** or CAM `T<n> M600` → [TOOLSETTER](docs/TOOLSETTER.md) |
 | Cancel a tool change mid-job | **ABORT** on the Manual Tool Change dialog → [PROBE_BASIC_UI](docs/PROBE_BASIC_UI.md) |
 | Measure tool diameter (laser) | Laser Setter tab → [LASER_TOOL_SETTER](docs/LASER_TOOL_SETTER.md) |
+| Semi-auto / one-click servo tune | Servo Tuning tab → [section below](#servo-tuning--auto-tune) |
 | Z repeatability tests | MDI metrology macros → [metrology README](probe_basic/subroutines/metrology/README.md) |
 
 ---
@@ -129,6 +130,85 @@ So I have both types on my machine.
 3. Set **START OFFSET** (default 15), **MAX TRAVEL** (default 30), **Z DROP**.
 4. **MEASURE DIAMETER**.
 5. Optional: enter **MASTER PIN** → measure again → **CALIBRATE BEAM**.
+
+---
+
+## Servo tuning / auto-tune
+
+A lot of the work in this repo is around making A6-EC loop gains less painful to
+set. Probe Basic has a **Servo Tuning** tab that reads/writes drive SDOs over
+EtherCAT, plots CiA **60F4** following error (not LinuxCNC `joint.f-error`), and
+supports three related workflows:
+
+| Workflow | What it is | When to use it |
+|----------|------------|----------------|
+| **Manual** | Edit Pending gains → **APPLY TO DRIVE**; zone ladder in the docs | Learning the loops, or one-off knobs |
+| **Semi-auto** | Frozen NGC stimulus → **COPY PLOT** / **COPY TUNING** → paste into an LLM → apply suggestions yourself | Judgment calls, notch placement, “does this look right?” |
+| **One-click** | One button per axis runs the full gain ladder (stimulus + FFT stability gate + notch + journaled revert) | First pass on an axis when you want the robot to climb gains |
+
+**Loop gains are not written from `ethercat-conf.xml`** — that used to wipe bench
+tuning on every LinuxCNC start. Startup still sets conservative drive
+position-deviation windows (6065/6066). APPLY is RAM-only; store to drive
+EEPROM yourself when you like a result.
+
+### Semi-auto tune (clipboard → LLM)
+
+Operator-in-the-loop. You run a frozen back-and-forth move, copy the FERR plot
+and the live parameter text, paste into an LLM that has the tuning playbook,
+then type suggestions into Pending and press **APPLY TO DRIVE**. The LLM never
+writes SDOs.
+
+1. Home / enable. Open **Servo Tuning** (parameters auto-read on tab open).
+2. Select the edit axis → **START PLOT** → run `nc_files/<axis>_tuning.ngc`.
+3. **COPY PLOT** + **COPY TUNING** → paste into an LLM with
+   [SERVO_TUNING_LLM.md](docs/SERVO_TUNING_LLM.md) in context.
+4. Edit Pending from the suggestion → **APPLY TO DRIVE** → repeat.
+
+Full operator guide: **[SEMI_AUTO_TUNING.md](docs/SEMI_AUTO_TUNING.md)**.
+
+### One-click auto-tune
+
+Automated version of the manual gain ladder: one button per axis moves a short
+repeatable stroke, watches drive FERR, climbs speed → notch → position →
+integral until the FFT stability gate trips, backs off, verifies, and saves a
+preset. Every step is journaled under `logs/tuning/one_click/` (cancel /
+exception restores baseline SDOs).
+
+1. Home, clear the envelope, machine **ON**. Keep a hand near ESTOP — **the axis moves**.
+2. Servo Tuning → pick the axis → profile (**BALANCED** is the default) →
+   **ONE-CLICK TUNE**.
+3. Read the summary; try the axis; EEPROM-store if you like it.
+
+Same engine runs headless via `scripts/run_auto_tune.py` (`--sim` / `--dry-run`
+for desk demos). Details, safety model, and state machine:
+**[ONE_CLICK_TUNING.md](docs/ONE_CLICK_TUNING.md)**.
+
+### Inertia auto-tune (still in the works)
+
+There is an **INERTIA** panel on the same tab that tries to identify load/motor
+inertia ratio and write **C00.06** (graphical physics fit + Yaskawa Sigma II
+cross-check — see [GRAPHICAL_INERTIA_TUNE.md](docs/GRAPHICAL_INERTIA_TUNE.md)).
+That path is **still being hardened** and is not something I would treat as
+“done” yet.
+
+**Practical caveat:** in many scenarios you can get away with the factory
+default inertia (**C00.06 = 100%**) and still get a usable one-click / semi-auto
+gain tune. Prefer measuring inertia when the load is heavy vs the motor, or when
+gains refuse to settle — but do not block on a perfect C00.06 before you start
+tuning.
+
+### Tuning docs map
+
+| Doc | Covers |
+|-----|--------|
+| [SERVO_TUNING.md](docs/SERVO_TUNING.md) | Manual zone ladder (high → low frequency) |
+| [SEMI_AUTO_TUNING.md](docs/SEMI_AUTO_TUNING.md) | Clipboard → LLM loop |
+| [ONE_CLICK_TUNING.md](docs/ONE_CLICK_TUNING.md) | Per-axis auto gain ladder |
+| [GRAPHICAL_INERTIA_TUNE.md](docs/GRAPHICAL_INERTIA_TUNE.md) | Inertia panel (WIP) |
+| [A6_TUNING.md](docs/A6_TUNING.md) | SDO map, APPLY path, branch status |
+| [SERVO_TUNING_LLM.md](docs/SERVO_TUNING_LLM.md) | Playbook to paste into an LLM |
+| [INSTALL_SERVO_TUNING.md](docs/INSTALL_SERVO_TUNING.md) | Drop the tabs onto another mill |
+| [SIGNAL_LOGGING.md](docs/SIGNAL_LOGGING.md) | Multi-channel CSV / plots |
 
 ---
 
