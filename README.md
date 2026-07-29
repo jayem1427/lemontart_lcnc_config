@@ -38,7 +38,7 @@ If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page 
 | Tweak Probe Basic UI / SET Z / abort dialog | **[PROBE_BASIC_UI.md](docs/PROBE_BASIC_UI.md)** |
 | Log following error / tune servos | **[Servo auto-tuning](#servo-tuning--auto-tune)** · [SIGNAL_LOGGING](docs/SIGNAL_LOGGING.md) · [A6_TUNING](docs/A6_TUNING.md) · [SEMI_AUTO_TUNING](docs/SEMI_AUTO_TUNING.md) · [ONE_CLICK_TUNING](docs/ONE_CLICK_TUNING.md) · [GRAPHICAL_INERTIA_TUNE](docs/GRAPHICAL_INERTIA_TUNE.md) |
 
-Full list of guides lives under [`docs/`](docs/).
+Full list of guides: **[docs/README.md](docs/README.md)** (topic index, learning paths, upstream links).
 
 ---
 
@@ -148,7 +148,7 @@ supports three related workflows:
 
 **Loop gains are not written from `ethercat-conf.xml`** — that used to wipe bench
 tuning on every LinuxCNC start. Startup still sets conservative drive
-position-deviation windows (6065/6066). APPLY is RAM-only; store to drive
+position-deviation windows (6065/6066: **0.5 mm / 0.5° / 250 ms**). APPLY is RAM-only; store to drive
 EEPROM yourself when you like a result.
 
 ### Semi-auto tune (clipboard → LLM)
@@ -255,7 +255,8 @@ git checkout <branch>
 - Custom Manual Tool Change dialog with **ABORT** (Esc/close ignored).
 - REF ALL order: Z → X → Y → A.
 - Software E-stop: Slave 3 DI1 (DB15 pin 10).
-- Drive position-deviation windows (SDO 6065/6066): about **1.0 mm / 1.0° / 250 ms**
+- Drive position-deviation windows (SDO 6065/6066): about **0.5 mm / 0.5° / 250 ms**
+  (one-click tuning temporarily raises 6065 to **2.0** during moves)
   — see [A6_TUNING.md](docs/A6_TUNING.md).
 - INI `FERROR` values are intentionally wide for bring-up — tighten for production
   ([DEVIATIONS.md](docs/DEVIATIONS.md)).

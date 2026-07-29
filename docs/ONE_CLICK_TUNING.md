@@ -48,9 +48,10 @@ restored to its baseline value.
   Direction is chosen from soft limits when homed; unhomed axes go positive
   and rely on you having confirmed clearance.
 - **FERR watchdog.** A 1 kHz sampler watches drive 60F4 during every move
-  and aborts motion when |FERR| crosses **80% of the drive 6065 window**
-  (1.0 mm / 1.0° on this machine → abort at 0.8). An unstable gain step is
-  therefore stopped by software *before* the drive faults with Er47.0.
+  and aborts motion when |FERR| crosses **80% of the active 6065 window**
+  (production **0.5 mm / 0.5°**; raised to **2.0** during the campaign → abort
+  at 1.6). An unstable gain step is therefore stopped by software *before* the
+  drive faults with Er47.0.
 - **Writes reuse the hardened APPLY path** (`apply_axis_params`): machine
   OFF → SDO download + read-back verify with retries → machine ON. Only keys
   that were successfully auto-read at baseline are ever written; the
@@ -63,9 +64,14 @@ restored to its baseline value.
 - **RAM only.** Nothing is stored to drive EEPROM, and `ethercat-conf.xml`
   still does not push loop gains at startup — a power cycle is always a
   hard reset to whatever the drive has stored.
-- **Not touched:** LinuxCNC `joint.f-error` / INI `FERROR`, 6065/6066 fault
-  windows, 2nd gain set, torque filter, feedforward, stiffness, inertia
-  (set C00.06 first via the **INERTIA** panel — `GRAPHICAL_INERTIA_TUNE.md`).
+- **6065 window:** Production fault window is **0.5 mm / 0.5°** from
+  `ethercat-conf.xml`. The campaign **raises 6065 to 2.0** before stimulus
+  moves and restores **0.5** on success, cancel, or failure. Loop gains,
+  2nd gain set, torque filter, feedforward, stiffness, and inertia are not
+  auto-written (set C00.06 first via the **INERTIA** panel —
+  `GRAPHICAL_INERTIA_TUNE.md`).
+- **Not touched:** LinuxCNC `joint.f-error` / INI `FERROR`, 6066 fault
+  persistence time.
 
 ---
 
@@ -196,7 +202,7 @@ the folder somewhere safe or paste `journal.md` into an issue/LLM chat.
 | `improved` (verify/backoff failed) | Ladder found a strong stable step; verify tripped on HF harmonics or a late integral stress but engine kept `_best_values` | `verify/keep-best` event lists the restored gains | try the axis; store EEPROM if happy — journal explains why verify failed |
 | `no-change` | Ladder found nothing ≥3% better than baseline | accepted vs stalled steps | baseline may already be good; try AGGRESSIVE, or tune stimulus feed up so tracking error dominates noise |
 | `cancelled` | You pressed CANCEL / Ctrl+C | — | baseline was restored; journal keeps everything measured so far |
-| Watchdog trips at the *first* speed step | Baseline is closer to instability than it looks, or 6065 window is tight | `tripped_ferr` value in the measure meta | verify 6065 (should be ~1.0 mm), start from a softer baseline preset |
+| Watchdog trips at the *first* speed step | Baseline is closer to instability than it looks, or 6065 window is tight | `tripped_ferr` value in the measure meta | verify production 6065 is **0.5 mm / 0.5°** and tuning raised it to 2.0; start from a softer baseline preset |
 | Gains end up lower than your hand tune | The gate is stricter than your ears, or the stimulus excites a mode your NGC didn't | FFT peaks in the last stalled/unstable step | that peak frequency is real information — consider a manual notch there, then rerun |
 
 4. If the behavior looks like an engine bug, reproduce it in the simulator:

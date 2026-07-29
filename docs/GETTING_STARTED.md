@@ -9,6 +9,8 @@ things together.
 If you only read one other file after this: **[DEVIATIONS.md](DEVIATIONS.md)** —
 that is where “why doesn’t this match the manual?” usually lives.
 
+Full doc index with learning paths and upstream links: **[README.md](README.md)**.
+
 ## Before you copy anything
 
 | Expect to change | Why |
@@ -79,7 +81,7 @@ Drive docs (vendor):
 
 ### Stage 3 — Homing, limits, bench mode
 
-Homing and limit wiring live in [`ethercat_mill.hal`](../ethercat_mill.hal), not the INI. See [README.md](../README.md#current-machine-notes-this-bench) for bench notes.
+Homing and limit wiring live in [`ethercat_mill.hal`](../ethercat_mill.hal), not the INI. See [README.md](../README.md#current-machine-notes) for bench notes.
 
 **Bench / breakout shortcuts** (revert before production — details in [DEVIATIONS.md](DEVIATIONS.md#bench--breakout-shortcuts)):
 
@@ -129,7 +131,7 @@ Before trusting CAM:
 5. Confirm HAL routing: `halcmd show pin halui.tool.number` and trip each sensor.
 6. Optional: Laser Setter diameter smoke test — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md).
 
-**EtherCAT note:** committed INI `FERROR` values are wide for bring-up (1270 / 254 mm); drives also set SDO `6065`/`6066` (~1.0 mm / 250 ms). Tighten both after motion is stable — [DEVIATIONS.md](DEVIATIONS.md#relaxed-ferror--min_ferror) and [A6_TUNING.md](A6_TUNING.md).
+**EtherCAT note:** committed INI `FERROR` values are wide for bring-up (1270 / 254 mm); drives also set SDO `6065`/`6066` (**0.5 mm / 0.5°** / 250 ms). Tighten both after motion is stable — [DEVIATIONS.md](DEVIATIONS.md#relaxed-ferror--min_ferror) and [A6_TUNING.md](A6_TUNING.md).
 
 ## How the config fits together
 

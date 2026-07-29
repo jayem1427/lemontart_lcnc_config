@@ -175,12 +175,12 @@ Configured in `ethercat-conf.xml` per slave via EtherCAT SDO at startup (no Step
 
 | SDO | Meaning | XYZ value | A value |
 |-----|---------|-----------|---------|
-| **6065h** | Max position deviation (encoder counts) | `0x3333` = 13107 counts ≈ **1.0 mm** @ 13107.2 counts/mm | `0x016C` = 364 counts ≈ **1.0°** @ 364.09 counts/deg |
+| **6065h** | Max position deviation (encoder counts) | `0x199A` = 6554 counts ≈ **0.5 mm** @ 13107.2 counts/mm | `0x00B6` = 182 counts ≈ **0.5°** @ 364.09 counts/deg |
 | **6066h** | Fault delay (ms deviation must persist) | `0x00FA` = **250 ms** | same |
 
 Drive fault **Er47.0** compares internal position demand vs feedback (CiA 6062 vs 6064). This is **separate** from LinuxCNC `joint.N.f-error` and the INI `FERROR` limit (2.0 mm on this machine).
 
-> **Note:** Startup defaults are intentionally loose for tuning (1.0 mm / 1.0°). Tighten 6065h later once loops are stable if you want earlier Er47.0 protection.
+> **Note:** Startup defaults are **0.5 mm / 0.5°** (conservative Er47.0 protection). One-click / inertia tuning temporarily raises 6065 to **2.0** during stimulus moves, then restores the production window. Tighten 6065 later if you want earlier drive faults once loops are stable.
 
 ---
 
