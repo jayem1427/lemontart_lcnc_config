@@ -36,6 +36,7 @@ don't fight when you're not measuring.
 | Feature | Status |
 |---------|--------|
 | Live beam LED on the tab | Works (keeps updating during measure) |
+| **SCOPE** / **SAVE PNG** | Live plot; auto-captures each measure to `logs/laser_scope/` |
 | **MEASURE DIAMETER** | Works |
 | **CALIBRATE BEAM** / editable **MEASURED BEAM WIDTH** | Works — master pin − raw → `#5516` |
 | **MEASURE LENGTH** | Experimental (needs `#5504` BEAM Z via MDI; not a contact TLO replacement) |
@@ -141,9 +142,36 @@ Defined in `ethercat_mill.hal`:
 ```
 lcec.0.2.di-5 → laser-beam-broken → motion.digital-in-03 (LED / M66)
                       │
-                      └── when M62 P0: and2.7 → or2.3 → motion.probe-input
+                      └── laser-flute-hold (timedelay: ON immediate, OFF delayed)
+                                             │
+                                             └── when M62 P0:
+                                                 and2.7 → or2.3
+                                                 → motion.probe-input
 contact probe / toolsetter → or2.0 → and2.8 (gated off when M62 P0) → or2.3
 ```
+
+G38 uses a **timedelay envelope** (`laser-flute-hold`): trip immediately on any
+block (`on-delay=0`), and stay blocked until the beam is continuously clear for
+`[LASER]BEAM_OFF_DELAY` (default **0.010 s**). That bridges flute gullets without
+the oneshot bug (oneshot expires during a long continuous block, then the next
+gullet clears early). LED / `M66 P3` stay **raw**.
+
+At 6000 RPM with three flutes, a flute passes every 3.33 ms, so 10 ms of off-delay
+covers several gullets. The master-pin calibration absorbs the small release lag.
+
+Press **SCOPE** for a live plot, or just run **MEASURE DIAMETER** — capture starts
+automatically for the whole macro. With **SAVE PNG** checked (default), a full-run
+screenshot is written to `logs/laser_scope/<timestamp>_diameter.png`.
+
+Traces:
+
+1. **RAW** `lcec.0.2.di-5` — individual flute pulses
+2. **FILT** `laser-flute-hold.out` — timedelay envelope (on-delay 0, off-delay
+   `[LASER]BEAM_OFF_DELAY`, default 10 ms)
+3. **G38** `motion.probe-input` — final probe input (only high during M62)
+
+With a spinning 3-flute in the beam, RAW should chatter; FILT should stay high
+across gullets. A solid pin should keep RAW and FILT solid high.
 
 Measure macros: **M62 P0** only around each **G38** (never during G0/G1),
 **M63 P0** immediately after each probe and on every exit — otherwise LinuxCNC
@@ -192,7 +220,10 @@ Results publish with `M68 E0` (corrected diameter or length) and `M68 E1` (1 = s
 | `laser_set_start_xy.ngc` | BEAM X/Y + RPM → `#5501–#5503` (UI usually writes params directly) |
 | `laser_set_diam_params.ngc` | Z DROP / MAX TRAVEL / START OFFSET |
 | `laser_set_beam_z.ngc` | BEAM Z for length |
-| `ethercat_mill.hal` | `laser-beam-broken` + M62/M63 probe mux |
+| `ethercat_mill.hal` | `laser-beam-broken` + flute envelope + M62/M63 probe mux |
+| `custom.hal` | Loads `timedelay` as `laser-flute-hold` (+ spindle at-speed delay) |
+| `ethercat_mill.ini` `[LASER]` | `BEAM_OFF_DELAY` (default 0.010 s) |
+| `logs/laser_scope/` | Auto PNG captures from MEASURE (gitignored `*.png`) |
 
 ---
 
@@ -221,6 +252,98 @@ tab rewrites the file sorted when it saves `#5516` / `#5517`.
 
 ---
 
+## Fluted tools, filtering, and accuracy (notes for humans + AI)
+
+This section records what we learned on hardware so the next agent does **not**
+re-invent failed approaches.
+
+### Symptom
+
+A **gauge pin** measures cleanly (solid on/off shadow). A **spinning multi-flute
+endmill** either:
+
+- quits diameter early (`G38.5` clear on the first gullet), or  
+- finishes but reads **~0.15–0.25 mm skinny** vs micrometer OD after beam cal.
+
+Example (this mill, Ø6.35 3-flute, after envelope filter): corrected ≈ **6.13 mm**.
+
+### Root cause
+
+`laser_diameter.ngc` finds edges with:
+
+1. **G38.3** −X until beam **breaks**  
+2. **G38.5** −X until beam **clears**
+
+Raw `laser-beam-broken` on a fluted cutter is a **chopped** signal (flute / gullet /
+flute). At 6000 RPM × 3 flutes, pulses repeat every **3.33 ms**. `G38.5` treats the
+first clear blip as “left the tool.”
+
+Higher RPM alone is **not** a fix: past a sweet spot (~6k on this setup) the sensor
+**averages** more light through gullets and the silhouette gets **skinnier**
+(10k/20k made results worse).
+
+### What failed
+
+| Approach | Why it failed |
+|----------|----------------|
+| Symmetric `debounce` (15–25 ms) | Averages duty cycle; both edges delayed; never recovers a true envelope |
+| `oneshot` retriggerable + OR raw | Oneshot **expires during a long continuous block**; next gullet clears immediately → raw width ≈ off-delay × feed (e.g. 0.005 mm) |
+| “Just spin faster” | Helps briefly, then optical averaging undersizes |
+
+### What works
+
+HAL **`timedelay`** named `laser-flute-hold`:
+
+- `on-delay = 0` → trip on first blocked sample  
+- `off-delay = [LASER]BEAM_OFF_DELAY` (default **0.010 s**) → stay blocked until
+  continuously clear for that long  
+
+Loaded in `custom.hal` with `spindle-at-speed-delay` (one `loadrt timedelay names=...`
+for TWOPASS). Wired in `ethercat_mill.hal` onto the **G38 mux only**; LED / `M66 P3`
+stay **raw**.
+
+Recommended probe RPM for 3-flute: about **6000** (sweet spot observed here).
+
+### Scope capture (debug)
+
+Laser Setter tab:
+
+- **SCOPE** — live pyqtgraph plot (UI-thread HAL sample, target **1000 Hz**)  
+- **SAVE PNG** (default on) — MEASURE DIAMETER/LENGTH auto-logs the **full macro**
+  (button → retract) to `logs/laser_scope/<stamp>_diameter.png`
+
+Traces: **RAW** `lcec.0.2.di-5`, **FILT** `laser-flute-hold.out`, **G38**
+`motion.probe-input`.
+
+Healthy fluted capture: RAW chatters on entry / may blip mid-pass; **FILT stays
+high** across gullets; G38 follows FILT while M62 is on. X axis must be **0…T
+seconds** for the whole run (not a trailing 2 s live window).
+
+### Accuracy limits (do not chase forever)
+
+After the envelope filter works:
+
+- Remaining ~**0.2 mm** undersize on flutes is usually **optics / Z section /
+  flute silhouette**, not gullet miss and not feedrate.  
+- At F50, motion per 1 ms sample is already ≪ 0.001 mm — **slower feed will not
+  close 0.2 mm**.  
+- Off-delay slightly **delays clear** (tiny oversize bias), so it is the wrong
+  knob for undersize.  
+- Mild beam **tilt** that acts as a constant scale is largely removed by the
+  **6 mm pin additive cal** for nearby diameters. Residual after a pin that
+  reads back ~6.00 is **not** “uncorrected tilt.”  
+- Pin cal: `corrected = raw + (master − raw_pin)` → `#5516`.
+
+Macro also rejects absurdly small raw widths (`< 0.025 mm`) as false-clear /
+filter failure.
+
+### Related drive note
+
+`ethercat-conf.xml` sets **C01.10 = 3** (speed observer) on all A6 axes via
+`0x2001:0x11` — unrelated to laser optics, but part of the same bench session.
+
+---
+
 ## Troubleshooting
 
 | What you see | Try this |
@@ -235,6 +358,9 @@ tab rewrites the file sorted when it saves `#5516` / `#5517`.
 | “Beam already broken at START” | START OFFSET too small — increase it so START is clear |
 | Never trips before MAX TRAVEL | Raise MAX TRAVEL (still short of the wall) or fix START OFFSET / polarity |
 | Never clears / oversize abort | Tool bigger than the travel window, or stop too short |
+| Raw width &lt; 0.025 mm / early clear | Envelope filter not holding — check `laser-flute-hold`, SCOPE PNG, ~6k RPM on 3-flute |
+| Fluted endmill ~0.2 mm skinny after filter | Expected ballpark for this sensor; check Z DROP on full OD; don’t expect feedrate to fix it |
+| SCOPE PNG only shows last ~2 s | Old bug; current code freezes sampling then renders **full** 0…T capture |
 | Footer FAILED, old diameter gone | That’s correct — success is gated on `M68 E1` |
 | Contact probe acting weird | MDI **M63 P0** if a laser measure aborted; then check contact mux / tool number |
 
@@ -245,9 +371,11 @@ tab rewrites the file sorted when it saves `#5516` / `#5517`.
 1. ~~HAL + LED + diameter~~  
 2. ~~G38 via M62 P0 mux; capture BEAM XY; START OFFSET / MAX TRAVEL (−X sweep)~~  
 3. ~~Beam-width / master-pin calibration (true diameter)~~  
-4. Optional measure axis (X vs Y)  
-5. Runout / broken-tool check  
-6. Length → real TLO vs gauge line  
-7. Air blast DO / controllable Select  
+4. ~~Flute envelope filter (`timedelay`) + SCOPE PNG capture~~  
+5. Optional measure axis (X vs Y)  
+6. Runout / broken-tool check  
+7. Length → real TLO vs gauge line  
+8. Air blast DO / controllable Select  
+9. Optional per-tool optical fudge if flutes stay systematically skinny  
 
 PRs welcome — especially safer travel limits for other mill layouts.

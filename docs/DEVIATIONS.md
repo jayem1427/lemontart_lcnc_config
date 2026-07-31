@@ -139,11 +139,14 @@ Here: `halui.tool.number` compared to constant **99** (`probe-tool-num`):
 - Equal → touch probe `lcec.0.1.di-5`
 - Not equal → toolsetter `lcec.0.1.di-2`
 
-Laser **M62 P0** muxes `laser-beam-broken` onto `motion.probe-input` for G38 measure macros; **M63 P0** restores contact-only routing — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md).
+Laser **M62 P0** muxes **filtered** `laser-beam-broken` (via `laser-flute-hold`
+timedelay envelope) onto `motion.probe-input` for G38 measure macros; **M63 P0**
+restores contact-only routing — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md)
+(see **Fluted tools** section for filter design notes).
 
 Uses `and2` + `or2`, not `mux2` (float-only). **`#3014` does not update HAL** — renumbering requires editing `setp probe-tool-num.value`.
 
-Audible feedback: `probe_beep.hal` watches the same `probe-in` net and plays `beep.mp3` via `scripts/probe_beep.py` (userspace; not realtime). Optional — comment out the HALFILE to disable.
+Audible feedback: `probe_beep.hal` watches `probe-in` and `laser-beam-broken`, playing `beep.mp3` via `scripts/probe_beep.py` (userspace; not realtime). Covers touch probe, contact toolsetter, laser G38, and jog/capture beam-block. Optional — comment out the HALFILE to disable.
 
 See [README.md](../README.md#contact-probe-vs-toolsetter-hal) and [TOOLSETTER.md](TOOLSETTER.md#touch-probe-tool-number-setup-and-renumbering).
 
@@ -165,7 +168,7 @@ Physical master estop cuts mains. Software NC estop on Slave 3 DI1 gates `iocont
 | Deviation | Notes |
 |-----------|--------|
 | M3/M4 ↔ VFD direction **swapped** | Comment `REVERT: fwd->sel0 rev->sel1` |
-| At-speed | `near.0` (50 RPM) + **`timedelay.0` 5 s** |
+| At-speed | `near.0` (50 RPM) + **`spindle-at-speed-delay` 5 s** |
 | Critical faults | Modbus fault reg `0x000A` codes 64 / 92 → `halui.estop.activate` |
 | `or2.1` reserved | Do not load another `or2` with `names=` — conflicts with probe `or2.0` |
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""HAL userspace component: play beep.mp3 on rising edge of probe-in.
+"""HAL userspace component: play beep.mp3 on probe/laser rising edges.
 
-Wired from probe_beep.hal to the existing probe-in net (touch probe,
-toolsetter, or laser trip → motion.probe-input).
+Wired from probe_beep.hal:
+  - trigger  ← probe-in (touch probe, contact toolsetter, or laser G38)
+  - laser    ← laser-beam-broken (jog/capture feedback even when M62 is off)
 
 Requires an MP3-capable CLI player (mpg123, ffplay, or gst-play-1.0).
 Disable by commenting out HALFILE = probe_beep.hal in ethercat_mill.ini.
@@ -93,23 +94,26 @@ def main() -> int:
 
     h = hal.component(COMPONENT_NAME)
     h.newpin("trigger", hal.HAL_BIT, hal.HAL_IN)
+    h.newpin("laser", hal.HAL_BIT, hal.HAL_IN)
     h.ready()
 
-    prev = False
+    prev_probe = False
+    prev_laser = False
     last_play = 0.0
     proc: subprocess.Popen | None = None
 
     try:
         while True:
             try:
-                on = bool(h["trigger"])
+                probe_on = bool(h["trigger"])
+                laser_on = bool(h["laser"])
             except Exception:
                 break
 
             now = time.monotonic()
+            rising = (probe_on and not prev_probe) or (laser_on and not prev_laser)
             if (
-                on
-                and not prev
+                rising
                 and player is not None
                 and os.path.isfile(beep_path)
                 and (now - last_play) >= COOLDOWN_S
@@ -117,7 +121,8 @@ def main() -> int:
                 proc = play_beep(player, beep_path, proc)
                 last_play = now
 
-            prev = on
+            prev_probe = probe_on
+            prev_laser = laser_on
             time.sleep(POLL_S)
     except KeyboardInterrupt:
         pass

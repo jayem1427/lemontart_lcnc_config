@@ -1,16 +1,18 @@
 # =========================================================
-# Probe / toolsetter audible feedback
+# Probe / toolsetter / laser audible feedback
 # =========================================================
-# Plays beep.mp3 on the rising edge of probe-in (touch probe,
-# contact toolsetter, or laser trip → motion.probe-input).
+# Plays beep.mp3 on rising edge of:
+#   probe-in           — touch probe, contact toolsetter, laser G38 (M62)
+#   laser-beam-broken  — beam block while jogging / capture (M62 off)
 #
 # Requires: scripts/probe_beep.py, beep.mp3 at config root,
 # and an MP3 player (mpg123 preferred; ffplay / gst-play-1.0 also ok).
 #
 # Disable: comment out HALFILE = probe_beep.hal in ethercat_mill.ini.
-# Must load AFTER ethercat_mill.hal (creates net probe-in).
+# Must load AFTER ethercat_mill.hal (creates probe-in + laser-beam-broken).
 
 loadusr -Wn probe-beep python3 scripts/probe_beep.py
 
-# Add a reader on the existing probe-in signal (already drives motion.probe-input).
+# Readers on existing nets (already drive motion.probe-input / digital-in-03).
 net probe-in => probe-beep.trigger
+net laser-beam-broken => probe-beep.laser

@@ -248,6 +248,17 @@ o<laser_diameter> sub
     #5512 = #<raw_diam>
     #<diameter> = [#<raw_diam> + #<beam_cal>]
 
+    (Reject a timer-width false edge; DS-5V-M specified minimum tool is 0.05 mm)
+    o<diam_too_small> if [#<raw_diam> LT 0.025]
+      (DEBUG, LASER DIAM: raw width below 0.025 mm — false clear / filter not retriggered)
+      G0 G53 Z#<z_safe>
+      M5
+      M68 E0 Q#<raw_diam>
+      M68 E1 Q0
+      M63 P0
+      o<laser_diameter> return
+    o<diam_too_small> endif
+
     o<diam_too_big> if [#<raw_diam> GT #<max_ok_diam>]
       (DEBUG, LASER DIAM: measured diameter exceeds travel window — reject)
       G0 G53 Z#<z_safe>

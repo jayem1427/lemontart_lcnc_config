@@ -37,13 +37,13 @@ setp near.0.difference 50.0  # Allow 50 RPM tolerance
 net pdnt.spindle-speed-abs => near.0.in1
 net spindle-speed-in => near.0.in2
 
-# Extra settle delay after speed-compare is true
-loadrt timedelay count=1
-addf timedelay.0 servo-thread
-setp timedelay.0.on-delay 5.0
-setp timedelay.0.off-delay 0.0
-net spindle-at-speed-raw near.0.out => timedelay.0.in
-net spindle-at-speed timedelay.0.out => spindle.0.at-speed
+# Extra settle delay after speed-compare is true + laser flute envelope hold
+loadrt timedelay names=spindle-at-speed-delay,laser-flute-hold
+addf spindle-at-speed-delay servo-thread
+setp spindle-at-speed-delay.on-delay 5.0
+setp spindle-at-speed-delay.off-delay 0.0
+net spindle-at-speed-raw near.0.out => spindle-at-speed-delay.in
+net spindle-at-speed spindle-at-speed-delay.out => spindle.0.at-speed
 
 # 5. Output Current Monitoring
 addf mult2.6 servo-thread

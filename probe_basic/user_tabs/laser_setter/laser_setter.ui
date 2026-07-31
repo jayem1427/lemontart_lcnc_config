@@ -127,6 +127,29 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="btnSignalScope">
+        <property name="minimumSize">
+         <size><width>112</width><height>32</height></size>
+        </property>
+        <property name="text"><string>SCOPE</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="toolTip"><string>Live Python plot: raw / filtered envelope / G38 probe (replaces photo while on)</string></property>
+        <property name="focusPolicy"><enum>Qt::NoFocus</enum></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnScopeSavePng">
+        <property name="minimumSize">
+         <size><width>100</width><height>32</height></size>
+        </property>
+        <property name="text"><string>SAVE PNG</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="checked"><bool>true</bool></property>
+        <property name="toolTip"><string>When checked, MEASURE DIAMETER/LENGTH auto-logs the full run and writes logs/laser_scope/*.png</string></property>
+        <property name="focusPolicy"><enum>Qt::NoFocus</enum></property>
+       </widget>
+      </item>
+      <item>
        <widget class="QPushButton" name="btnHelp">
         <property name="minimumSize">
          <size><width>32</width><height>32</height></size>

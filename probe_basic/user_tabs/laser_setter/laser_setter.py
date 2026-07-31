@@ -17,8 +17,10 @@ Params live in #5501+ (never G30/toolsetter #5181-#5186).
 MDI dispatch uses linuxcnc.command() directly (not qtpyvcp.actions).
 """
 
+import collections
 import os
 import subprocess
+import sys
 import time
 
 import linuxcnc
@@ -26,9 +28,33 @@ import linuxcnc
 from qtpy import uic
 from qtpy.QtCore import Qt, QSize, QTimer
 from qtpy.QtGui import QImage, QPixmap, QColor, QPalette, QFont, QFontDatabase
-from qtpy.QtWidgets import QWidget, QMessageBox, QApplication
+from qtpy.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QApplication,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from qtpyvcp.utilities import logger
+
+try:
+    import pyqtgraph as pg
+except ImportError:  # pragma: no cover
+    pg = None
+
+PYTHON_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, "python")
+)
+if PYTHON_DIR not in sys.path:
+    sys.path.insert(0, PYTHON_DIR)
+
+try:
+    from a6_servo_tune import hal_getp  # noqa: E402
+except Exception:  # pragma: no cover
+    hal_getp = None
 
 LOG = logger.getLogger(__name__)
 MM_PER_INCH = 25.4
@@ -40,6 +66,16 @@ HAL_LASER_DIO = "motion.digital-in-03"  # live M66 source; also usable for captu
 LED_CLEAR = "#c01c28"      # beam clear (nothing in slot)
 LED_BROKEN = "#f5c211"     # tool breaking beam
 LED_UNKNOWN = "#4a4f51"
+# Live scope: stacked 0/1 traces. Sample on UI thread via in-process HAL.
+SCOPE_SAMPLE_HZ = 1000.0
+SCOPE_LIVE_S = 2.0
+SCOPE_CAPTURE_S = 90.0  # full MEASURE DIAMETER / LENGTH run
+SCOPE_CHANNELS = (
+    # key, HAL pin, vertical offset, color, label
+    ("raw", "lcec.0.2.di-5", 0.0, "#f5c211", "RAW"),
+    ("filt", "laser-flute-hold.out", 1.5, "#8ae234", "FILT"),
+    ("probe", "motion.probe-input", 3.0, "#ef2929", "G38"),
+)
 # Persistent laser params in linuxcnc.var (must exist there or they are lost on exit)
 LASER_VAR_PARAMS = (
     5501, 5502, 5503, 5504, 5505, 5506, 5507, 5508, 5509,
@@ -172,6 +208,7 @@ class UserTab(QWidget):
 
         self._wire_buttons()
         self._wire_help()
+        self._wire_signal_scope()
         self._wire_start_position()
         self._wire_beam_width_edit()
         self._init_units()
@@ -427,6 +464,373 @@ class UserTab(QWidget):
                 btn.clicked.connect(self._calibrate_beam_width)
             else:
                 btn.clicked.connect(self._make_handler(mdi_cmd))
+
+    def _wire_signal_scope(self):
+        """In-tab pyqtgraph scope — samples HAL on the UI thread (not Halscope)."""
+        button = getattr(self, "btnSignalScope", None)
+        if button is None:
+            return
+
+        self._scope_running = False
+        self._scope_capture = False
+        self._scope_capture_label = ""
+        self._scope_owned_by_measure = False
+        self._scope_last_sample = 0.0
+        self._scope_plot = None
+        self._scope_curves = {}
+        maxlen = int(SCOPE_SAMPLE_HZ * SCOPE_CAPTURE_S)
+        self._scope_buffers = {
+            key: collections.deque(maxlen=maxlen) for key, *_ in SCOPE_CHANNELS
+        }
+        self._scope_t = collections.deque(maxlen=maxlen)
+        self._scope_timer = QTimer(self)
+        # 1 ms tick; catch-up loop fills toward SCOPE_SAMPLE_HZ (~1 kHz).
+        self._scope_timer.setInterval(1)
+        self._scope_timer.timeout.connect(self._poll_signal_scope)
+
+        self._build_signal_scope_widget()
+        button.toggled.connect(self._toggle_signal_scope)
+
+    def _scope_log_dir(self):
+        here = os.path.dirname(os.path.abspath(__file__))
+        return os.path.abspath(os.path.join(here, "..", "..", "..", "logs", "laser_scope"))
+
+    def _build_signal_scope_widget(self):
+        slot = getattr(self, "imageSlot", None)
+        if slot is None:
+            return
+
+        self._scope_host = QWidget(slot)
+        self._scope_host.setObjectName("laserSignalScope")
+        self._scope_host.setVisible(False)
+        self._scope_host.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout = QVBoxLayout(self._scope_host)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        title = QLabel("LASER SIGNAL  (RAW / FILT / G38)")
+        title.setStyleSheet("color: #eeeeec; font-weight: bold;")
+        header.addWidget(title)
+        header.addStretch(1)
+        self._scope_stat = QLabel("—")
+        self._scope_stat.setStyleSheet("color: #babdb6;")
+        header.addWidget(self._scope_stat)
+        layout.addLayout(header)
+
+        if pg is None:
+            layout.addWidget(
+                QLabel("pyqtgraph not installed — live scope unavailable.")
+            )
+        else:
+            plot = pg.PlotWidget()
+            plot.setBackground("#1e2122")
+            plot.showGrid(x=True, y=True, alpha=0.25)
+            plot.setLabel("bottom", "time", units="s", color="#eeeeec")
+            plot.setLabel("left", "0/1 stacked", color="#eeeeec")
+            plot.setYRange(-0.2, 4.4, padding=0)
+            plot.enableAutoRange(x=False, y=False)
+            plot.setMouseEnabled(x=False, y=False)
+            plot.addLegend(offset=(8, 8))
+            for key, _pin, offset, color, label in SCOPE_CHANNELS:
+                pen = pg.mkPen(color=color, width=2)
+                curve = plot.plot(pen=pen, name=label)
+                self._scope_curves[key] = (curve, offset)
+            for y in (1.25, 2.75):
+                plot.addItem(
+                    pg.InfiniteLine(
+                        pos=y,
+                        angle=0,
+                        pen=pg.mkPen("#555753", width=1),
+                    )
+                )
+            plot.setMinimumHeight(280)
+            plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            layout.addWidget(plot, stretch=1)
+            self._scope_plot = plot
+
+        slot_layout = slot.layout()
+        if slot_layout is not None:
+            slot_layout.insertWidget(0, self._scope_host, stretch=1)
+
+    def _set_photo_column_visible(self, visible):
+        for name in (
+            "lblToolSetterImage",
+            "imageSlotTopSpacer",
+            "imageSlotBottomSpacer",
+            "imageSlotLeftSpacer",
+            "imageSlotRightSpacer",
+        ):
+            widget = getattr(self, name, None)
+            if widget is None:
+                continue
+            if hasattr(widget, "setVisible"):
+                widget.setVisible(visible)
+            elif hasattr(widget, "changeSize"):
+                if visible:
+                    defaults = {
+                        "imageSlotTopSpacer": (20, 40),
+                        "imageSlotBottomSpacer": (20, 40),
+                        "imageSlotLeftSpacer": (40, 20),
+                        "imageSlotRightSpacer": (40, 20),
+                    }
+                    w, h = defaults.get(name, (20, 20))
+                    widget.changeSize(w, h)
+                else:
+                    widget.changeSize(0, 0)
+
+    def _toggle_signal_scope(self, checked):
+        button = getattr(self, "btnSignalScope", None)
+        if checked:
+            if pg is None or hal_getp is None:
+                if button is not None:
+                    button.blockSignals(True)
+                    button.setChecked(False)
+                    button.blockSignals(False)
+                self._set_status(
+                    "ERROR: need pyqtgraph + in-process HAL (a6_servo_tune.hal_getp)"
+                )
+                return
+            if hasattr(self, "_scope_host"):
+                self._scope_host.setVisible(True)
+            self._set_photo_column_visible(False)
+            self._scope_start_sampling(clear=True)
+            self._set_status(
+                "SCOPE ON @ {:.0f} Hz — FILT should stay high across gullet gaps in RAW".format(
+                    SCOPE_SAMPLE_HZ
+                )
+            )
+        else:
+            if not self._scope_capture:
+                self._scope_stop_sampling()
+            if hasattr(self, "_scope_host"):
+                self._scope_host.setVisible(False)
+            self._set_photo_column_visible(True)
+            self._update_tool_setter_image()
+            self._set_status("SCOPE OFF")
+
+    def _scope_start_sampling(self, clear=False):
+        if clear:
+            for buf in self._scope_buffers.values():
+                buf.clear()
+            self._scope_t.clear()
+            self._scope_last_sample = 0.0
+        self._scope_running = True
+        if not self._scope_timer.isActive():
+            self._scope_timer.start()
+
+    def _scope_stop_sampling(self):
+        self._scope_running = False
+        self._scope_timer.stop()
+
+    def _start_measure_scope_capture(self, label):
+        """Log HAL bits for the whole measure macro (even if SCOPE view is off)."""
+        if pg is None or hal_getp is None:
+            return False
+        self._scope_capture = True
+        self._scope_capture_label = label
+        button = getattr(self, "btnSignalScope", None)
+        if button is not None and not button.isChecked():
+            self._scope_owned_by_measure = True
+            button.blockSignals(True)
+            button.setChecked(True)
+            button.blockSignals(False)
+            if hasattr(self, "_scope_host"):
+                self._scope_host.setVisible(True)
+            self._set_photo_column_visible(False)
+        else:
+            self._scope_owned_by_measure = False
+        self._scope_start_sampling(clear=True)
+        return True
+
+    def _stop_measure_scope_capture(self, save_png=True):
+        """End macro capture; optionally write PNG under logs/laser_scope/."""
+        # Freeze sampling before render so nothing overwrites with the live 2 s window.
+        self._scope_timer.stop()
+        self._scope_running = False
+        path = None
+        if save_png and self._scope_t:
+            path = self._save_scope_png(self._scope_capture_label or "measure")
+        label = self._scope_capture_label or "capture"
+        self._scope_capture = False
+        self._scope_capture_label = label
+        button = getattr(self, "btnSignalScope", None)
+        # Keep SCOPE open showing the FULL run (button → retract).
+        if button is not None and not button.isChecked():
+            button.blockSignals(True)
+            button.setChecked(True)
+            button.blockSignals(False)
+        if hasattr(self, "_scope_host"):
+            self._scope_host.setVisible(True)
+        self._set_photo_column_visible(False)
+        self._render_scope_full()
+        self._scope_owned_by_measure = False
+        return path
+
+    def _render_scope_full(self):
+        """Show the entire capture buffer from t=0 (button) to end (retract)."""
+        if self._scope_plot is None or not self._scope_t:
+            return
+        t0 = self._scope_t[0]
+        xs = [t - t0 for t in self._scope_t]
+        for key, _pin, _offset, _color, _lab in SCOPE_CHANNELS:
+            curve, off = self._scope_curves[key]
+            ys = [v + off for v in self._scope_buffers[key]]
+            curve.setData(xs, ys)
+        span = max(xs[-1], 0.1) if xs else 0.1
+        self._scope_plot.setXRange(0.0, span, padding=0.02)
+        self._scope_plot.setTitle(
+            "laser {}  n={}  {:.0f} Hz  ({:.1f} s)".format(
+                self._scope_capture_label or "capture",
+                len(xs),
+                SCOPE_SAMPLE_HZ,
+                span,
+            )
+        )
+        if hasattr(self, "_scope_stat") and self._scope_buffers["raw"]:
+            raw = self._scope_buffers["raw"][-1]
+            filt = self._scope_buffers["filt"][-1]
+            probe = self._scope_buffers["probe"][-1]
+            self._scope_stat.setText(
+                "FULL  RAW={}  FILT={}  G38={}  n={}  {:.1f}s".format(
+                    int(raw), int(filt), int(probe), len(xs), span
+                )
+            )
+
+    def _save_scope_png(self, label):
+        """Render the full capture buffer to logs/laser_scope/<stamp>_<label>.png."""
+        if self._scope_plot is None or pg is None or not self._scope_t:
+            return None
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in label)
+        out_dir = self._scope_log_dir()
+        os.makedirs(out_dir, exist_ok=True)
+        path = os.path.join(out_dir, "{}_{}.png".format(stamp, safe))
+
+        prev_label = self._scope_capture_label
+        self._scope_capture_label = label
+        self._render_scope_full()
+        self._scope_capture_label = prev_label
+        # Do NOT processEvents — that re-entered the 2 s live redraw.
+        try:
+            from pyqtgraph.exporters import ImageExporter
+
+            ImageExporter(self._scope_plot.plotItem).export(path)
+        except Exception as exc:
+            LOG.warning("laser_setter: ImageExporter failed (%s) — widget grab", exc)
+            pix = self._scope_host.grab()
+            if not pix.save(path, "PNG"):
+                LOG.error("laser_setter: failed to save scope PNG %s", path)
+                return None
+        LOG.info(
+            "laser_setter: wrote scope PNG %s (%d samples, %.1fs)",
+            path,
+            len(self._scope_t),
+            (self._scope_t[-1] - self._scope_t[0]) if len(self._scope_t) > 1 else 0.0,
+        )
+        return path
+
+    def _want_scope_png(self):
+        btn = getattr(self, "btnScopeSavePng", None)
+        return btn is None or btn.isChecked()
+
+    def _read_scope_bit(self, pin):
+        """Return 0.0/1.0 for a HAL bit pin; None on failure."""
+        if hal_getp is None:
+            return None
+        try:
+            val = float(hal_getp(pin))
+        except Exception:
+            return None
+        if val != val:  # NaN
+            return None
+        return 1.0 if val >= 0.5 else 0.0
+
+    def _poll_signal_scope(self):
+        if not self._scope_running:
+            return
+        now = time.monotonic()
+        interval = 1.0 / SCOPE_SAMPLE_HZ
+        if self._scope_last_sample <= 0.0:
+            self._scope_last_sample = now - interval
+
+        samples = 0
+        max_catchup = max(1, int(SCOPE_SAMPLE_HZ * 0.05))
+        while now - self._scope_last_sample >= interval and samples < max_catchup:
+            self._scope_last_sample += interval
+            row = {}
+            ok = True
+            for key, pin, _off, _color, _label in SCOPE_CHANNELS:
+                bit = self._read_scope_bit(pin)
+                if bit is None:
+                    ok = False
+                    break
+                row[key] = bit
+            if not ok:
+                if hasattr(self, "_scope_stat"):
+                    self._scope_stat.setText("HAL read failed")
+                break
+            if not self._scope_t:
+                t_rel = 0.0
+            else:
+                t_rel = self._scope_t[-1] + interval
+            self._scope_t.append(t_rel)
+            for key, val in row.items():
+                self._scope_buffers[key].append(val)
+            samples += 1
+
+        if samples >= max_catchup and now - self._scope_last_sample >= interval:
+            self._scope_last_sample = now
+
+        if not self._scope_t or self._scope_plot is None:
+            return
+
+        if self._scope_capture:
+            # Whole macro: x = 0 at button click → now.
+            t0 = self._scope_t[0]
+            xs = [t - t0 for t in self._scope_t]
+            for key, _pin, _offset, _color, _label in SCOPE_CHANNELS:
+                curve, off = self._scope_curves[key]
+                ys = [v + off for v in self._scope_buffers[key]]
+                curve.setData(xs, ys)
+            span = max(xs[-1], 0.1)
+            self._scope_plot.setXRange(0.0, span, padding=0.02)
+            raw = self._scope_buffers["raw"][-1]
+            filt = self._scope_buffers["filt"][-1]
+            probe = self._scope_buffers["probe"][-1]
+            self._scope_stat.setText(
+                "CAP  RAW={}  FILT={}  G38={}  n={}  {:.1f}s".format(
+                    int(raw), int(filt), int(probe), len(xs), span
+                )
+            )
+            return
+
+        # Idle live scope: last SCOPE_LIVE_S seconds only.
+        t_end = self._scope_t[-1]
+        t_min = t_end - SCOPE_LIVE_S
+        xs_all = list(self._scope_t)
+        for key, _pin, _offset, _color, _label in SCOPE_CHANNELS:
+            curve, off = self._scope_curves[key]
+            ys_all = list(self._scope_buffers[key])
+            xs = []
+            ys = []
+            for t, v in zip(xs_all, ys_all):
+                if t >= t_min:
+                    xs.append(t - t_end)
+                    ys.append(v + off)
+            curve.setData(xs, ys)
+
+        self._scope_plot.setXRange(-SCOPE_LIVE_S, 0.0, padding=0)
+
+        raw = self._scope_buffers["raw"][-1]
+        filt = self._scope_buffers["filt"][-1]
+        probe = self._scope_buffers["probe"][-1]
+        self._scope_stat.setText(
+            "LIVE  RAW={}  FILT={}  G38={}  n={}".format(
+                int(raw), int(filt), int(probe), len(self._scope_t)
+            )
+        )
 
     def _poll_beam_led(self):
         """UI LED mirrors HAL laser-beam-broken (clear vs tool in beam)."""
@@ -829,6 +1233,7 @@ class UserTab(QWidget):
             LOG.error("laser_setter: linuxcnc unavailable, cannot issue: %s", mdi_cmd)
             self._set_status("ERROR: linuxcnc unavailable")
             return
+        capturing = False
         try:
             self._stat.poll()
             if self._stat.estop:
@@ -840,11 +1245,20 @@ class UserTab(QWidget):
                 LOG.warning("laser_setter: not enabled, blocked: %s", mdi_cmd)
                 return
 
+            if btn_name in ("btnMeasureDiameter", "btnMeasureLength"):
+                label = "diameter" if btn_name == "btnMeasureDiameter" else "length"
+                capturing = self._start_measure_scope_capture(label)
+
             self._cmd.mode(linuxcnc.MODE_MDI)
             self._wait_complete_pump(10.0)
             self._cmd.mdi(mdi_cmd)
             self._set_status("MEASURING…")
             self._wait_complete_pump(120.0)
+
+            png_path = None
+            if capturing:
+                png_path = self._stop_measure_scope_capture(save_png=self._want_scope_png())
+                capturing = False
 
             if btn_name == 'btnMeasureLength':
                 self._refresh_length_result()
@@ -852,8 +1266,21 @@ class UserTab(QWidget):
                 self._refresh_diameter_result()
             else:
                 self._set_status("DONE: " + mdi_cmd)
+            if png_path:
+                # Append shot path so you can send it from logs/laser_scope/
+                cur = getattr(self, "lblStatus", None)
+                extra = "  |  SCOPE PNG: " + png_path
+                if cur is not None and cur.text():
+                    self._set_status(cur.text() + extra)
+                else:
+                    self._set_status("SCOPE PNG: " + png_path)
             LOG.info("laser_setter: %s", mdi_cmd)
         except Exception as exc:
+            if capturing:
+                try:
+                    self._stop_measure_scope_capture(save_png=self._want_scope_png())
+                except Exception:
+                    pass
             LOG.error("laser_setter: MDI failed (%s): %s", mdi_cmd, exc)
             self._set_status("ERROR: " + str(exc))
 
