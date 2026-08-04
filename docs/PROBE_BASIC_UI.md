@@ -143,7 +143,8 @@ Only the path named by `DRO_DISPLAY` in the INI is loaded.
 
 ## Launch note
 
-[`launch.sh`](../launch.sh) sets `QT_QUICK_BACKEND=software`. Use it if Probe Basic fails to render on your GPU driver.
+If Probe Basic fails to render on your GPU driver, launch with
+`QT_QUICK_BACKEND=software linuxcnc ethercat_mill.ini`.
 
 ---
 

@@ -19,7 +19,7 @@ git checkout servo-tuning-gui
 # Clear leftover user tabs from other feature branches (Probe Basic loads every folder):
 rm -rf probe_basic/user_tabs/laser_setter
 ls probe_basic/user_tabs/   # expect: signal_monitor, servo_tuner, templates
-./launch.sh
+QT_QUICK_BACKEND=software linuxcnc ethercat_mill.ini
 ```
 
 Then: **Servo Tuning** → check axis buttons to plot (multi-OK) → parameters auto-read on open → **START PLOT** → **COPY TUNING** / **COPY PLOT** for LLM → edit Pending → **APPLY TO DRIVE**. Optional: **Logging** tab for multi-channel CSV.
@@ -46,7 +46,7 @@ Does **not** auto-apply LLM suggestions. C01.38 gain switchover remains read-onl
 
 Under the FERR plot:
 
-1. **START PLOT** → run `nc_files/x_resonance.ngc` (short high-accel reversals).
+1. **START PLOT** → run a short high-accel reversal program on the edit axis (or jog).
 2. **ANALYZE** — Hann-windowed FFT of the edit-axis FERR buffer (~1 kHz → Nyquist ≈ 500 Hz).
 3. Stability gate: PASS/FAIL from spectral peaks, HF energy, ring score.
 4. **USE SUGGESTED NOTCH 3** — loads dominant peak into Pending `C01.46/47/48` (leaves 1st/2nd for adaptive).
@@ -126,7 +126,7 @@ There is **no** HAL pipeline-delay / ghost-lag compensation. Rewiring `motor-pos
 Written once per slave when lcec claims the bus (RAM only).
 
 **C00/C01 loop gains are intentionally NOT in XML.** They used to be, and every
-`./launch.sh` / bus claim reset pos/speed/integral/inertia back to catalog
+`linuxcnc` / bus claim reset pos/speed/integral/inertia back to catalog
 defaults — wiping whatever you had just tuned in the Servo Tuning tab.
 
 Tune gains only via **Servo Tuning → APPLY** (or `ethercat download`). If you
@@ -199,7 +199,7 @@ To zoom more or less, edit `FERR_PLOT_X_FRAC` in `probe_basic/user_tabs/servo_tu
 **Typical workflow**
 
 1. Open tab — auto-read when EtherCAT is up.
-2. **START PLOT** → pick **MM** or **PULSES** → run `nc_files/x_tuning.ngc` (or jog).
+2. **START PLOT** → pick **MM** or **PULSES** → run a frozen back-and-forth on the edit axis (or jog).
 3. **COPY PLOT** + **COPY TUNING** → paste into LLM with `SERVO_TUNING_LLM.md`.
 4. Edit **Pending** from the suggestion.
 5. **APPLY TO DRIVE** — confirm the value list; unread / read-only keys are skipped.
@@ -225,7 +225,7 @@ To zoom more or less, edit `FERR_PLOT_X_FRAC` in `probe_basic/user_tabs/servo_tu
 
 1. Start LinuxCNC; confirm no HAL errors.
 2. **Servo Tuning** → **START PLOT** → **DRIVE FERR** in mm or pulses.
-3. Run `nc_files/x_tuning.ngc` (or jog). Prefer drive 60F4 over LinuxCNC `joint.f-error`.
+3. Run a frozen back-and-forth on the edit axis (or jog). Prefer drive 60F4 over LinuxCNC `joint.f-error`.
 4. Soften **C01.01** if ringing/whine persists, or raise gains carefully toward your target.
 5. Optional: **Logging** tab → **START LIVE** for multi-channel CSV at **1000 Hz** under `logs/signals/`.
 
@@ -273,7 +273,7 @@ A6 vendor objects often lack SDO dictionary info, so **`-t uint16` / `-t uint32`
 | `config/logging/signals.json` | Logging-tab channels; default **1000 Hz** |
 | `logs/tuning/one_click/` | Auto-tune journals (gitignored) |
 | `SIGNAL_LOGGING.md` | Logging tab + HAL telemetry |
-| `nc_files/*_tuning.ngc` | Oscillation moves for FERR plots |
+| (your NC dir) | Oscillation moves for FERR plots — keep stimuli frozen mid-campaign |
 
 ---
 

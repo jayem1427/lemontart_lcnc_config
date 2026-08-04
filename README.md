@@ -51,8 +51,8 @@ Full list of guides lives under [`docs/`](docs/).
    - `ethercat-conf.xml` — your slave chain
    - `ethercat_mill.ini` / `ethercat_mill.hal` — scales, limits, homing
    - `h100.mb2hal` — `SERIAL_PORT`
-   - `PROGRAM_PREFIX` in the INI — must point at *your* `nc_files/`
-5. Launch with `./launch.sh` or `linuxcnc ethercat_mill.ini`.
+   - `PROGRAM_PREFIX` in the INI — must point at *your* NC programs directory
+5. Launch with `linuxcnc ethercat_mill.ini` (set `QT_QUICK_BACKEND=software` if Probe Basic fails to render).
 
 The staged path (sim → EtherCAT → Probe Basic → CAM) is spelled out in
 [GETTING_STARTED.md](docs/GETTING_STARTED.md).
@@ -71,9 +71,9 @@ The staged path (sim → EtherCAT → Probe Basic → CAM) is spelled out in
 | `h100.mb2hal` | VFD register map |
 | `xhc-whb04b-6.hal` | Pendant |
 | `probe_basic/` | UI, macros, tool table, custom tabs + tool-change dialog |
-| `nc_files/` | Programs (includes `m600_tool_change_test.ngc`) |
-| `linuxcnc-djr.cps` | Fusion post (M600, XYZA, G93) |
-| `docs/` | Everything you’re reading about |
+| `post-processor/linuxcnc-djr.cps` | Fusion post (M600, XYZA, G93) |
+| `docs/` | Guides |
+| `docs/reference/` | Vendor manuals / worksheets (H100, Sigma II calculator) |
 
 These files talk to each other a lot. An AI coding assistant helps when you point
 it at several of them at once. Add one feature at a time, and rigorously test before moving on to the next feature.
