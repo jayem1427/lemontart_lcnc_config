@@ -41,7 +41,7 @@ Optional: **SAVE AS PRESET** / **LOAD** for named snapshots (combo starts on `(n
 
 ## Frozen stimuli
 
-Keep one NGC per axis under your `PROGRAM_PREFIX` directory and reuse it for the whole campaign:
+Keep one NGC per axis under your `PROGRAM_PREFIX` directory and reuse it for the whole campaign. Copy-paste examples: **[TUNING_PROGRAMS.md](TUNING_PROGRAMS.md)**.
 
 | Axis | Intent (example envelope) |
 |------|--------|

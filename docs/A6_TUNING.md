@@ -2,34 +2,24 @@
 
 Conservative **fault-window** SDOs (6065/6066) at EtherCAT startup, plus a **Servo Tuning** Probe Basic tab for C00/C01 loop gains. **Loop gains are NOT written from `ethercat-conf.xml`** — that was wiping bench tuning on every LinuxCNC start. **LinuxCNC `joint.N.f-error` / INI `FERROR` are left alone** — plot the drive’s own following error (CiA **60F4**) as a separate Logging signal (**DRIVE**).
 
-Based on the [kalico sota-motion](https://github.com/dderg/kalico/tree/sota-motion) approach (SDO object dictionary instead of StepperOnline GUI). Logging tab + Servo Tuning live on this branch together.
+Based on the [kalico sota-motion](https://github.com/dderg/kalico/tree/sota-motion) approach (SDO object dictionary instead of StepperOnline GUI). The **Servo Tuning** and **Logging** tabs ship in `probe_basic/user_tabs/` on `main`.
+
+**Workflow docs:** [SEMI_AUTO_TUNING.md](SEMI_AUTO_TUNING.md) · [ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md) · [TUNING_PROGRAMS.md](TUNING_PROGRAMS.md) (example frozen G-code)
 
 ---
 
-## Status — active tuning branch
+## Quick start
 
-**Branch:** `servo-tuning-gui`  
-Rebased onto current `main`. Servo Tuning UI + APPLY path hardened; loop gains no longer wiped on every LinuxCNC start.
+1. Home / enable. Open Probe Basic → **Servo Tuning** (parameters auto-read on tab open).
+2. Pick a workflow:
+   - **ONE-CLICK TUNE** — automated gain ladder per axis ([ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md))
+   - **Semi-auto** — **START PLOT** → run frozen `<axis>_tuning.ngc` from your `PROGRAM_PREFIX` → **COPY PLOT** / **COPY TUNING** → LLM with [SERVO_TUNING_LLM.md](SERVO_TUNING_LLM.md) → edit Pending → **APPLY TO DRIVE**
+3. Optional: **Logging** tab for multi-channel CSV under `logs/signals/`.
+4. When happy, store gains to drive **EEPROM** (vendor panel) — APPLY is RAM-only.
 
-### Resume checklist
+If Probe Basic fails to render: `QT_QUICK_BACKEND=software linuxcnc ethercat_mill.ini`.
 
-```bash
-cd /home/jon/linuxcnc/configs/ethercat_mill
-git checkout servo-tuning-gui
-# Clear leftover user tabs from other feature branches (Probe Basic loads every folder):
-rm -rf probe_basic/user_tabs/laser_setter
-ls probe_basic/user_tabs/   # expect: signal_monitor, servo_tuner, templates
-QT_QUICK_BACKEND=software linuxcnc ethercat_mill.ini
-```
-
-Then: **Servo Tuning** → check axis buttons to plot (multi-OK) → parameters auto-read on open → **START PLOT** → **COPY TUNING** / **COPY PLOT** for LLM → edit Pending → **APPLY TO DRIVE**. Optional: **Logging** tab for multi-channel CSV.
-
-Or skip the loop entirely: **ONE-CLICK TUNE** on the same tab runs the whole
-gain ladder per axis automatically (stimulus moves + FFT stability gate +
-auto notch + journaled revert paths) — see **`ONE_CLICK_TUNING.md`**.
-
-Before one-click, set inertia via the **INERTIA** panel
-(`GRAPHICAL_INERTIA_TUNE.md`) when C00.06 is unknown.
+After switching git branches, prune broken `user_tabs/` folders — see [README § branch switching](../README.md#dev-notes-switching-feature-branches).
 
 ### Clipboard → LLM
 
@@ -38,7 +28,6 @@ Servo Tuning → **CLIPBOARD** strip:
 - **COPY TUNING** — parameter text using the same labels as the table (`C01.00 1st position loop gain`, …)
 - **COPY PLOT** — FERR strip-chart image
 - **COPY RESONANCE** — FFT / stability-gate report (after **ANALYZE**)
-- Docs: `SEMI_AUTO_TUNING.md`, `SERVO_TUNING_LLM.md`
 
 Does **not** auto-apply LLM suggestions. C01.38 gain switchover remains read-only on APPLY.
 
@@ -52,59 +41,34 @@ Under the FERR plot:
 4. **USE SUGGESTED NOTCH 3** — loads dominant peak into Pending `C01.46/47/48` (leaves 1st/2nd for adaptive).
 5. **APPLY TO DRIVE** yourself. Or enable `C01.30` adaptive and re-read notch freqs.
 
-Parameter table **Notch** group now exposes:
-
-- `C01.30`–`C01.33` adaptive mode / test diagnostics (`C01.32`/`C01.33` read-only)
-- Five torque notches `C01.40`–`C01.4E` (freq / width % / depth %; **8000 Hz = off**)
-
 Backend: `probe_basic/python/resonance_analysis.py`.
 
-### What is done
+### Feature status
 
 | Item | State |
 |------|--------|
 | Drive 60F4 PDO → `tune-drive-ferr.*` | Working |
-| Servo Tuning live FERR plot (mm/deg **or** pulses) | Working — multi-axis toggles + **START PLOT** (no CSV). HAL poll only while plotting. |
-| Compact presets strip + right-side param table | Working |
-| APPLY with per-SDO retry/verify; continues after failures | Working |
-| **ONE-CLICK TUNE** per axis (auto gain ladder + notch + journal) | New — sim-tested; see `ONE_CLICK_TUNING.md` for hardware bring-up |
-| Read-only SDOs skipped (C01.10, C01.38) | Working — no longer abort the whole APPLY |
+| Servo Tuning live FERR plot (mm/deg **or** pulses) | Working |
+| **ONE-CLICK TUNE** per axis (auto gain ladder + notch + journal) | Working — see `ONE_CLICK_TUNING.md` |
+| Semi-auto clipboard → LLM loop | Working — see `SEMI_AUTO_TUNING.md` |
+| **INERTIA** panel (C00.06 graphical ID) | WIP — see `GRAPHICAL_INERTIA_TUNE.md` |
 | Startup C00/C01 SDOs in `ethercat-conf.xml` | **Removed** — was overwriting RAM tuning every bus claim |
-| Startup 6065/6066 fault windows | Still set (1.0 mm / 1.0° / 250 ms) |
-| Logging tab default sample rate | **1000 Hz** via in-process `hal.get_value` |
-| Bench presets incl. `one_click_best_20260712` (X/Y), `10um`, `20um_y_axis`, `Z/20um`, `Z/no_buzz` | Under `config/tuning/presets/` — combo starts on **(none)** |
+| Startup 6065/6066 fault windows | **0.5 mm / 0.5° / 250 ms** (6065 → **2.0** during one-click / inertia moves) |
+| Bench presets | Under `config/tuning/presets/` |
 
 ### What we deliberately abandoned
 
-**HAL pipeline-delay / “ghost lag” compensation** (`servo_tuning.hal`) was removed. It advanced `motor-pos-fb` by `vel_cmd × ferr-lag` so host `joint.f-error` looked smaller. That couples tuning into LinuxCNC FERROR / soft faults and caused HAL load headaches. **Do not bring it back** unless you have a strong reason and keep it off the FERROR path.
+**HAL pipeline-delay / “ghost lag” compensation** (`servo_tuning.hal`) was removed. It advanced `motor-pos-fb` by `vel_cmd × ferr-lag` so host `joint.f-error` looked smaller. That couples tuning into LinuxCNC FERROR / soft faults. **Do not bring it back** unless you have a strong reason and keep it off the FERROR path.
 
-**Servo Tuning CSV logging** — removed from this tab on purpose. Use the **Logging** tab if you want files under `logs/signals/`.
+**Servo Tuning CSV logging** — use the **Logging** tab instead (`logs/signals/`).
 
-### Machine tweaks made while debugging (still on this branch)
-
-These are operational, not “final tuned gains”:
+### Machine-specific notes
 
 | Change | Why | Where |
 |--------|-----|--------|
-| Drive **6065** XYZ **1.0 mm**, A **1.0°**; **6066** **250 ms** | 0.1 mm Er47.0 amp faults during moves | `ethercat-conf.xml`, presets, `a6_servo_tune` defaults |
-| Host INI `FERROR` left at main’s relaxed values after rebase | Avoid fighting toolchange / jog | `ethercat_mill.ini` |
-| Z soft **MAX_LIMIT = 400 mm** | Unhomed absolute encoder can sit ~300+ mm → jog blocked if soft max is lower | `ethercat_mill.ini` |
-
-### Open / next when you return
-
-1. Per-axis gain ladder: **ONE-CLICK TUNE** now automates it (`ONE_CLICK_TUNING.md`) — first hardware campaigns should be `--dry-run` then CONSERVATIVE on X; keep the journals. The **COPY PLOT** / **COPY TUNING** + LLM loop (`SERVO_TUNING_LLM.md`) remains for judgment calls (torque filter, FF, 2nd set).
-2. Store good tunes to drive **EEPROM** (vendor tool / panel) so they survive power loss — LinuxCNC no longer pushes C00/C01 at bus claim.
-3. Optional: inertia ratio (C00.06) after a real load measurement.
-4. Optional: feedforward / carrier / system ID (Tier 2 — not started).
-5. If push-buzz persists, set gain switchover on the drive panel (C01.38 is read-only over SDO here).
-### Related branches
-
-| Branch | Role |
-|--------|------|
-| `servo-tuning-gui` | **This pin** — Logging tab + A6 SDO Servo Tuning + drive FERR + clipboard LLM flow |
-| `cursor/laser-setter-1afc` | Laser tool setter UI (remove its tab folder when on this branch) |
-
-See also branch-switching notes in README when present; otherwise use the `rm -rf` lines in the resume checklist above.
+| Drive **6065** XYZ **0.5 mm**, A **0.5°**; **6066** **250 ms** | Production Er47.0 window; one-click raises 6065 to **2.0** during moves | `ethercat-conf.xml`, `a6_servo_tune.py` |
+| Host INI `FERROR` relaxed (1270 / 254 mm) | Avoid LinuxCNC faults during bench jog / homing | `ethercat_mill.ini` |
+| Z soft **MAX_LIMIT = 400 mm** | Unhomed absolute encoder can sit ~300+ mm | `ethercat_mill.ini` |
 
 ---
 
@@ -133,11 +97,13 @@ Tune gains only via **Servo Tuning → APPLY** (or `ethercat download`). If you
 want values to survive drive power loss, store them to the A6 EEPROM from the
 drive panel / vendor tool after a good tune.
 
-Still written at startup (fault windows only):
+Still written at startup (fault windows only). During **one-click** or **inertia**
+tuning, Python temporarily writes 6065 to **2.0 mm / 2.0°**, then restores
+**0.5** (`FOLLOWING_ERROR_RUN` in `a6_servo_tune.py`).
 
 | SDO | Meaning | XYZ | A |
 |-----|---------|-----|---|
-| `6065h` | Max position deviation (counts) | 13107 ≈ **1.0 mm** | 364 ≈ **1.0°** |
+| `6065h` | Max position deviation (counts) | 6554 (`0x199A`) ≈ **0.5 mm** | 182 (`0xB6`) ≈ **0.5°** |
 | `6066h` | Fault persistence (ms) | **250** | **250** |
 | `6060h` | Modes of operation | CSP (8) | CSP (8) |
 
