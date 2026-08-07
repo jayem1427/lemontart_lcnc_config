@@ -14,6 +14,7 @@ motion.digital-in-03 is still used for beam-at-START safety checks.
 
 Params live in #5501+ (never G30/toolsetter #5181-#5186).
 #5516 = measured beam width offset (master pin − last raw diameter).
+#5518 = reverse spindle during probe (1 = M3 / VFD reverse; 0 = M4 / forward).
 MDI dispatch uses linuxcnc.command() directly (not qtpyvcp.actions).
 """
 
@@ -79,7 +80,7 @@ SCOPE_CHANNELS = (
 # Persistent laser params in linuxcnc.var (must exist there or they are lost on exit)
 LASER_VAR_PARAMS = (
     5501, 5502, 5503, 5504, 5505, 5506, 5507, 5508, 5509,
-    5510, 5511, 5512, 5513, 5514, 5515, 5516, 5517, 5519,
+    5510, 5511, 5512, 5513, 5514, 5515, 5516, 5517, 5518, 5519,
 )
 
 # Chroma key for green-screen tool setter photos. Uses green-channel dominance
@@ -294,12 +295,16 @@ class UserTab(QWidget):
         raw_diam = values.get(5512, 0.0)
         beam_width = values.get(5516, 0.0)
         master_pin = values.get(5517, 0.0)
+        reverse_spindle = values.get(5518, 0.0)
 
         if abs(x_mm) > 1e-6 or abs(y_mm) > 1e-6:
             self._set_beam_xy_widgets(x_mm, y_mm)
         le_rpm = getattr(self, "leProbeRpm", None)
         if le_rpm is not None and rpm >= 0:
             le_rpm.setText("{:.0f}".format(rpm))
+        chk_rev = getattr(self, "chkReverseSpindle", None)
+        if chk_rev is not None:
+            chk_rev.setChecked(reverse_spindle >= 0.5)
         for name, val in (
             ("leZDrop", z_drop),
             ("leMaxTravel", max_travel),
@@ -954,11 +959,12 @@ class UserTab(QWidget):
             "Capture Current XY as Beam-Blocked.\n"
             "4. Set START OFFSET (+X from BEAM to clear START, default 15), "
             "MAX TRAVEL (−X from START through beam), Z DROP.\n"
-            "5. PROBE RPM: 0 = static; >0 = M3 reverse on diameter pass "
-            "(custom.hal swaps M3/M4 to the VFD).\n"
+            "5. PROBE RPM: 0 = static; >0 spins during diameter pass. "
+            "REVERSE SPINDLE checked = M3 (VFD reverse); unchecked = M4 "
+            "(VFD forward). custom.hal swaps M3/M4 to the VFD.\n"
             "6. MEASURE DIAMETER (M62 P0 enables laser on probe-input for G38):\n"
             "   Z0 → G38 tip-find at BEAM XY → retract 5 mm → START (BEAM+offset) → "
-            "tip−ZDROP → G38 pre-touch −X → X+2 mm → M3 → break→clear "
+            "tip−ZDROP → G38 pre-touch −X → X+2 mm → M3/M4 → break→clear "
             "(stop at START−max travel) → M63 P0.\n"
             "7. Beam-width cal: enter MASTER PIN size → MEASURE DIAMETER on that pin → "
             "CALIBRATE BEAM. MEASURED BEAM WIDTH = master − raw; later diameters add "
@@ -1073,21 +1079,31 @@ class UserTab(QWidget):
             self._set_status("ERROR: invalid BEAM X/Y or probe RPM")
             return False
         x_pos, y_pos, rpm = setup
+        reverse = self._reverse_spindle_flag()
         if abs(x_pos) < 1e-6 and abs(y_pos) < 1e-6:
             self._set_status(
                 "ERROR: BEAM X/Y is 0,0 — Capture Current XY as Beam-Blocked first"
             )
             return False
         if not self._mdi_set_numbered_params(
-            ((5501, x_pos), (5502, y_pos), (5503, rpm))
+            ((5501, x_pos), (5502, y_pos), (5503, rpm), (5518, reverse))
         ):
             return False
-        self._write_var_params({5501: x_pos, 5502: y_pos, 5503: rpm})
+        self._write_var_params(
+            {5501: x_pos, 5502: y_pos, 5503: rpm, 5518: reverse}
+        )
         LOG.info(
-            "laser_setter: setup synced X%.6f Y%.6f RPM%.0f (mm)",
-            x_pos, y_pos, rpm,
+            "laser_setter: setup synced X%.6f Y%.6f RPM%.0f reverse=%.0f (mm)",
+            x_pos, y_pos, rpm, reverse,
         )
         return True
+
+    def _reverse_spindle_flag(self):
+        """1.0 if REVERSE SPINDLE checked, else 0.0 (#5518)."""
+        chk = getattr(self, "chkReverseSpindle", None)
+        if chk is not None and chk.isChecked():
+            return 1.0
+        return 0.0
 
     def _sync_diam_params(self) -> bool:
         """Push Z DROP, MAX TRAVEL, START OFFSET into #5507-#5509."""
@@ -1375,14 +1391,17 @@ class UserTab(QWidget):
                 rpm = 0.0
             if rpm < 0:
                 rpm = 0.0
+            reverse = self._reverse_spindle_flag()
 
             self._set_beam_xy_widgets(x_mm, y_mm)
 
             if not self._mdi_set_numbered_params(
-                ((5501, x_mm), (5502, y_mm), (5503, rpm))
+                ((5501, x_mm), (5502, y_mm), (5503, rpm), (5518, reverse))
             ):
                 return
-            if not self._write_var_params({5501: x_mm, 5502: y_mm, 5503: rpm}):
+            if not self._write_var_params(
+                {5501: x_mm, 5502: y_mm, 5503: rpm, 5518: reverse}
+            ):
                 self._set_status(
                     "BEAM XY in interpreter but var file write failed — "
                     "will be lost on restart"

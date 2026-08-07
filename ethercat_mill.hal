@@ -260,8 +260,9 @@ net probe-in          or2.3.out => motion.probe-input
 # If your DI is TRUE when clear instead, insert not.N on the di-5 -> laser-beam-broken net.
 #
 # Raw → LED / M66 P3 (instant). timedelay envelope → G38 mux.
-# on-delay=0 (trip on first flute), off-delay bridges gullets. A solid pin keeps
-# in=TRUE so out stays TRUE until the true exit + off-delay. Do NOT use oneshot:
+# on-delay=0 (trip on first flute), off-delay bridges gullets ([LASER]BEAM_OFF_DELAY).
+# Size delay > 60/(RPM×flutes). Current ini targets ~1000 RPM multi-flute.
+# Solid pin: in stays TRUE until true exit + off-delay. Do NOT use oneshot:
 # a long continuous block lets oneshot expire, then the next gullet clears early.
 setp laser-flute-hold.on-delay 0
 setp laser-flute-hold.off-delay [LASER]BEAM_OFF_DELAY

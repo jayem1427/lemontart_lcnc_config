@@ -77,7 +77,8 @@ restarted after any HAL/tab change.
    - **START OFFSET** — +X from BEAM to clear START (default `15`)
    - **MAX TRAVEL** — max −X from START through the beam; stay short of the far wall / toolsetter (default `30`)
    - **Z DROP** — how far below the tip to sit for the side sweep (default `2`)
-   - **PROBE RPM** — `0` = no spin; `>0` = reverse (**M3**) during the diameter pass  
+   - **PROBE RPM** — `0` = no spin; `>0` = spin during the diameter pass  
+   - **REVERSE SPINDLE** — checked = **M3** (VFD reverse on this mill); unchecked = **M4** (forward)  
 5. Press **MEASURE DIAMETER**.  
 6. Watch the footer status. On success, **DIAMETER** updates.
 
@@ -90,7 +91,7 @@ restarted after any HAL/tab change.
 3. **M62 P0** → **G38** tip-find → **M63 P0** (mux on only during the probe).  
 4. Back off / fine tip-find the same way (M62 ↔ G38 ↔ M63).  
 5. Retract ~5 mm above tip, **`G0 G53`** to **START**, drop to tip − Z DROP.  
-6. Pre-touch **G38 −X**, back off +2 mm, optional **M3**, then break→clear **G38**.  
+6. Pre-touch **G38 −X**, back off +2 mm, optional **M3/M4** (per REVERSE SPINDLE), then break→clear **G38**.  
 7. Corrected diameter = raw shadow + `#5516` beam width; retract to Z0, **M5**, **M63 P0**.
 
 LinuxCNC only allows **G53 with G0 or G1** — never with G38. Probes use **G91**
@@ -152,11 +153,11 @@ contact probe / toolsetter → or2.0 → and2.8 (gated off when M62 P0) → or2.
 
 G38 uses a **timedelay envelope** (`laser-flute-hold`): trip immediately on any
 block (`on-delay=0`), and stay blocked until the beam is continuously clear for
-`[LASER]BEAM_OFF_DELAY` (default **0.010 s**). That bridges flute gullets without
+`[LASER]BEAM_OFF_DELAY` (default **0.050 s**). That bridges flute gullets without
 the oneshot bug (oneshot expires during a long continuous block, then the next
 gullet clears early). LED / `M66 P3` stay **raw**.
 
-At 6000 RPM with three flutes, a flute passes every 3.33 ms, so 10 ms of off-delay
+At 1000 RPM with three flutes, a flute passes every **20 ms**, so 50 ms of off-delay
 covers several gullets. The master-pin calibration absorbs the small release lag.
 
 Press **SCOPE** for a live plot, or just run **MEASURE DIAMETER** — capture starts
@@ -167,7 +168,7 @@ Traces:
 
 1. **RAW** `lcec.0.2.di-5` — individual flute pulses
 2. **FILT** `laser-flute-hold.out` — timedelay envelope (on-delay 0, off-delay
-   `[LASER]BEAM_OFF_DELAY`, default 10 ms)
+   `[LASER]BEAM_OFF_DELAY`, default 50 ms)
 3. **G38** `motion.probe-input` — final probe input (only high during M62)
 
 With a spinning 3-flute in the beam, RAW should chatter; FILT should stay high
@@ -222,7 +223,7 @@ Results publish with `M68 E0` (corrected diameter or length) and `M68 E1` (1 = s
 | `laser_set_beam_z.ngc` | BEAM Z for length |
 | `ethercat_mill.hal` | `laser-beam-broken` + flute envelope + M62/M63 probe mux |
 | `custom.hal` | Loads `timedelay` as `laser-flute-hold` (+ spindle at-speed delay) |
-| `ethercat_mill.ini` `[LASER]` | `BEAM_OFF_DELAY` (default 0.010 s) |
+| `ethercat_mill.ini` `[LASER]` | `BEAM_OFF_DELAY` (default 0.050 s) |
 | `logs/laser_scope/` | Auto PNG captures from MEASURE (gitignored `*.png`) |
 
 ---
@@ -235,7 +236,7 @@ teach (`#5181–#5186`) or ATC `M66` (`#5399`).
 | # | Name | Meaning |
 |---|------|---------|
 | `#5501` / `#5502` | BEAM X/Y | Tool blocking light (G53 mm) — **CAPTURE BEAM** writes these + `linuxcnc.var` |
-| `#5503` | PROBE RPM | 0 = static; else **M3** on diameter pass (`custom.hal` swaps to VFD reverse) |
+| `#5503` | PROBE RPM | 0 = static; else spin on diameter pass |
 | `#5504` | BEAM Z | Length only (MDI teach) |
 | `#5507` | Z DROP | Below tip for side sweep |
 | `#5508` | MAX TRAVEL | Max −X from START |
@@ -244,6 +245,7 @@ teach (`#5181–#5186`) or ATC `M66` (`#5399`).
 | `#5515` | Success | 1 = OK (`M68 E1`) |
 | `#5516` | Beam width | `master − raw` offset; corrected = raw + `#5516` |
 | `#5517` | Master pin | Last master-pin size used for cal |
+| `#5518` | Reverse spindle | 1 = **M3** (VFD reverse); 0 = **M4** (forward); `custom.hal` swaps M3/M4 |
 
 UI always syncs **millimeters** into these params, even if the Units combo shows inches.
 
@@ -275,12 +277,12 @@ Example (this mill, Ø6.35 3-flute, after envelope filter): corrected ≈ **6.13
 2. **G38.5** −X until beam **clears**
 
 Raw `laser-beam-broken` on a fluted cutter is a **chopped** signal (flute / gullet /
-flute). At 6000 RPM × 3 flutes, pulses repeat every **3.33 ms**. `G38.5` treats the
+flute). At 1000 RPM × 3 flutes, pulses repeat every **20 ms**. `G38.5` treats the
 first clear blip as “left the tool.”
 
-Higher RPM alone is **not** a fix: past a sweet spot (~6k on this setup) the sensor
-**averages** more light through gullets and the silhouette gets **skinnier**
-(10k/20k made results worse).
+Higher RPM alone is **not** a fix: past a sweet spot the sensor **averages** more
+light through gullets and the silhouette gets **skinnier** (10k/20k made results
+worse on this setup). Prefer a longer envelope hold and modest RPM.
 
 ### What failed
 
@@ -295,14 +297,16 @@ Higher RPM alone is **not** a fix: past a sweet spot (~6k on this setup) the sen
 HAL **`timedelay`** named `laser-flute-hold`:
 
 - `on-delay = 0` → trip on first blocked sample  
-- `off-delay = [LASER]BEAM_OFF_DELAY` (default **0.010 s**) → stay blocked until
+- `off-delay = [LASER]BEAM_OFF_DELAY` (default **0.050 s**) → stay blocked until
   continuously clear for that long  
+  (rule of thumb: `> 60/(RPM × flutes)`; 50 ms suits **~1000 RPM** multi-flute)
 
 Loaded in `custom.hal` with `spindle-at-speed-delay` (one `loadrt timedelay names=...`
 for TWOPASS). Wired in `ethercat_mill.hal` onto the **G38 mux only**; LED / `M66 P3`
 stay **raw**.
 
-Recommended probe RPM for 3-flute: about **6000** (sweet spot observed here).
+Recommended probe RPM for 3-flute: about **1000** with `BEAM_OFF_DELAY=0.050`.
+Confirm on SCOPE: FILT stays high across gullets.
 
 ### Scope capture (debug)
 
@@ -353,12 +357,12 @@ filter failure.
 | Tip-find never trips / never stops | Restart after HAL change; measure needs **M62 P0** + G38 on `motion.probe-input` (not `#<_hal[]>`) |
 | Tip-find never trips | BEAM XY wrong, or polarity (DI invert) |
 | *Probe tripped during non-probe move* | M62 left on during G0/G1 — macros should wrap each G38 only; MDI **M63 P0** to clear |
-| *Parameter file out of order* | `#5516`/`#5517` must sit before `#5519` — open Laser Setter once (it rewrites sorted) or sort `linuxcnc.var` |
+| *Parameter file out of order* | `#5516`–`#5518` must sit before `#5519` — open Laser Setter once (it rewrites sorted) or sort `linuxcnc.var` |
 | “Beam already broken at START” but clear | Polarity inverted — DI should be TRUE when broken |
 | “Beam already broken at START” | START OFFSET too small — increase it so START is clear |
 | Never trips before MAX TRAVEL | Raise MAX TRAVEL (still short of the wall) or fix START OFFSET / polarity |
 | Never clears / oversize abort | Tool bigger than the travel window, or stop too short |
-| Raw width &lt; 0.025 mm / early clear | Envelope filter not holding — check `laser-flute-hold`, SCOPE PNG, ~6k RPM on 3-flute |
+| Raw width &lt; 0.025 mm / early clear | Envelope filter not holding — check `laser-flute-hold`, SCOPE PNG, delay &gt; 60/(RPM×flutes), ~1k RPM |
 | Fluted endmill ~0.2 mm skinny after filter | Expected ballpark for this sensor; check Z DROP on full OD; don’t expect feedrate to fix it |
 | SCOPE PNG only shows last ~2 s | Old bug; current code freezes sampling then renders **full** 0…T capture |
 | Footer FAILED, old diameter gone | That’s correct — success is gated on `M68 E1` |

@@ -9,7 +9,8 @@
 (        start offset #5509 = +X from BEAM to clear START)
 (Results: #5512 raw diameter, #5513/#5514 edges, #5515=1 on success, M68 E0/E1)
 (#5516 beam-width offset: corrected = raw + #5516; set by CALIBRATE BEAM in UI)
-(Probe RPM >0: M3 during diameter sweep — custom.hal swaps M3/M4 to VFD reverse.)
+(Probe RPM >0: spin during diameter sweep. #5518=1 → M3 reverse; 0 → M4 forward.)
+(custom.hal swaps M3/M4 vs VFD wiring on this mill.)
 
 o<laser_diameter> sub
     o<400> if [#<_task> EQ 1]
@@ -30,6 +31,7 @@ o<laser_diameter> sub
     #<beam_z> = #5504
     #<max_z_travel> = #5506
     #<beam_cal> = #5516
+    #<spindle_reverse> = #5518
     #<slow_fr> = #3005
     #<tip_coarse_fr> = 1200
     #<fast_x_fr> = 500
@@ -197,8 +199,13 @@ o<laser_diameter> sub
     o<pre_still> endif
 
     o<diam_spin> if [#<probe_rpm> GT 0]
-      (spindle reverse M3 — custom.hal swaps M3/M4 to VFD)
-      M3 S#<probe_rpm>
+      o<diam_dir> if [#<spindle_reverse> GE 0.5]
+        (M3 — custom.hal → VFD reverse)
+        M3 S#<probe_rpm>
+      o<diam_dir> else
+        (M4 — custom.hal → VFD forward)
+        M4 S#<probe_rpm>
+      o<diam_dir> endif
       G4 P2.0
     o<diam_spin> endif
 

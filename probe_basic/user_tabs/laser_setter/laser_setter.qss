@@ -213,6 +213,27 @@ QGroupBox#grpCalibration QLabel#lblBeamDiaCap {
     min-width: 118px;
 }
 
+QGroupBox#grpMeasure QCheckBox#chkReverseSpindle {
+    color: rgb(238, 238, 236);
+    font: 14pt "BebasKai";
+    letter-spacing: 1px;
+    spacing: 8px;
+    min-height: 28px;
+}
+
+QGroupBox#grpMeasure QCheckBox#chkReverseSpindle::indicator {
+    width: 18px;
+    height: 18px;
+    border: 1px solid #8a8484;
+    border-radius: 3px;
+    background-color: #2e3436;
+}
+
+QGroupBox#grpMeasure QCheckBox#chkReverseSpindle::indicator:checked {
+    background-color: #f5c211;
+    border-color: #c4a000;
+}
+
 QGroupBox#grpMeasure QLabel#lblStartXUnit,
 QGroupBox#grpMeasure QLabel#lblStartYUnit,
 QGroupBox#grpMeasure QLabel#lblProbeRpmUnit,
