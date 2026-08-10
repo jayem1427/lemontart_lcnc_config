@@ -23,8 +23,8 @@ loadrt or2 count=4
 loadrt near count=3
 loadrt comp count=1
 loadrt constant names=probe-tool-num
-# Laser envelope filter (timedelay) is loaded with spindle-at-speed-delay in
-# custom.hal — one loadrt timedelay names=... for TWOPASS.
+# Laser timedelay (laser-flute-hold) is loaded with spindle-at-speed-delay in
+# custom.hal for SCOPE FILT only — G38 diameter uses RAW beam (see laser block).
 
 # =========================================================
 # 3. THREAD EXECUTION ORDER (Read -> Compute -> Write)
@@ -259,14 +259,12 @@ net probe-in          or2.3.out => motion.probe-input
 # HCMOS 5 V — level-shift before the A6 DI. TRUE when tool blocks the beam.
 # If your DI is TRUE when clear instead, insert not.N on the di-5 -> laser-beam-broken net.
 #
-# Raw → LED / M66 P3 (instant). timedelay envelope → G38 mux.
-# on-delay=0 (trip on first flute), off-delay bridges gullets. A solid pin keeps
-# in=TRUE so out stays TRUE until the true exit + off-delay. Do NOT use oneshot:
-# a long continuous block lets oneshot expire, then the next gullet clears early.
+# Diameter uses RAW on the G38 mux (max-of-N first-tooth triggers; no gullet envelope).
+# laser-flute-hold remains loaded for SCOPE "FILT" comparison only — not in the probe path.
 setp laser-flute-hold.on-delay 0
 setp laser-flute-hold.off-delay [LASER]BEAM_OFF_DELAY
-net laser-beam-broken     lcec.0.2.di-5 => motion.digital-in-03 laser-flute-hold.in
-net laser-beam-filtered   laser-flute-hold.out => and2.7.in0
+net laser-beam-broken     lcec.0.2.di-5 => motion.digital-in-03 and2.7.in0 laser-flute-hold.in
+net laser-beam-filtered   laser-flute-hold.out
 
 # Standard Software GUI E-Stop Loop (Physical Master E-Stop cuts Mains Power)
 # Software E-stop switch is NC on Slave 3 DI1 / DB15 pin 10.

@@ -139,10 +139,10 @@ Here: `halui.tool.number` compared to constant **99** (`probe-tool-num`):
 - Equal → touch probe `lcec.0.1.di-5`
 - Not equal → toolsetter `lcec.0.1.di-2`
 
-Laser **M62 P0** muxes **filtered** `laser-beam-broken` (via `laser-flute-hold`
-timedelay envelope) onto `motion.probe-input` for G38 measure macros; **M63 P0**
-restores contact-only routing — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md)
-(see **Fluted tools** section for filter design notes).
+Laser **M62 P0** muxes **raw** `laser-beam-broken` onto `motion.probe-input` for
+G38 measure macros (max-of-N first-tooth diameter; no gullet envelope);
+**M63 P0** restores contact-only routing —
+[LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md).
 
 Uses `and2` + `or2`, not `mux2` (float-only). **`#3014` does not update HAL** — renumbering requires editing `setp probe-tool-num.value`.
 

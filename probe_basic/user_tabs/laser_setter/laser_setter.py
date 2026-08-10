@@ -5,11 +5,12 @@ DS-5V-M on Slave 2 DI5 (DB15 pin 11). Live LASER LED mirrors HAL signal
 laser-beam-broken (clear vs tool in beam). CAPTURE stores BEAM X/Y while
 the tool blocks the light. START OFFSET (+X, default 15 mm) is the clear
 approach point away from the toolsetter. MEASURE DIAMETER tip-finds Z at
-BEAM XY, then sweeps −X from START through the beam up to MAX TRAVEL.
+BEAM XY, then takes 5 first-tooth G38.3 hits from each side (keep outermost
+edges). G38 uses RAW laser (no gullet envelope).
 
 Measure macros use M62 P0 to route the laser onto motion.probe-input for
 continuous G38 moves; M63 P0 restores the contact probe mux. M66 P3 on
-motion.digital-in-03 is still used for beam-at-START safety checks.
+motion.digital-in-03 is still used for clear-start safety checks.
 (#<_hal[laser-beam-broken]> is frozen at program start; do not use it in loops.)
 
 Params live in #5501+ (never G30/toolsetter #5181-#5186).
@@ -72,6 +73,7 @@ SCOPE_LIVE_S = 2.0
 SCOPE_CAPTURE_S = 90.0  # full MEASURE DIAMETER / LENGTH run
 SCOPE_CHANNELS = (
     # key, HAL pin, vertical offset, color, label
+    # G38 follows RAW (no gullet envelope). FILT is scope-only legacy.
     ("raw", "lcec.0.2.di-5", 0.0, "#f5c211", "RAW"),
     ("filt", "laser-flute-hold.out", 1.5, "#8ae234", "FILT"),
     ("probe", "motion.probe-input", 3.0, "#ef2929", "G38"),
@@ -954,19 +956,18 @@ class UserTab(QWidget):
             "Capture Current XY as Beam-Blocked.\n"
             "4. Set START OFFSET (+X from BEAM to clear START, default 15), "
             "MAX TRAVEL (−X from START through beam), Z DROP.\n"
-            "5. PROBE RPM: 0 = static; >0 = M3 reverse on diameter pass "
-            "(custom.hal swaps M3/M4 to the VFD).\n"
-            "6. MEASURE DIAMETER (M62 P0 enables laser on probe-input for G38):\n"
-            "   Z0 → G38 tip-find at BEAM XY → retract 5 mm → START (BEAM+offset) → "
-            "tip−ZDROP → G38 pre-touch −X → X+2 mm → M3 → break→clear "
-            "(stop at START−max travel) → M63 P0.\n"
+            "5. PROBE RPM: 0 = static (pins); >0 = M3 reverse on diameter hits "
+            "(custom.hal swaps M3/M4 to the VFD). Fluted tools: try ~1000–6000.\n"
+            "6. MEASURE DIAMETER (M62 P0 enables RAW laser on probe-input for G38):\n"
+            "   tip-find at BEAM → START → tip−ZDROP → pre-touch → M3 → "
+            "5× G38.3 from +X (keep max X) → G0 to −X clear → "
+            "5× G38.3 from −X (keep min X) → raw = x_plus − x_minus + beam cal.\n"
             "7. Beam-width cal: enter MASTER PIN size → MEASURE DIAMETER on that pin → "
             "CALIBRATE BEAM. MEASURED BEAM WIDTH = master − raw; later diameters add "
-            "that offset. You can also type a value into MEASURED BEAM WIDTH by hand "
-            "for fine tuning (#5516).\n"
+            "that offset. Re-calibrate after this max-trigger method change.\n"
             "8. Optional: MEASURE LENGTH (uses #5504 BEAM Z if already taught).\n"
-            "While measuring, M62 P0 routes laser-beam-broken to motion.probe-input; "
-            "M63 P0 restores contact probe / toolsetter mux.",
+            "While measuring, M62 P0 routes raw laser-beam-broken to motion.probe-input; "
+            "M63 P0 restores contact probe / toolsetter mux. No gullet envelope filter.",
         )
 
     def _wire_start_position(self):
@@ -1329,7 +1330,7 @@ class UserTab(QWidget):
             self.lblResDiam.setText("{:.4f}".format(self._mm_to_ui(diameter_mm)))
             if abs(self._beam_width_mm) > 1e-12:
                 self._set_status(
-                    "DIAMETER {:.4f} (raw {:.4f} + beam width {:.4f})".format(
+                    "DIAMETER {:.4f} (max 5+5; raw {:.4f} + beam width {:.4f})".format(
                         self._mm_to_ui(diameter_mm),
                         self._mm_to_ui(self._last_raw_diam_mm or 0.0),
                         self._mm_to_ui(self._beam_width_mm),
@@ -1337,7 +1338,7 @@ class UserTab(QWidget):
                 )
             else:
                 self._set_status(
-                    "DIAMETER {:.4f} (raw — CALIBRATE BEAM to apply master-pin offset)".format(
+                    "DIAMETER {:.4f} (max 5+5 raw — CALIBRATE BEAM for master-pin offset)".format(
                         self._mm_to_ui(diameter_mm)
                     )
                 )
