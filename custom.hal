@@ -37,7 +37,8 @@ setp near.0.difference 50.0  # Allow 50 RPM tolerance
 net pdnt.spindle-speed-abs => near.0.in1
 net spindle-speed-in => near.0.in2
 
-# Extra settle delay after speed-compare is true + laser flute envelope hold
+# Extra settle delay after speed-compare is true; laser-flute-hold kept for
+# Laser Setter SCOPE "FILT" only (G38 diameter uses RAW beam).
 loadrt timedelay names=spindle-at-speed-delay,laser-flute-hold
 addf spindle-at-speed-delay servo-thread
 setp spindle-at-speed-delay.on-delay 5.0
