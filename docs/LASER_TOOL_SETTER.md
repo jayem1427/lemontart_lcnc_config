@@ -37,7 +37,7 @@ systems don't fight when you're not measuring.
 | Feature | Status |
 |---------|--------|
 | Live beam LED on the tab | Works (keeps updating during measure) |
-| **SCOPE** / **SAVE PNG** | Live plot; auto-captures each measure to `logs/laser_scope/` |
+| **SCOPE** / **SAVE PNG** | Legacy debug — UI sampler can miss short peaks while measure still OK; replace with hit dots + CSV |
 | **MEASURE DIAMETER** | Works — raw G38, 5+5 max first-tooth triggers |
 | **CALIBRATE BEAM** / editable **MEASURED BEAM WIDTH** | Works — master pin − raw → `#5516` |
 | **MEASURE LENGTH** | Experimental (needs `#5504` BEAM Z via MDI; not a contact TLO replacement) |
@@ -284,17 +284,92 @@ Fine hit feed is **F50** (≈0.0008 mm per 1 ms sample).
 | Envelope `timedelay` + break→clear | Stops gullet aborts but left ~0.2 mm skinny silhouette vs mic OD |
 | “Just spin faster” with silhouette method | Optical averaging undersizes further |
 
-### Scope capture (debug)
+### Scope capture (legacy debug — replace)
 
-Laser Setter tab:
+Laser Setter tab still has:
 
 - **SCOPE** — live pyqtgraph plot (UI-thread HAL sample, target **1000 Hz**)  
 - **SAVE PNG** (default on) — full macro to `logs/laser_scope/<stamp>_diameter.png`
 
 Traces: **RAW** / **FILT** (legacy, unused by G38) / **G38** (follows RAW).
 
-Healthy fluted capture: RAW and G38 chatter on each approach; tip trips should
-land near the geometric OD. X axis must be **0…T seconds** for the whole run.
+**Known limitation:** SCOPE is **not** proof that G38 saw a tip. Measure runs in the
+realtime servo thread; SCOPE samples on the Qt UI thread. Short flute pulses are
+easy to miss (busy UI, catch-up re-reads *current* HAL into past timestamps, then
+skips leftover time after `max_catchup`). So PNGs can look flat / peakless while
+diameter still succeeds — that is expected, not a macro bug.
+
+Do **not** chase SCOPE fidelity for operator feedback. Next UX is hit dots +
+per-hit CSV (below). Keep Halscope / a realtime sampler only if you need true
+pulse-level debug.
+
+### Next UX: hit dots + per-hit CSV (merge action items)
+
+Context: local work may already be ahead of this branch; fold these in when
+merging rather than resurrecting SCOPE as the primary truth UI.
+
+#### Live: red → green hit dots
+
+Replace SCOPE-as-progress with two rows of **5 dots** (+X side / −X side):
+
+| State | Meaning |
+|-------|---------|
+| Red | Hit slot not yet accepted |
+| Green | That `G38.3` trip succeeded (`#5070 != 0`) |
+| Remains red / flash on abort | Which hit failed (miss before travel stop, etc.) |
+
+Reset all red when **MEASURE DIAMETER** starts. Drive dots from **accepted G38
+trips**, not from RAW waveform sampling (same source of truth as diameter).
+
+Optional: keep `probe_beep.hal` for audible confirmation; optional HAL
+`oneshot` latch on `laser-probe-trip` / `probe-in` if a single HIT lamp is useful
+in addition to the 5+5 strip.
+
+#### Saved: per-hit position CSV (plot afterwards)
+
+Today the macro only keeps extremes (`#5513` max / `#5514` min). To re-plot
+positions later, record **each** tip X as an event log — not a 1 kHz scope dump.
+
+Suggested path: `logs/laser_hits/<stamp>_diameter.csv`
+
+```text
+side,hit,x_mm,ok
+plus,1,12.341,1
+plus,2,12.338,1
+plus,3,12.350,1
+plus,4,12.347,1
+plus,5,12.349,1
+minus,1,6.012,1
+minus,2,6.009,1
+minus,3,6.015,1
+minus,4,6.011,1
+minus,5,6.010,1
+```
+
+Plus a one-line summary (raw, corrected, `#5516`, tip Z, RPM, success).
+
+**How to get numbers out of the macro**
+
+1. After each `#5070` check in `laser_diameter.ngc`, record `#<_abs_x>` (and a
+   failed row if the miss path should appear in the log).
+2. Publish to the UI each hit (`M68` for X + side/index) **or** stash
+   `#5520`–`#5529` and read once at end.
+3. Laser Setter writes the CSV at measure end (same lifecycle as today’s scope
+   PNG, different payload).
+
+**Afterwards:** plot hit index vs X (two series), or a 1D strip of the 10
+positions with kept max/min highlighted. Do **not** reuse the HAL signal logger
+for this — wrong data shape (event list vs high-rate timeseries).
+
+#### Implementation checklist (for merge)
+
+- [ ] Publish per-hit X (+ side / index / ok) from `laser_diameter.ngc`
+- [ ] Laser Setter: 5+5 red/green dots driven by those events
+- [ ] Write `logs/laser_hits/*.csv` (+ summary) per MEASURE
+- [ ] Optional post-run / script plot of hit positions
+- [ ] Hide or remove SCOPE / SAVE PNG as primary feedback (Halscope remains for
+      deep HAL debug if needed)
+- [ ] Update troubleshooting: “flat SCOPE but measure OK” → expected; use dots/CSV
 
 ### Accuracy notes
 
@@ -326,8 +401,9 @@ land near the geometric OD. X axis must be **0…T seconds** for the whole run.
 | “Beam already broken at START” / −X clear | START OFFSET too small — increase it so both clears are open |
 | Never trips before MAX TRAVEL | Raise MAX TRAVEL (still short of the wall) or fix START OFFSET / polarity / RPM |
 | −X clear still broken | Need `MAX TRAVEL ≥ ~2× START OFFSET`, or raise START OFFSET |
-| Raw width &lt; 0.025 mm / edge order bad | Tip never seen — check polarity, spin RPM, SCOPE PNG |
+| Raw width &lt; 0.025 mm / edge order bad | Tip never seen — check polarity, spin RPM; prefer hit CSV / dots over SCOPE |
 | Fluted OD still off after recal | Check Z DROP on full OD; expect runout ≥ mic land OD possible |
+| SCOPE PNG flat / no peaks but measure OK | Expected — UI sampler misses short flute pulses; G38 still tripped. Use hit dots/CSV (planned) or Halscope |
 | SCOPE PNG only shows last ~2 s | Old bug; current code freezes sampling then renders **full** 0…T capture |
 | Footer FAILED, old diameter gone | That’s correct — success is gated on `M68 E1` |
 | Contact probe acting weird | MDI **M63 P0** if a laser measure aborted; then check contact mux / tool number |
@@ -340,13 +416,14 @@ land near the geometric OD. X axis must be **0…T seconds** for the whole run.
 1. ~~HAL + LED + diameter~~  
 2. ~~G38 via M62 P0 mux; capture BEAM XY; START OFFSET / MAX TRAVEL (−X sweep)~~  
 3. ~~Beam-width / master-pin calibration (true diameter)~~  
-4. ~~Flute envelope filter (`timedelay`) + SCOPE PNG capture~~ (superseded for G38)  
+4. ~~Flute envelope filter (`timedelay`) + SCOPE PNG capture~~ (superseded for G38; SCOPE itself is next to retire as primary UI)  
 5. ~~Max-of-N first-tooth diameter (raw G38, 5+5 sides)~~  
-6. Optional measure axis (X vs Y)  
-7. Runout / broken-tool check  
-8. Length → real TLO vs gauge line  
-9. Air blast DO / controllable Select  
-10. Optional `G10` tool-table diameter once accuracy is proven  
-11. Optional per-tool optical fudge if flutes stay systematically off  
+6. **Hit feedback + per-hit CSV** — red→green 5+5 dots; `logs/laser_hits/` event CSV for post-plot of tip X’s; demote/remove SCOPE (see **Next UX** above)  
+7. Optional measure axis (X vs Y)  
+8. Runout / broken-tool check  
+9. Length → real TLO vs gauge line  
+10. Air blast DO / controllable Select  
+11. Optional `G10` tool-table diameter once accuracy is proven  
+12. Optional per-tool optical fudge if flutes stay systematically off  
 
 PRs welcome — especially safer travel limits for other mill layouts.
