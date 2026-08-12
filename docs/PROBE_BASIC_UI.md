@@ -148,6 +148,20 @@ If Probe Basic fails to render on your GPU driver, launch with
 
 ---
 
+---
+
+## Custom Probe Basic tabs
+
+| Tab | Folder | Doc |
+|-----|--------|-----|
+| Servo Tuning | `probe_basic/user_tabs/servo_tuner/` | [A6_TUNING.md](A6_TUNING.md) |
+| Logging | `probe_basic/user_tabs/signal_monitor/` | [SIGNAL_LOGGING.md](SIGNAL_LOGGING.md) |
+| Laser Setter | `probe_basic/user_tabs/laser_setter/` | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
+
+Probe Basic auto-loads every subfolder under `USER_TABS_PATH`. `template_*` folders are upstream scaffolding only.
+
+---
+
 ## Upgrading Probe Basic
 
 1. Diff your INI against new `pb_required_ini_settings.ini`.
