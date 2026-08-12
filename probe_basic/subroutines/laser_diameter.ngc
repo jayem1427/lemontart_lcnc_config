@@ -5,6 +5,7 @@
 (START = BEAM_X + START_OFFSET; +X clear side away from toolsetter.)
 (MINUS START = BEAM_X - START_OFFSET; -X clear side, clamped to x_stop.)
 (Tip-find at BEAM XY; then 5x G38.3 from each side; keep outermost edges.)
+(+X-side miss stop = MAX TRAVEL x_stop; -X-side miss stop = forward break x_plus.)
 (M62 P0 ONLY around G38 — never during G0/G1 or "Probe tripped during non-probe move".)
 (M63 P0 restores contact mux. M66 P3 L0 for beam clear checks on digital-in-03.)
 (Prereqs: BEAM X/Y + RPM #5501-#5503; Z-drop #5507; max travel #5508;)
@@ -265,7 +266,16 @@ o<laser_diameter> sub
       o<laser_diameter> return
     o<minus_blocked> endif
 
-    (--- -X side: 5x G38.3 +X; keep MIN X (outermost) ---)
+    (--- -X side: 5x G38.3 +X toward forward (+X) break; keep MIN X ---)
+    (Miss stop = x_plus from the +X-side hits — do not run past the known tip.)
+    o<minus_window> if [#<x_plus> LE #<minus_start_x>]
+      (DEBUG, LASER DIAM: forward break not beyond -X clear — cannot reverse-probe)
+      G0 G53 Z#<z_safe>
+      M5
+      M63 P0
+      o<laser_diameter> return
+    o<minus_window> endif
+
     #<x_minus> = 999999
     #<hit_i> = 0
     o<minus_hits> while [#<hit_i> LT #<n_hits>]
@@ -281,11 +291,11 @@ o<laser_diameter> sub
 
       M62 P0
       G91
-      G38.3 X[#<plus_clear_x> - #<_abs_x>] F#<slow_x_fr>
+      G38.3 X[#<x_plus> - #<_abs_x>] F#<slow_x_fr>
       G90
       M63 P0
       o<minus_miss> if [#5070 EQ 0]
-        (DEBUG, LASER DIAM: -X-side hit missed before +X clear)
+        (DEBUG, LASER DIAM: -X-side hit missed before forward (+X) break)
         G0 G53 Z#<z_safe>
         M5
         M63 P0

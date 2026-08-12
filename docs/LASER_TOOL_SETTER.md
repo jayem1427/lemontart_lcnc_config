@@ -95,15 +95,18 @@ restarted after any HAL/tab change.
 5. Retract ~5 mm above tip, **`G0 G53`** to **START**, drop to tip − Z DROP.  
 6. Pre-touch **G38 −X**, back off, optional **M3**.  
 7. **5×** `G38.3 −X` from +X clear — keep **max X** (outermost +X flute tip).  
+   Miss before **MAX TRAVEL** (`x_stop`) → fail.  
 8. **`G0`** to −X clear (mux off; may pass through beam).  
-9. **5×** `G38.3 +X` from −X clear — keep **min X** (outermost −X flute tip).  
+9. **5×** `G38.3 +X` from −X clear toward the **forward (+X) break** (`#5513`) — keep **min X**.  
+   Miss before that known +X tip → fail (do not run out to +X clear).  
 10. `raw = x_plus − x_minus`; corrected = raw + `#5516`; retract to Z0, **M5**, **M63 P0**.
 
 LinuxCNC only allows **G53 with G0 or G1** — never with G38. Probes use **G91**
 relative moves toward a machine-coordinate target, then **G90**.
 
 If anything fails (never sees the beam, still in the beam at a clear start, hits MAX TRAVEL
-without a tip trip, etc.), it **retracts to Z0**, stops the spindle, restores **M63 P0**,
+without a +X-side tip trip, reaches the known forward (+X) break without a −X-side tip trip,
+etc.), it **retracts to Z0**, stops the spindle, restores **M63 P0**,
 and the footer says it failed. It will **not** pretend the last good diameter is
 still valid.
 
@@ -260,9 +263,9 @@ Diameter does **not** reconstruct a solid silhouette with a gullet envelope.
 It measures **effective cutting diameter** by spinning the tool and taking
 **first-tooth triggers** from both sides:
 
-1. **5×** `G38.3 −X` from +X clear → keep **max X** (`#5513`)  
+1. **5×** `G38.3 −X` from +X clear → keep **max X** (`#5513`); miss stop = `x_stop`  
 2. **G0** to −X clear (mux off)  
-3. **5×** `G38.3 +X` from −X clear → keep **min X** (`#5514`)  
+3. **5×** `G38.3 +X` from −X clear → keep **min X** (`#5514`); miss stop = `#5513` (forward break)  
 4. `raw = x_plus − x_minus`; `corrected = raw + #5516`
 
 G38 is wired to **raw** `laser-beam-broken` (1 kHz servo). No `G38.5` clear pass.
@@ -326,6 +329,7 @@ land near the geometric OD. X axis must be **0…T seconds** for the whole run.
 | “Beam already broken at START” / −X clear | START OFFSET too small — increase it so both clears are open |
 | Never trips before MAX TRAVEL | Raise MAX TRAVEL (still short of the wall) or fix START OFFSET / polarity / RPM |
 | −X clear still broken | Need `MAX TRAVEL ≥ ~2× START OFFSET`, or raise START OFFSET |
+| −X-side hit missed before forward (+X) break | No tip between −X clear and `#5513` — polarity / RPM / tool not in path; reverse no longer searches past the known +X tip |
 | Raw width &lt; 0.025 mm / edge order bad | Tip never seen — check polarity, spin RPM, SCOPE PNG |
 | Fluted OD still off after recal | Check Z DROP on full OD; expect runout ≥ mic land OD possible |
 | SCOPE PNG only shows last ~2 s | Old bug; current code freezes sampling then renders **full** 0…T capture |
