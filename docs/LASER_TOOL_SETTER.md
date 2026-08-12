@@ -91,8 +91,9 @@ restarted after any HAL/tab change.
 3. **M62 P0** → **G38** tip-find → **M63 P0** (mux on only during the probe).  
 4. Back off / fine tip-find the same way (M62 ↔ G38 ↔ M63).  
 5. Retract ~5 mm above tip, **`G0 G53`** to **START**, drop to tip − Z DROP.  
-6. Pre-touch **G38 −X**, back off +2 mm, optional **M3/M4** (per REVERSE SPINDLE), then break→clear **G38**.  
-7. Corrected diameter = raw shadow + `#5516` beam width; retract to Z0, **M5**, **M63 P0**.
+6. Pre-touch **G38 −X**, back off +2 mm, optional **M3/M4** (per REVERSE SPINDLE).  
+7. **Forward** break→clear (−X) → **+1 mm** overshoot → **return** break→clear (+X).  
+8. Primary **DIAMETER** = entry-to-entry `|break_fwd − break_bwd|` + `#5516`; FWD/BWD get the same beam cal. Retract to Z0, **M5**, **M63 P0**.
 
 LinuxCNC only allows **G53 with G0 or G1** — never with G38. Probes use **G91**
 relative moves toward a machine-coordinate target, then **G90**.
@@ -109,13 +110,23 @@ Progress chatter is silent; only **failure** `(DEBUG, …)` lines notify in Prob
 ## Beam-width calibration
 
 1. Enter the known **MASTER PIN** diameter.  
-2. **MEASURE DIAMETER** on that pin (raw shadow width).  
+2. **MEASURE DIAMETER** on that pin (raw **entry** diameter).  
 3. Press **CALIBRATE BEAM** — or type a value into **MEASURED BEAM WIDTH** by hand.
 
-**MEASURED BEAM WIDTH** = `master pin − last raw diameter` (stored in `#5516`).  
-Later diameter results are `raw + #5516`, so the master reads back as the master size.
+**MEASURED BEAM WIDTH** = `master pin − last raw entry diameter` (stored in `#5516`).  
+Later diameter results are `entry raw + #5516`, so the master reads back as the master size.
 You can fine-tune the field anytime; leaving it (or measuring again) persists `#5516`
 into `linuxcnc.var` in **ascending parameter order** (required by LinuxCNC).
+
+### Why bidirectional?
+
+- **FWD / BWD DIAM** = break→clear width on each pass **+ `#5516`** (same beam-width
+  correction as entry). Raw shadows still live in `#5520`/`#5521`. Clear-edge /
+  filter lag usually makes these a bit fatter than entry, and FWD vs BWD can differ
+  slightly from optics, tilt, or residual motion after the direction change.  
+- **DIAMETER (entry)** = distance between **break-on** from the START side and **break-on**
+  from the exit side. With `on-delay=0`, that is usually the tighter OD estimate and
+  what CALIBRATE BEAM uses.
 
 ## Optional: length experiments
 
@@ -206,8 +217,9 @@ backwards (on when clear / off when blocked), insert a `not` between DI5 and
 frozen at program start. G38 uses `motion.probe-input` while **M62 P0** is on;
 **M66 P3** / `#5399` is still used for beam-at-START safety checks.
 
-Results publish with `M68 E0` (corrected diameter or length) and `M68 E1` (1 = success).
-`#5512` always stores the **raw** shadow width.
+Results publish with `M68 E0` (corrected **entry** diameter or length), `M68 E1`
+(1 = success), and for diameter also `M68 E2`/`E3` (FWD/BWD shadow raw).
+`#5512` stores the **entry** raw diameter; `#5520`/`#5521` the shadow widths.
 
 ---
 
@@ -241,11 +253,15 @@ teach (`#5181–#5186`) or ATC `M66` (`#5399`).
 | `#5507` | Z DROP | Below tip for side sweep |
 | `#5508` | MAX TRAVEL | Max −X from START |
 | `#5509` | START OFFSET | BEAM → clear START (+X) |
-| `#5512` | Raw diameter | Last **raw** shadow width |
+| `#5512` | Entry raw diameter | `|break_fwd − break_bwd|` (primary; CALIBRATE uses this) |
+| `#5513` | Break X (START side) | Forward −X trip-on |
+| `#5514` | Break X (exit side) | Return +X trip-on |
 | `#5515` | Success | 1 = OK (`M68 E1`) |
-| `#5516` | Beam width | `master − raw` offset; corrected = raw + `#5516` |
+| `#5516` | Beam width | `master − entry raw`; corrected = entry + `#5516` |
 | `#5517` | Master pin | Last master-pin size used for cal |
 | `#5518` | Reverse spindle | 1 = **M3** (VFD reverse); 0 = **M4** (forward); `custom.hal` swaps M3/M4 |
+| `#5520` | FWD shadow raw | Forward −X break→clear width; UI shows raw + `#5516` |
+| `#5521` | BWD shadow raw | Return +X break→clear width; UI shows raw + `#5516` |
 
 UI always syncs **millimeters** into these params, even if the Units combo shows inches.
 

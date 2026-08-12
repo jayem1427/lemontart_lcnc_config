@@ -427,6 +427,7 @@ as Beam-Blocked</string></property>
           <item row="1" column="0">
            <widget class="QLabel" name="lblResDiamCap">
             <property name="text"><string>DIAMETER</string></property>
+            <property name="toolTip"><string>Entry-to-entry diameter (break from both sides) + beam-width cal</string></property>
            </widget>
           </item>
           <item row="1" column="1">
@@ -437,6 +438,42 @@ as Beam-Blocked</string></property>
           </item>
           <item row="1" column="2">
            <widget class="QLabel" name="lblResDiamUnit">
+            <property name="text"><string>mm</string></property>
+           </widget>
+          </item>
+
+          <item row="2" column="0">
+           <widget class="QLabel" name="lblResDiamFwdCap">
+            <property name="text"><string>FWD DIAM</string></property>
+            <property name="toolTip"><string>Forward −X break→clear diameter after beam-width cal (shadow raw + #5516)</string></property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLabel" name="lblResDiamFwd">
+            <property name="text"><string>0.0000</string></property>
+            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+           </widget>
+          </item>
+          <item row="2" column="2">
+           <widget class="QLabel" name="lblResDiamFwdUnit">
+            <property name="text"><string>mm</string></property>
+           </widget>
+          </item>
+
+          <item row="3" column="0">
+           <widget class="QLabel" name="lblResDiamBwdCap">
+            <property name="text"><string>BWD DIAM</string></property>
+            <property name="toolTip"><string>Return +X break→clear diameter after beam-width cal (shadow raw + #5516)</string></property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLabel" name="lblResDiamBwd">
+            <property name="text"><string>0.0000</string></property>
+            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+           </widget>
+          </item>
+          <item row="3" column="2">
+           <widget class="QLabel" name="lblResDiamBwdUnit">
             <property name="text"><string>mm</string></property>
            </widget>
           </item>
@@ -491,7 +528,7 @@ as Beam-Blocked</string></property>
            <widget class="QPushButton" name="btnCalibrate">
             <property name="text"><string>CALIBRATE BEAM
 WITH PREVIOUS MEASUREMENT</string></property>
-            <property name="toolTip"><string>MEASURED BEAM WIDTH = MASTER PIN − last raw diameter. Applied to later diameter results.</string></property>
+            <property name="toolTip"><string>MEASURED BEAM WIDTH = MASTER PIN − last raw ENTRY diameter. Applied to later diameter results.</string></property>
             <property name="minimumHeight"><number>56</number></property>
            </widget>
           </item>

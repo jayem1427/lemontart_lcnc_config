@@ -205,6 +205,8 @@ QGroupBox#grpMeasure QLabel#lblBeamOffsetCap,
 QGroupBox#grpMeasure QLabel#lblMaxTravelCap,
 QGroupBox#grpResults QLabel#lblResLengthCap,
 QGroupBox#grpResults QLabel#lblResDiamCap,
+QGroupBox#grpResults QLabel#lblResDiamFwdCap,
+QGroupBox#grpResults QLabel#lblResDiamBwdCap,
 QGroupBox#grpCalibration QLabel#lblMasterPinCap,
 QGroupBox#grpCalibration QLabel#lblBeamDiaCap {
     color: rgb(238, 238, 236);
@@ -242,6 +244,8 @@ QGroupBox#grpMeasure QLabel#lblBeamOffsetUnit,
 QGroupBox#grpMeasure QLabel#lblMaxTravelUnit,
 QGroupBox#grpResults QLabel#lblResLengthUnit,
 QGroupBox#grpResults QLabel#lblResDiamUnit,
+QGroupBox#grpResults QLabel#lblResDiamFwdUnit,
+QGroupBox#grpResults QLabel#lblResDiamBwdUnit,
 QGroupBox#grpCalibration QLabel#lblMasterPinUnit,
 QGroupBox#grpCalibration QLabel#lblBeamDiaUnit {
     color: rgb(238, 238, 236);
@@ -253,7 +257,9 @@ QGroupBox#grpCalibration QLabel#lblBeamDiaUnit {
 /* ---------- Value readouts (DRO-style; same 14pt) ---------- */
 
 QLabel#lblResLength,
-QLabel#lblResDiam {
+QLabel#lblResDiam,
+QLabel#lblResDiamFwd,
+QLabel#lblResDiamBwd {
     color: black;
     background-color: rgb(235, 235, 235);
     border: 1px solid rgb(160, 160, 160);

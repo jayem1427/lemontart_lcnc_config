@@ -2,13 +2,17 @@
 (date: 2026)
 (Laser diameter — CAPTURE stores BEAM XY; tool blocking light.)
 (START = BEAM_X + START_OFFSET; +X clear side away from toolsetter.)
-(Tip-find at BEAM XY; diameter sweep feeds -X from START through beam.)
+(Tip-find at BEAM XY; diameter: −X through beam, +1 mm overshoot, then +X return.)
 (M62 P0 ONLY around G38 — never during G0/G1 or "Probe tripped during non-probe move".)
 (M63 P0 restores contact mux. M66 P3 L0 for beam-at-START on digital-in-03.)
 (Prereqs: BEAM X/Y + RPM #5501-#5503; Z-drop #5507; max travel #5508;)
 (        start offset #5509 = +X from BEAM to clear START)
-(Results: #5512 raw diameter, #5513/#5514 edges, #5515=1 on success, M68 E0/E1)
-(#5516 beam-width offset: corrected = raw + #5516; set by CALIBRATE BEAM in UI)
+(Bidirectional diameter: forward −X break→clear, +1 mm overshoot, then +X return.)
+(Results: #5512 entry raw = |break_fwd - break_bwd| — primary for cal / M68 E0)
+(        #5513 break X from START side -X trip; #5514 break X from exit side +X trip)
+(        #5520 forward shadow break→clear -X; #5521 backward shadow break→clear +X)
+(        #5515=1 on success; M68 E0=entry+cal, E1=ok, E2=fwd raw, E3=bwd raw)
+(#5516 beam-width offset: corrected = entry raw + #5516; set by CALIBRATE BEAM in UI)
 (Probe RPM >0: spin during diameter sweep. #5518=1 → M3 reverse; 0 → M4 forward.)
 (custom.hal swaps M3/M4 vs VFD wiring on this mill.)
 
@@ -21,6 +25,8 @@ o<laser_diameter> sub
 
     #5515 = 0
     M68 E1 Q0
+    M68 E2 Q0
+    M68 E3 Q0
 
     #<beam_x> = #5501
     #<beam_y> = #5502
@@ -39,6 +45,7 @@ o<laser_diameter> sub
     #<tip_retract_z> = 5.0
     #<slow_z_fr> = 50
     #<x_backoff> = 2.0
+    #<x_overshoot> = 1.0
     #<min_remain> = 0.50
     #<z_safe> = 0
     #<z_floor> = [#<_ini[AXIS_Z]MIN_LIMIT> + 1]
@@ -209,7 +216,7 @@ o<laser_diameter> sub
       G4 P2.0
     o<diam_spin> endif
 
-    (--- edge 1: G38 -X until beam breaks ---)
+    (--- forward pass: G38 -X until beam breaks — START-side entry ---)
     M62 P0
     G91
     G38.3 X[#<x_stop> - #<_abs_x>] F#<slow_x_fr>
@@ -223,8 +230,8 @@ o<laser_diameter> sub
       o<laser_diameter> return
     o<diam_miss_e1> endif
 
-    #<x_break> = #<_abs_x>
-    #5513 = #<x_break>
+    #<x_break_fwd> = #<_abs_x>
+    #5513 = #<x_break_fwd>
 
     #<remain> = [#<_abs_x> - #<x_stop>]
     o<diam_risk> if [#<remain> LT #<min_remain>]
@@ -235,7 +242,7 @@ o<laser_diameter> sub
       o<laser_diameter> return
     o<diam_risk> endif
 
-    (--- edge 2: G38.5 -X until beam clears — loss of contact ---)
+    (--- forward clear: G38.5 −X until beam clears ---)
     M62 P0
     G91
     G38.5 X[#<x_stop> - #<_abs_x>] F#<slow_x_fr>
@@ -249,42 +256,158 @@ o<laser_diameter> sub
       o<laser_diameter> return
     o<diam_miss_e2> endif
 
-    #<x_clear> = #<_abs_x>
-    #5514 = #<x_clear>
-    #<raw_diam> = [ABS[#<x_clear> - #<x_break>]]
+    #<x_clear_fwd> = #<_abs_x>
+    #<diam_fwd> = [ABS[#<x_clear_fwd> - #<x_break_fwd>]]
+    #5520 = #<diam_fwd>
+
+    (Reject a timer-width false edge; DS-5V-M specified minimum tool is 0.05 mm)
+    o<diam_fwd_small> if [#<diam_fwd> LT 0.025]
+      (DEBUG, LASER DIAM: forward shadow below 0.025 mm — false clear / filter not retriggered)
+      G0 G53 Z#<z_safe>
+      M5
+      M68 E0 Q#<diam_fwd>
+      M68 E1 Q0
+      M63 P0
+      o<laser_diameter> return
+    o<diam_fwd_small> endif
+
+    o<diam_fwd_big> if [#<diam_fwd> GT #<max_ok_diam>]
+      (DEBUG, LASER DIAM: forward shadow exceeds travel window — reject)
+      G0 G53 Z#<z_safe>
+      M5
+      M68 E0 Q#<diam_fwd>
+      M68 E1 Q0
+      M63 P0
+      o<laser_diameter> return
+    o<diam_fwd_big> endif
+
+    (--- overshoot 1 mm past clear so return starts fully out of beam ---)
+    #<x_far_clear> = [#<_abs_x> - #<x_overshoot>]
+    o<overshoot_lim> if [#<x_far_clear> LT #<x_stop>]
+      #<x_far_clear> = #<x_stop>
+    o<overshoot_lim> endif
+    o<overshoot_need> if [[#<_abs_x> - #<x_far_clear>] LT 0.05]
+      (DEBUG, LASER DIAM: no room for 1 mm clear overshoot — raise MAX TRAVEL)
+      G0 G53 Z#<z_safe>
+      M5
+      M63 P0
+      o<laser_diameter> return
+    o<overshoot_need> endif
+    G1 G53 X#<x_far_clear> F#<fast_x_fr>
+
+    M66 P3 L0
+    o<far_blocked> if [#5399 NE 0]
+      (DEBUG, LASER DIAM: still in beam after clear overshoot)
+      G0 G53 Z#<z_safe>
+      M5
+      M63 P0
+      o<laser_diameter> return
+    o<far_blocked> endif
+
+    (--- return pass: G38 +X toward START until break — exit-side entry ---)
+    M62 P0
+    G91
+    G38.3 X[#<start_x> - #<_abs_x>] F#<slow_x_fr>
+    G90
+    M63 P0
+    o<diam_miss_e3> if [#5070 EQ 0]
+      (DEBUG, LASER DIAM: return pass never broke beam before START)
+      G0 G53 Z#<z_safe>
+      M5
+      M63 P0
+      o<laser_diameter> return
+    o<diam_miss_e3> endif
+
+    #<x_break_bwd> = #<_abs_x>
+    #5514 = #<x_break_bwd>
+
+    #<remain_bwd> = [#<start_x> - #<_abs_x>]
+    o<diam_risk_bwd> if [#<remain_bwd> LT #<min_remain>]
+      (DEBUG, LASER DIAM: after return break, remaining travel to START too small)
+      G0 G53 Z#<z_safe>
+      M5
+      M63 P0
+      o<laser_diameter> return
+    o<diam_risk_bwd> endif
+
+    (--- return clear: G38.5 +X until beam clears ---)
+    M62 P0
+    G91
+    G38.5 X[#<start_x> - #<_abs_x>] F#<slow_x_fr>
+    G90
+    M63 P0
+    o<diam_miss_e4> if [#5070 EQ 0]
+      (DEBUG, LASER DIAM: return pass never cleared before START)
+      G0 G53 Z#<z_safe>
+      M5
+      M63 P0
+      o<laser_diameter> return
+    o<diam_miss_e4> endif
+
+    #<x_clear_bwd> = #<_abs_x>
+    #<diam_bwd> = [ABS[#<x_clear_bwd> - #<x_break_bwd>]]
+    #5521 = #<diam_bwd>
+
+    o<diam_bwd_small> if [#<diam_bwd> LT 0.025]
+      (DEBUG, LASER DIAM: backward shadow below 0.025 mm — false clear / filter not retriggered)
+      G0 G53 Z#<z_safe>
+      M5
+      M68 E0 Q#<diam_bwd>
+      M68 E1 Q0
+      M63 P0
+      o<laser_diameter> return
+    o<diam_bwd_small> endif
+
+    o<diam_bwd_big> if [#<diam_bwd> GT #<max_ok_diam>]
+      (DEBUG, LASER DIAM: backward shadow exceeds travel window — reject)
+      G0 G53 Z#<z_safe>
+      M5
+      M68 E0 Q#<diam_bwd>
+      M68 E1 Q0
+      M63 P0
+      o<laser_diameter> return
+    o<diam_bwd_big> endif
+
+    (Entry diameter = distance between break-on from each side)
+    #<raw_diam> = [ABS[#<x_break_fwd> - #<x_break_bwd>]]
     #5512 = #<raw_diam>
     #<diameter> = [#<raw_diam> + #<beam_cal>]
 
-    (Reject a timer-width false edge; DS-5V-M specified minimum tool is 0.05 mm)
-    o<diam_too_small> if [#<raw_diam> LT 0.025]
-      (DEBUG, LASER DIAM: raw width below 0.025 mm — false clear / filter not retriggered)
+    o<diam_entry_small> if [#<raw_diam> LT 0.025]
+      (DEBUG, LASER DIAM: entry diameter below 0.025 mm — reject)
       G0 G53 Z#<z_safe>
       M5
       M68 E0 Q#<raw_diam>
       M68 E1 Q0
+      M68 E2 Q#<diam_fwd>
+      M68 E3 Q#<diam_bwd>
       M63 P0
       o<laser_diameter> return
-    o<diam_too_small> endif
+    o<diam_entry_small> endif
 
-    o<diam_too_big> if [#<raw_diam> GT #<max_ok_diam>]
-      (DEBUG, LASER DIAM: measured diameter exceeds travel window — reject)
+    o<diam_entry_big> if [#<raw_diam> GT #<max_ok_diam>]
+      (DEBUG, LASER DIAM: entry diameter exceeds travel window — reject)
       G0 G53 Z#<z_safe>
       M5
       M68 E0 Q#<raw_diam>
       M68 E1 Q0
+      M68 E2 Q#<diam_fwd>
+      M68 E3 Q#<diam_bwd>
       M63 P0
       o<laser_diameter> return
-    o<diam_too_big> endif
+    o<diam_entry_big> endif
 
     #5515 = 1
     M68 E0 Q#<diameter>
     M68 E1 Q1
+    M68 E2 Q#<diam_fwd>
+    M68 E3 Q#<diam_bwd>
 
     G0 G53 Z#<z_safe>
     M5
     M63 P0
 
-    (done: break X=#5513 clear X=#5514 raw=#5512 corr=#<diameter> cal=#5516)
+    (done: entry=#5512 fwd=#5520 bwd=#5521 breaks=#5513/#5514 corr=#<diameter>)
     o<400> endif
 o<laser_diameter> endsub
 

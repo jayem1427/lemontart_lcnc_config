@@ -13,8 +13,9 @@ motion.digital-in-03 is still used for beam-at-START safety checks.
 (#<_hal[laser-beam-broken]> is frozen at program start; do not use it in loops.)
 
 Params live in #5501+ (never G30/toolsetter #5181-#5186).
-#5516 = measured beam width offset (master pin − last raw diameter).
+#5516 = measured beam width offset (master pin − last raw entry diameter).
 #5518 = reverse spindle during probe (1 = M3 / VFD reverse; 0 = M4 / forward).
+#5520 / #5521 = forward / backward shadow widths from bidirectional measure.
 MDI dispatch uses linuxcnc.command() directly (not qtpyvcp.actions).
 """
 
@@ -81,6 +82,7 @@ SCOPE_CHANNELS = (
 LASER_VAR_PARAMS = (
     5501, 5502, 5503, 5504, 5505, 5506, 5507, 5508, 5509,
     5510, 5511, 5512, 5513, 5514, 5515, 5516, 5517, 5518, 5519,
+    5520, 5521,
 )
 
 # Chroma key for green-screen tool setter photos. Uses green-channel dominance
@@ -141,12 +143,16 @@ BUTTON_MDI = {
 LINEAR_VALUE_WIDGETS = (
     'lblResLength',
     'lblResDiam',
+    'lblResDiamFwd',
+    'lblResDiamBwd',
     'leBeamWidth',
 )
 
 LINEAR_UNIT_WIDGETS = (
     'lblResLengthUnit',
     'lblResDiamUnit',
+    'lblResDiamFwdUnit',
+    'lblResDiamBwdUnit',
     'lblBeamDiaUnit',
     'lblMasterPinUnit',
     'lblStartXUnit',
@@ -296,6 +302,8 @@ class UserTab(QWidget):
         beam_width = values.get(5516, 0.0)
         master_pin = values.get(5517, 0.0)
         reverse_spindle = values.get(5518, 0.0)
+        diam_fwd = values.get(5520, 0.0)
+        diam_bwd = values.get(5521, 0.0)
 
         if abs(x_mm) > 1e-6 or abs(y_mm) > 1e-6:
             self._set_beam_xy_widgets(x_mm, y_mm)
@@ -319,6 +327,19 @@ class UserTab(QWidget):
                 le_master.setText("{:.4f}".format(self._mm_to_ui(master_pin)))
         if raw_diam > 0:
             self._last_raw_diam_mm = raw_diam
+            corrected = raw_diam + float(beam_width)
+            lbl = getattr(self, "lblResDiam", None)
+            if lbl is not None:
+                lbl.setText("{:.4f}".format(self._mm_to_ui(corrected)))
+        for name, val in (
+            ("lblResDiamFwd", diam_fwd),
+            ("lblResDiamBwd", diam_bwd),
+        ):
+            widget = getattr(self, name, None)
+            if widget is not None and val > 0:
+                widget.setText(
+                    "{:.4f}".format(self._mm_to_ui(val + float(beam_width)))
+                )
         self._beam_width_mm = float(beam_width)
         le_bw = getattr(self, "leBeamWidth", None)
         if le_bw is not None:
@@ -926,8 +947,9 @@ class UserTab(QWidget):
 
             corrected = float(raw_mm) + beam_width
             self.lblResDiam.setText("{:.4f}".format(self._mm_to_ui(corrected)))
+            self._refresh_pass_diam_labels()
             self._set_status(
-                "BEAM WIDTH {:.4f} (= master {:.4f} − raw {:.4f}) — applied to diameter".format(
+                "BEAM WIDTH {:.4f} (= master {:.4f} − entry raw {:.4f}) — applied to diameter".format(
                     self._mm_to_ui(beam_width),
                     self._mm_to_ui(master_mm),
                     self._mm_to_ui(raw_mm),
@@ -963,11 +985,12 @@ class UserTab(QWidget):
             "REVERSE SPINDLE checked = M3 (VFD reverse); unchecked = M4 "
             "(VFD forward). custom.hal swaps M3/M4 to the VFD.\n"
             "6. MEASURE DIAMETER (M62 P0 enables laser on probe-input for G38):\n"
-            "   Z0 → G38 tip-find at BEAM XY → retract 5 mm → START (BEAM+offset) → "
-            "tip−ZDROP → G38 pre-touch −X → X+2 mm → M3/M4 → break→clear "
-            "(stop at START−max travel) → M63 P0.\n"
+            "   Z0 → tip-find at BEAM → START → pre-touch −X → M3/M4 →\n"
+            "   forward break→clear (−X) → +1 mm overshoot → return break→clear (+X).\n"
+            "   DIAMETER = entry-to-entry (|break_fwd − break_bwd| + beam cal).\n"
+            "   FWD/BWD DIAM = each pass break→clear width + beam cal.\n"
             "7. Beam-width cal: enter MASTER PIN size → MEASURE DIAMETER on that pin → "
-            "CALIBRATE BEAM. MEASURED BEAM WIDTH = master − raw; later diameters add "
+            "CALIBRATE BEAM. MEASURED BEAM WIDTH = master − entry raw; later diameters add "
             "that offset. You can also type a value into MEASURED BEAM WIDTH by hand "
             "for fine tuning (#5516).\n"
             "8. Optional: MEASURE LENGTH (uses #5504 BEAM Z if already taught).\n"
@@ -1188,8 +1211,15 @@ class UserTab(QWidget):
             return
         if not self._persist_beam_width(beam_width):
             return
+        if self._last_raw_diam_mm:
+            self.lblResDiam.setText(
+                "{:.4f}".format(
+                    self._mm_to_ui(self._last_raw_diam_mm + beam_width)
+                )
+            )
+        self._refresh_pass_diam_labels()
         self._set_status(
-            "BEAM WIDTH SET: {:.4f} (manual — applied to next diameter)".format(
+            "BEAM WIDTH SET: {:.4f} (manual — applied to diameter)".format(
                 self._mm_to_ui(beam_width)
             )
         )
@@ -1322,8 +1352,18 @@ class UserTab(QWidget):
             LOG.debug("laser_setter: length result refresh skipped: %s", exc)
             self._set_status("LENGTH: done (result refresh failed)")
 
+    def _refresh_pass_diam_labels(self):
+        """Show FWD/BWD as stored shadow raw (#5520/#5521) + current beam cal."""
+        values = self._read_var_file()
+        cal = float(self._beam_width_mm)
+        for name, param in (("lblResDiamFwd", 5520), ("lblResDiamBwd", 5521)):
+            raw = values.get(param, 0.0)
+            widget = getattr(self, name, None)
+            if widget is not None and raw > 0:
+                widget.setText("{:.4f}".format(self._mm_to_ui(raw + cal)))
+
     def _refresh_diameter_result(self):
-        """Read corrected diameter from M68 E0; keep last raw for CALIBRATE BEAM."""
+        """Read corrected entry diam from M68 E0; show FWD/BWD as raw+beam cal."""
         try:
             if not self._measure_succeeded():
                 self._set_status(
@@ -1334,27 +1374,58 @@ class UserTab(QWidget):
             if diameter_mm is None or diameter_mm <= 0:
                 self._set_status("DIAMETER: success flag set but no result on aout[0]")
                 return
-            # #5512 is always raw shadow width; M68 E0 is corrected (raw + #5516)
+            # #5512 = entry raw; M68 E0 = entry + #5516; E2/E3 = FWD/BWD shadow raw
             if abs(self._beam_width_mm) > 1e-12:
                 raw_mm = diameter_mm - self._beam_width_mm
             else:
                 raw_mm = diameter_mm
+            fwd_raw = self._read_aout(2)
+            bwd_raw = self._read_aout(3)
+            cal = float(self._beam_width_mm)
+            updates = {}
             if raw_mm > 0:
                 self._last_raw_diam_mm = float(raw_mm)
-                self._write_var_params({5512: float(raw_mm)})
+                updates[5512] = float(raw_mm)
+            fwd_corr = None
+            bwd_corr = None
+            if fwd_raw is not None and fwd_raw > 0:
+                updates[5520] = float(fwd_raw)
+                fwd_corr = float(fwd_raw) + cal
+                lbl_fwd = getattr(self, "lblResDiamFwd", None)
+                if lbl_fwd is not None:
+                    lbl_fwd.setText("{:.4f}".format(self._mm_to_ui(fwd_corr)))
+            if bwd_raw is not None and bwd_raw > 0:
+                updates[5521] = float(bwd_raw)
+                bwd_corr = float(bwd_raw) + cal
+                lbl_bwd = getattr(self, "lblResDiamBwd", None)
+                if lbl_bwd is not None:
+                    lbl_bwd.setText("{:.4f}".format(self._mm_to_ui(bwd_corr)))
+            if updates:
+                self._write_var_params(updates)
             self.lblResDiam.setText("{:.4f}".format(self._mm_to_ui(diameter_mm)))
-            if abs(self._beam_width_mm) > 1e-12:
+            fwd_txt = (
+                "{:.4f}".format(self._mm_to_ui(fwd_corr))
+                if fwd_corr is not None
+                else "—"
+            )
+            bwd_txt = (
+                "{:.4f}".format(self._mm_to_ui(bwd_corr))
+                if bwd_corr is not None
+                else "—"
+            )
+            if abs(cal) > 1e-12:
                 self._set_status(
-                    "DIAMETER {:.4f} (raw {:.4f} + beam width {:.4f})".format(
+                    "ENTRY {:.4f}  FWD {}  BWD {}  (all + beam cal {:.4f})".format(
                         self._mm_to_ui(diameter_mm),
-                        self._mm_to_ui(self._last_raw_diam_mm or 0.0),
-                        self._mm_to_ui(self._beam_width_mm),
+                        fwd_txt,
+                        bwd_txt,
+                        self._mm_to_ui(cal),
                     )
                 )
             else:
                 self._set_status(
-                    "DIAMETER {:.4f} (raw — CALIBRATE BEAM to apply master-pin offset)".format(
-                        self._mm_to_ui(diameter_mm)
+                    "ENTRY {:.4f}  FWD {}  BWD {} — CALIBRATE BEAM for offset".format(
+                        self._mm_to_ui(diameter_mm), fwd_txt, bwd_txt
                     )
                 )
         except Exception as exc:
