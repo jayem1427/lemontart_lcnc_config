@@ -127,29 +127,6 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="btnSignalScope">
-        <property name="minimumSize">
-         <size><width>112</width><height>32</height></size>
-        </property>
-        <property name="text"><string>SCOPE</string></property>
-        <property name="checkable"><bool>true</bool></property>
-        <property name="toolTip"><string>Live Python plot: raw / filtered envelope / G38 probe (replaces photo while on)</string></property>
-        <property name="focusPolicy"><enum>Qt::NoFocus</enum></property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="btnScopeSavePng">
-        <property name="minimumSize">
-         <size><width>100</width><height>32</height></size>
-        </property>
-        <property name="text"><string>SAVE PNG</string></property>
-        <property name="checkable"><bool>true</bool></property>
-        <property name="checked"><bool>true</bool></property>
-        <property name="toolTip"><string>When checked, MEASURE DIAMETER/LENGTH auto-logs the full run and writes logs/laser_scope/*.png</string></property>
-        <property name="focusPolicy"><enum>Qt::NoFocus</enum></property>
-       </widget>
-      </item>
-      <item>
        <widget class="QPushButton" name="btnHelp">
         <property name="minimumSize">
          <size><width>32</width><height>32</height></size>
@@ -270,12 +247,20 @@
            </widget>
           </item>
 
-          <item row="3" column="0">
+          <item row="3" column="0" colspan="3">
+           <widget class="QCheckBox" name="chkReverseSpindle">
+            <property name="text"><string>REVERSE SPINDLE</string></property>
+            <property name="toolTip"><string>When PROBE RPM &gt; 0: checked = M3 (VFD reverse on this mill), unchecked = M4 (VFD forward). Persists as #5518.</string></property>
+            <property name="checked"><bool>true</bool></property>
+           </widget>
+          </item>
+
+          <item row="4" column="0">
            <widget class="QLabel" name="lblZDropCap">
             <property name="text"><string>Z DROP</string></property>
            </widget>
           </item>
-          <item row="3" column="1">
+          <item row="4" column="1">
            <widget class="QLineEdit" name="leZDrop">
             <property name="text"><string>2.0000</string></property>
             <property name="toolTip"><string>Below tip-find Z before diameter cross-feed</string></property>
@@ -283,18 +268,18 @@
             <property name="minimumHeight"><number>28</number></property>
            </widget>
           </item>
-          <item row="3" column="2">
+          <item row="4" column="2">
            <widget class="QLabel" name="lblZDropUnit">
             <property name="text"><string>mm</string></property>
            </widget>
           </item>
 
-          <item row="4" column="0">
+          <item row="5" column="0">
            <widget class="QLabel" name="lblBeamOffsetCap">
             <property name="text"><string>START OFFSET</string></property>
            </widget>
           </item>
-          <item row="4" column="1">
+          <item row="5" column="1">
            <widget class="QLineEdit" name="leBeamOffset">
             <property name="text"><string>15.0000</string></property>
             <property name="toolTip"><string>+X from BEAM to clear START (away from toolsetter). Tip-find uses BEAM XY; diameter sweep starts at BEAM+offset and feeds −X.</string></property>
@@ -302,18 +287,18 @@
             <property name="minimumHeight"><number>28</number></property>
            </widget>
           </item>
-          <item row="4" column="2">
+          <item row="5" column="2">
            <widget class="QLabel" name="lblBeamOffsetUnit">
             <property name="text"><string>mm</string></property>
            </widget>
           </item>
 
-          <item row="5" column="0">
+          <item row="6" column="0">
            <widget class="QLabel" name="lblMaxTravelCap">
             <property name="text"><string>MAX TRAVEL</string></property>
            </widget>
           </item>
-          <item row="5" column="1">
+          <item row="6" column="1">
            <widget class="QLineEdit" name="leMaxTravel">
             <property name="text"><string>30.0000</string></property>
             <property name="toolTip"><string>Max −X distance from START through the beam — stop before the far wall / toolsetter</string></property>
@@ -321,7 +306,7 @@
             <property name="minimumHeight"><number>28</number></property>
            </widget>
           </item>
-          <item row="5" column="2">
+          <item row="6" column="2">
            <widget class="QLabel" name="lblMaxTravelUnit">
             <property name="text"><string>mm</string></property>
            </widget>

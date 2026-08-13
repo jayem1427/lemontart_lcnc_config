@@ -63,6 +63,6 @@ logs/tuning/graphical_inertia/
 # Local UI smoke screenshots
 logs/tuning/ui_smoke/
 
-# Laser setter SCOPE PNG captures (keep directory)
-logs/laser_scope/**/*.png
-!logs/laser_scope/.gitkeep
+# Laser setter per-hit CSVs (keep directory)
+logs/laser_hits/**/*.csv
+!logs/laser_hits/.gitkeep

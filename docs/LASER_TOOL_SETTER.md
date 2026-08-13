@@ -17,7 +17,7 @@ out of the way, it says “clear.”
 This mill uses that tripwire to:
 
 1. Find the **tip** (lower until the beam breaks).
-2. From each side, trip the beam **5 times** on a spinning tool and keep the
+2. From each side, trip the beam **9 times** on a spinning tool and keep the
    **outermost** flute tips (max-of-N first-tooth triggers).
 3. Report that width, then optionally correct it with a
    **master-pin beam-width calibration**.
@@ -37,8 +37,10 @@ systems don't fight when you're not measuring.
 | Feature | Status |
 |---------|--------|
 | Live beam LED on the tab | Works (keeps updating during measure) |
-| **SCOPE** / **SAVE PNG** | Legacy debug — UI sampler can miss short peaks while measure still OK; replace with hit dots + CSV |
-| **MEASURE DIAMETER** | Works — raw G38, 9+9 max first-tooth triggers |
+| **+X / −X hit dots** | Works — 9+9 red→green from accepted `G38.3` trips (`M68 E2/E3`) |
+| **Hit CSV** | Works — `logs/laser_hits/<stamp>_diameter.csv` after MEASURE |
+| **MEASURE DIAMETER** | Works — G38, 9+9 max first-tooth triggers |
+| **20× stats** | Works — MDI `o<laser_diameter_stats> call` (avg + sample stdev) |
 | **CALIBRATE BEAM** / editable **MEASURED BEAM WIDTH** | Works — master pin − raw → `#5516` |
 | **MEASURE LENGTH** | Experimental (needs `#5504` BEAM Z via MDI; not a contact TLO replacement) |
 | Runout / broken-tool / air blast | Not built yet (roadmap only — no fake buttons) |
@@ -82,7 +84,7 @@ restarted after any HAL/tab change.
    - **Z DROP** — how far below the tip to sit for the side sweep (default `2`)
    - **PROBE RPM** — `0` = static (pins); `>0` = reverse (**M3**) during diameter hits (~1000–6000 for flutes)  
 5. Press **MEASURE DIAMETER**.  
-6. Watch the footer status. On success, **DIAMETER** updates.
+6. Watch **+X HITS / −X HITS** dots go red→green. On success, **DIAMETER** updates.
 
 **Rule of thumb:** `START OFFSET` must be **less than** `MAX TRAVEL` (ideally `MAX TRAVEL ≥ 2 × START OFFSET` so −X clear fits).
 
@@ -150,30 +152,22 @@ smoke tests. **Not** a spindle-nose TLO replacement — keep using the contact s
 Defined in `ethercat_mill.hal`:
 
 ```
-lcec.0.2.di-5 → laser-beam-broken → motion.digital-in-03 (LED / M66)
+lcec.0.2.di-5 → laser-beam-broken → motion.digital-in-03 (LED / M66 P3 RAW)
                       │
-                      ├── when M62 P0: and2.7 → or2.3 → motion.probe-input  (RAW)
-                      └── laser-flute-hold (SCOPE "FILT" only — not on G38 path)
+                      └── laser-flute-hold → and2.7 → G38 mux when M62 P0
+                                         → motion.digital-in-04 (M66 P4 FILT)
 contact probe / toolsetter → or2.0 → and2.8 (gated off when M62 P0) → or2.3
 ```
 
-G38 uses **raw** `laser-beam-broken`. Diameter is **max-of-9 first-tooth triggers**
-from each side of the beam (no gullet envelope / timedelay on the probe path).
-`laser-flute-hold` remains loaded so SCOPE can still show FILT for comparison.
-LED / `M66 P3` stay **raw**.
+G38 uses the **flute envelope** (`on-delay=0`, `off-delay=BEAM_OFF_DELAY`) so
+`G38.5` can clear through gullets. First-tooth `G38.3` still trips immediately.
+LED / `M66 P3` stay **raw**. Macros wait **FILT** (`M66 P4`) clear before each
+hit so G38 starts from a falling envelope — real travel + beep.
 
-Press **SCOPE** for a live plot, or just run **MEASURE DIAMETER** — capture starts
-automatically for the whole macro. With **SAVE PNG** checked (default), a full-run
-screenshot is written to `logs/laser_scope/<timestamp>_diameter.png`.
-
-Traces:
-
-1. **RAW** `lcec.0.2.di-5` — individual flute pulses  
-2. **FILT** `laser-flute-hold.out` — legacy envelope (not used by G38)  
-3. **G38** `motion.probe-input` — follows RAW while M62 is on  
-
-With a spinning 3-flute in the beam, RAW and G38 should chatter. A solid pin should
-keep RAW/G38 solid high while blocking.
+**+X / −X HITS** dots (RESULTS) are the live progress display: red until that
+slot’s `G38.3` is accepted, then green. After MEASURE, a CSV of every hit X is
+written to `logs/laser_hits/<timestamp>_diameter.csv`. Each accepted hit dwells
+`G4 P0.20` so the last −X slot is not skipped by the UI poll.
 
 Measure macros: **M62 P0** only around each **G38** (never during G0/G1),
 **M63 P0** immediately after each probe and on every exit — otherwise LinuxCNC
@@ -209,6 +203,8 @@ frozen at program start. G38 uses `motion.probe-input` while **M62 P0** is on;
 
 Results publish with `M68 E0` (corrected diameter or length) and `M68 E1` (1 = success).
 `#5512` stores **raw** = `x_plus − x_minus`; `#5513`/`#5514` are the kept outer edges.
+Each accepted (or final-failed) tip hit also publishes `M68 E2` (X mm) and `M68 E3`
+(packed: `seq*10000 + side*100 + slot*10 + ok`, side 1 = +X, 2 = −X).
 
 ---
 
@@ -218,14 +214,15 @@ Results publish with `M68 E0` (corrected diameter or length) and `M68 E1` (1 = s
 |------|------|
 | `probe_basic/user_tabs/laser_setter/` | Tab UI + tool-setter photo |
 | `laser_diameter.ngc` | Diameter sequence |
+| `laser_diameter_stats.ngc` | 20× diameter, mean + sample stdev (`o<laser_diameter_stats> call`) |
 | `laser_length.ngc` | Length experiment |
 | `laser_set_start_xy.ngc` | BEAM X/Y + RPM → `#5501–#5503` (UI usually writes params directly) |
 | `laser_set_diam_params.ngc` | Z DROP / MAX TRAVEL / START OFFSET |
 | `laser_set_beam_z.ngc` | BEAM Z for length |
-| `ethercat_mill.hal` | `laser-beam-broken` raw → G38 mux + M62/M63 |
-| `custom.hal` | Loads `timedelay` as `laser-flute-hold` (SCOPE only) + spindle at-speed delay |
-| `ethercat_mill.ini` `[LASER]` | `BEAM_OFF_DELAY` (SCOPE FILT only; unused by G38) |
-| `logs/laser_scope/` | Auto PNG captures from MEASURE (gitignored `*.png`) |
+| `ethercat_mill.hal` | `laser-beam-broken` → FILT → G38 mux; RAW on `digital-in-03`; FILT on `digital-in-04` |
+| `custom.hal` | Loads `timedelay` as `laser-flute-hold` + spindle at-speed delay |
+| `ethercat_mill.ini` `[LASER]` | `BEAM_OFF_DELAY` (G38 envelope off-delay) |
+| `logs/laser_hits/` | Per-hit CSV from MEASURE DIAMETER (gitignored `*.csv`) |
 
 ---
 
@@ -237,7 +234,7 @@ teach (`#5181–#5186`) or ATC `M66` (`#5399`).
 | # | Name | Meaning |
 |---|------|---------|
 | `#5501` / `#5502` | BEAM X/Y | Tool blocking light (G53 mm) — **CAPTURE BEAM** writes these + `linuxcnc.var` |
-| `#5503` | PROBE RPM | 0 = static; else **M3** during diameter hits (`custom.hal` swaps to VFD reverse) |
+| `#5503` | PROBE RPM | 0 = static; else spin during diameter hits |
 | `#5504` | BEAM Z | Length only (MDI teach) |
 | `#5507` | Z DROP | Below tip for side sweep |
 | `#5508` | MAX TRAVEL | Max −X from START |
@@ -248,11 +245,15 @@ teach (`#5181–#5186`) or ATC `M66` (`#5399`).
 | `#5515` | Success | 1 = OK (`M68 E1`) |
 | `#5516` | Beam width | `master − raw` offset; corrected = raw + `#5516` |
 | `#5517` | Master pin | Last master-pin size used for cal |
+| `#5518` | Reverse spindle | 1 = **M3** (VFD reverse); 0 = **M4** (forward); `custom.hal` swaps M3/M4 |
+| `#5531–#5550` | Stats corr | 20 corrected diameters from `laser_diameter_stats` |
+| `#5551–#5570` | Stats raw | Matching raw widths |
+| `#5571` / `#5572` / `#5573` | Stats mean / sample stdev / n | MDI `o<laser_diameter_stats> call` |
 
 UI always syncs **millimeters** into these params, even if the Units combo shows inches.
 
 `linuxcnc.var` parameter numbers must stay **strictly ascending**. The Laser Setter
-tab rewrites the file sorted when it saves `#5516` / `#5517`.
+tab rewrites the file sorted when it saves `#5516` / `#5517` / `#5518`.
 
 ---
 
@@ -271,13 +272,26 @@ It measures **effective cutting diameter** by spinning the tool and taking
 
 G38 uses the **flute envelope** again (`on-delay=0`, `off-delay=BEAM_OFF_DELAY`) so
 `G38.5` can clear through gullets. First-tooth `G38.3` still trips immediately.
-Max-of-5 randomizes flute phase so the outermost tip is usually caught.
+Max-of-9 randomizes flute phase so the outermost tip is usually caught.
 
 Recommended PROBE RPM for flutes: about **1000–6000**. Pins: **RPM = 0**.
 Fine hit feed is **F50** (≈0.0008 mm per 1 ms sample).
 
 **Re-run CALIBRATE BEAM** on a master pin after switching to this method — old
 `#5516` values included envelope clear-delay bias.
+
+### Repeatability (20× stats)
+
+From MDI (same BEAM / RPM / Z DROP as MEASURE DIAMETER):
+
+```text
+o<laser_diameter_stats> call
+```
+
+That calls `o<laser_diameter>` **20 times** (up to 3 retries per sample), then
+prints mean and sample stdev. Results stay in `#5531–#5573` (must stay below
+`#5600`). Hit dots will cycle through all 20 runs if the Laser Setter tab is
+open — that is expected.
 
 ### What failed (do not resurrect)
 
@@ -289,80 +303,30 @@ Fine hit feed is **F50** (≈0.0008 mm per 1 ms sample).
 | Envelope `timedelay` + break→clear | Stops gullet aborts but left ~0.2 mm skinny silhouette vs mic OD |
 | “Just spin faster” with silhouette method | Optical averaging undersizes further |
 
-### Scope capture (legacy debug — replace)
+### Hit dots + per-hit CSV
 
-Laser Setter tab still has:
-
-- **SCOPE** — live pyqtgraph plot (UI-thread HAL sample, target **1000 Hz**)  
-- **SAVE PNG** (default on) — full macro to `logs/laser_scope/<stamp>_diameter.png`
-
-Traces: **RAW** / **FILT** (envelope on G38) / **G38** (follows FILT while M62 is on).
-
-**Known limitation:** SCOPE is **not** proof that G38 saw a tip. Measure runs in the
-realtime servo thread; SCOPE samples on the Qt UI thread. Short flute pulses are
-easy to miss (busy UI, catch-up re-reads *current* HAL into past timestamps, then
-skips leftover time after `max_catchup`). So PNGs can look flat / peakless while
-diameter still succeeds — that is expected, not a macro bug.
-
-Do **not** chase SCOPE fidelity for operator feedback. Next UX is hit dots +
-per-hit CSV (below). Keep Halscope / a realtime sampler only if you need true
-pulse-level debug.
-
-### Next UX: hit dots + per-hit CSV (merge action items)
-
-Replace SCOPE-as-progress with two rows of **9 dots** (+X side / −X side):
+RESULTS shows two rows of **9 dots** (+X / −X):
 
 | State | Meaning |
 |-------|---------|
 | Red | Hit slot not yet accepted |
 | Green | That `G38.3` trip succeeded (`#5070 != 0` and travel ≥ min) |
-| Remains red / flash on abort | Which hit failed (miss before travel stop, etc.) |
+| Red with yellow ring | That slot exhausted retries / miss |
 
-Reset all red when **MEASURE DIAMETER** starts. Drive dots from **accepted G38
-trips**, not from RAW waveform sampling (same source of truth as diameter).
+Reset all red when **MEASURE DIAMETER** starts. Dots are driven from **accepted
+G38 trips** (`M68 E2/E3`), not from RAW waveform sampling.
 
-Optional: keep `probe_beep.hal` for audible confirmation; optional HAL
-`oneshot` latch on `laser-probe-trip` / `probe-in` if a single HIT lamp is useful
-in addition to the 9+9 strip.
-
-#### Saved: per-hit position CSV (plot afterwards)
-
-Today the macro only keeps extremes (`#5513` max / `#5514` min). To re-plot
-positions later, record **each** tip X as an event log — not a 1 kHz scope dump.
-
-Suggested path: `logs/laser_hits/<stamp>_diameter.csv`
+After MEASURE, Laser Setter writes `logs/laser_hits/<stamp>_diameter.csv`:
 
 ```text
+# raw=... corr=... beam=... tip_z=... rpm=... success=0|1
 side,hit,x_mm,ok
 plus,1,12.341,1
-plus,2,12.338,1
 minus,1,6.012,1
 ```
 
-Plus a one-line summary (raw, corrected, `#5516`, tip Z, RPM, success).
-
-**How to get numbers out of the macro**
-
-1. After each `#5070` check in `laser_diameter.ngc`, record `#<_abs_x>` (and a
-   failed row if the miss path should appear in the log).
-2. Publish to the UI each hit (`M68` for X + side/index) **or** stash
-   numbered params and read once at end (stay below `#5600`).
-3. Laser Setter writes the CSV at measure end (same lifecycle as today’s scope
-   PNG, different payload).
-
-**Afterwards:** plot hit index vs X (two series), or a 1D strip of the positions
-with kept max/min highlighted. Do **not** reuse the HAL signal logger
-for this — wrong data shape (event list vs high-rate timeseries).
-
-#### Implementation checklist
-
-- [ ] Publish per-hit X (+ side / index / ok) from `laser_diameter.ngc`
-- [ ] Laser Setter: 9+9 red/green dots driven by those events
-- [ ] Write `logs/laser_hits/*.csv` (+ summary) per MEASURE
-- [ ] Optional post-run / script plot of hit positions
-- [ ] Hide or remove SCOPE / SAVE PNG as primary feedback (Halscope remains for
-      deep HAL debug if needed)
-- [ ] Update troubleshooting: “flat SCOPE but measure OK” → expected; use dots/CSV
+Plot in a spreadsheet or script (hit index vs X, two series). Do **not** reuse
+the HAL signal logger for this — wrong data shape.
 
 ### Accuracy notes
 
@@ -389,19 +353,19 @@ for this — wrong data shape (event list vs high-rate timeseries).
 | Tip-find never trips / never stops | Restart after HAL change; measure needs **M62 P0** + G38 on `motion.probe-input` (not `#<_hal[]>`) |
 | Tip-find never trips | BEAM XY wrong, or polarity (DI invert) |
 | *Probe tripped during non-probe move* | M62 left on during G0/G1 — macros should wrap each G38 only; MDI **M63 P0** to clear |
-| *Parameter file out of order* | `#5516`/`#5517` must sit before `#5519` — open Laser Setter once (it rewrites sorted) or sort `linuxcnc.var` |
+| *Parameter file out of order* | `#5516`–`#5518` must sit before `#5519` — open Laser Setter once (it rewrites sorted) or sort `linuxcnc.var` |
 | “Beam already broken at START” but clear | Polarity inverted — DI should be TRUE when broken |
 | “Beam already broken at START” / −X clear | START OFFSET too small — increase it so both clears are open |
 | Never trips before MAX TRAVEL | Raise MAX TRAVEL (still short of the wall) or fix START OFFSET / polarity / RPM |
 | −X clear still broken | Need `MAX TRAVEL ≥ ~2× START OFFSET`, or raise START OFFSET |
 | −X-side hit missed before forward (+X) break | No tip between −X clear and `#5513` — polarity / RPM / tool not in path; reverse no longer searches past the known +X tip |
-| Raw width &lt; 0.025 mm / edge order bad | Tip never seen — check polarity, spin RPM; prefer hit CSV / dots over SCOPE |
+| *forward break not beyond -X clear* / *transit never reached -X clear* | Stale FILT after last +X hit — macro now waits FILT/RAW clear and retries transit; restart LinuxCNC so that NGC is loaded |
+| Raw width &lt; 0.025 mm / edge order bad | Tip never seen — check polarity, spin RPM; inspect hit CSV / dots |
 | Fluted OD still off after recal | Check Z DROP on full OD; expect runout ≥ mic land OD possible |
-| SCOPE PNG flat / no peaks but measure OK | Expected — UI sampler misses short flute pulses; G38 still tripped. Use hit dots/CSV (planned) or Halscope |
-| SCOPE PNG only shows last ~2 s | Old bug; current code freezes sampling then renders **full** 0…T capture |
+| Last −X hit dot stays red | Restart Probe Basic so the tab’s hit-event poll + post-hit `G4 P0.20` is loaded |
+| G38 does not follow FILT | Restart after HAL change — mux must be `laser-flute-hold.out` → `and2.7.in0` |
 | Footer FAILED, old diameter gone | That’s correct — success is gated on `M68 E1` |
 | Contact probe acting weird | MDI **M63 P0** if a laser measure aborted; then check contact mux / tool number |
-| G38 does not follow RAW | Restart after HAL change — mux must be raw `and2.7.in0` |
 
 ---
 
@@ -410,9 +374,9 @@ for this — wrong data shape (event list vs high-rate timeseries).
 1. ~~HAL + LED + diameter~~  
 2. ~~G38 via M62 P0 mux; capture BEAM XY; START OFFSET / MAX TRAVEL (−X sweep)~~  
 3. ~~Beam-width / master-pin calibration (true diameter)~~  
-4. ~~Flute envelope filter (`timedelay`) + SCOPE PNG capture~~ (superseded for G38; SCOPE itself is next to retire as primary UI)  
-5. ~~Max-of-N first-tooth diameter (raw G38, 9+9 sides)~~  
-6. **Hit feedback + per-hit CSV** — red→green 9+9 dots; `logs/laser_hits/` event CSV for post-plot of tip X’s; demote/remove SCOPE (see **Next UX** above)  
+4. ~~Flute envelope filter (`timedelay`)~~  
+5. ~~Max-of-N first-tooth diameter (G38, 9+9 sides)~~  
+6. ~~Hit feedback + per-hit CSV~~ — red→green 9+9 dots; `logs/laser_hits/`  
 7. Optional measure axis (X vs Y)  
 8. Runout / broken-tool check  
 9. Length → real TLO vs gauge line  
