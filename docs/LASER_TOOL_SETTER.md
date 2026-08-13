@@ -277,7 +277,7 @@ G38 uses the **flute envelope** again (`on-delay=0`, `off-delay=BEAM_OFF_DELAY`)
 Max-of-9 randomizes flute phase so the outermost tip is usually caught.
 
 Recommended PROBE RPM for typical mill endmills: about **200–1500**. Pins: **RPM = 0**.
-Fine hit feed is **F50** (≈0.0008 mm per 1 ms sample). If diameter **falls as RPM rises**, the flute pulse is already too short — slow down rather than spin faster. See **Occlusion, RPM, and small tools** below.
+Fine hit feed is **F50** (≈0.0008 mm per 1 ms sample). If diameter **falls as RPM rises**, the flute pulse is already too short — slow down rather than spin faster. See **Flute land vs beam** below.
 
 **Re-run CALIBRATE BEAM** on a master pin after switching to this method — old
 `#5516` values included envelope clear-delay bias.
@@ -340,111 +340,108 @@ the HAL signal logger for this — wrong data shape.
 - Pin cal: `corrected = raw + (master − raw_pin)` → `#5516`.  
 - Macro rejects raw `< 0.025 mm` or `x_plus ≤ x_minus`.
 
-### Occlusion, RPM, and small tools
+### Flute land vs beam — occlusion and RPM
 
-Two separate limits get mixed together. The DS-5V-M can trip on a **parked**
-object down around Ø 0.05–0.1 mm. Diameter on this mill is **not** measured at
-the tip: tip-find is always **M5 / static**, then the side hits run at
-**tip − Z DROP** (default 2 mm) while spinning. A tiny tip can still spoil
-**height** (wrong Z DROP plane). The “higher RPM → smaller diameter” effect is
-almost always the **spinning flute**, not “the tip can never break the beam.”
+First-tooth diameter is exactly this: the **cutting-edge land** sweeps
+**perpendicular** through the U-slot beam. G38.3 keeps the outermost X where
+that land first switches the sensor. A pin presents a wide silhouette; that
+land is a thin slit. The sensor trips when occluded light crosses a threshold,
+not at the geometric knife-edge — so a thinner “object” has to sit deeper in
+the beam, or stay there longer, before the bit flips.
+
+That is an **object-size × time** relationship. Higher RPM shortens how long
+the land is in the beam, which is the same as making the object optically
+smaller. The trip then happens further **inward** → smaller raw diameter.
+A solid pin should not show that slope.
 
 | Limit | What fails | Typical symptom |
 |-------|------------|-----------------|
-| **Spatial** | Not enough metal in the beam *when parked* | LASER LED stays clear with the land sitting in the slot |
-| **Temporal** | Flute pulse shorter than sensor + 1 ms servo sample | Diameter shrinks as PROBE RPM rises; pin does not |
+| **Spatial** | Land never covers enough of the beam, even parked | LED stays clear or mushy with a land sitting in the slot |
+| **Temporal** | Pulse shorter than sensor + 1 ms servo sample | Diameter shrinks as PROBE RPM rises; pin stays flat |
 
-G38.3 first-tooth trips on the first servo cycle where the envelope is TRUE
-(`on-delay=0`, `SERVO_PERIOD=1 ms`). A land of circumferential width `w` mm on
-a Ø`D` mm tool at `N` RPM spends roughly
+G38.3 trips on the first servo cycle where the envelope is TRUE (`on-delay=0`,
+`SERVO_PERIOD=1 ms`). A land of circumferential width `w` mm on a Ø`D` mm tool
+at `N` RPM spends roughly
 
 ```text
 t_ms ≈ 19100 × w / (D × N)
 ```
 
-in the beam at the OD. Need **t ≳ 2 ms** or the comparator often never switches
-until the tool has moved *inward* (thicker chord) — that is a smaller reading.
-Example: Ø6 mm, `w`≈0.2 mm land → `N` ≲ **300 RPM** for a 2 ms pulse. Unknown
-land? Start ~500 RPM and **lower** it if the reading shrinks.
+in the beam at the OD. Need **t ≳ 2 ms** or the comparator often never
+switches until a thicker chord is in the beam. Example: Ø6 mm, `w`≈0.2 mm →
+`N` ≲ **300 RPM** for a 2 ms pulse. Unknown land? Start ~500 RPM and
+**lower** it if the reading shrinks.
 
-Pin beam-width cal (`#5516`) assumes a **solid** edge. A thin land reaches the
-same optical threshold further into the beam, so flutes can stay a bit skinny
-vs a mic even at a “good” RPM. That is a **bias**, not proof that the sensor
-is unusable. Fix RPM / Z DROP first; then 20× stats tell you if it is
-repeatable enough.
+Pin beam-width cal (`#5516`) assumes a **fat** edge. It cannot fully cancel a
+thin-land bias. That is a per-geometry offset, not proof the sensor is
+useless.
 
-**“Never repeatable nor accurate” is too strong** if a parked land turns the
-LED broken. You can still get a stable number at one RPM. You cannot expect
-pin-level accuracy on a 2-flute at several thousand RPM — that is the same
-optical-averaging failure that killed the old silhouette method.
+**Hopeless or not**
+
+- Parked land **never** breaks the LED → this beam cannot see that cutting
+  edge. First-tooth OD of *that* tool is not salvageable here.
+- Parked land **does** break the LED → not doomed. Repeatable at one moderate
+  RPM is still on the table. Pin-level accuracy on a skinny 2-flute at
+  several thousand RPM is not — same optical-averaging failure that killed
+  the silhouette method.
 
 #### How to test
 
-Do these in order. Capture BEAM XY first. Record **raw** (`#5512`), not only
-corrected — `#5516` is a constant and will not hide an RPM slope.
+Capture BEAM XY first. Record **raw** (`#5512`); `#5516` is a constant and
+will not hide an RPM slope.
 
-1. **Parked LED (spatial)**  
-   Spindle off. Jog the tool into the slot until the LED is broken.  
-   - **Pin / shank:** LED must stay solidly broken.  
-   - **Endmill at the tip:** may flicker or stay clear — that is a tip-find /
-     Z DROP problem, not the diameter hits.  
-   - **Endmill ~2 mm up the flutes:** rotate the collet by hand. LED should
-     break on a land and clear in a gullet. If a land parked in the beam never
-     breaks the LED, that cutter is spatially too small for this beam. Stop.
+1. **Parked land LED (spatial)**  
+   Spindle off. At the diameter Z (about 2 mm below the end face), rotate the
+   collet so a **land** sits in the slot, then jog X until that land is in
+   the beam.  
+   - **Pin:** LED snaps solidly broken at the edge.  
+   - **Flute land:** LED should go solidly broken, not flicker or stay clear.  
+   If a parked land never breaks the LED, the flute edge is spatially too
+   small for this beam. Stop.
 
-2. **Beep / HAL scope (temporal)**  
-   Leave the tool grazing the beam on a land. Spin 200 → 2000 → 6000 RPM.  
-   `probe_beep` clicks on each `laser-beam-broken` rising edge; **halscope** on
-   that signal at the servo thread is the real pulse-width plot. Pulses that
-   shrink then vanish as RPM rises confirm the temporal limit. Do **not** trust
-   the tab LED here — it only polls every 200 ms.
+2. **Slow graze vs pin (same threshold, no spin)**  
+   From +X clear, jog −X slowly across a parked land, then across the pin.
+   Note how far past first contact the LED actually flips. A land that needs
+   more inward travel than the pin is already “too thin” at RPM=0; spinning
+   will only make it worse.
 
-3. **Pin RPM sweep (control)**  
-   Master pin, same BEAM / Z DROP:
+3. **Beep / HAL scope (temporal)**  
+   Graze a land in the beam. Spin 200 → 2000 → 6000 RPM. `probe_beep` clicks
+   on each `laser-beam-broken` rising edge; **halscope** on that signal at
+   the servo thread is the pulse-width plot. Pulses that shrink then vanish
+   as RPM rises confirm size × time. Ignore the tab LED — it polls every
+   200 ms.
+
+4. **Pin RPM sweep (control)** — solid object, should be **flat**:
 
    ```text
    o<laser_rpm_sweep> call
    ```
 
-   Points: RPM **0, 500, 1000, 2000, 4000, 6000**. A solid pin should stay
-   **flat**. If the pin also shrinks, look at vibration, runout, or analog
-   averaging of the whole shadow — not flute width.
+   Points: RPM **0, 500, 1000, 2000, 4000, 6000**. If the pin also shrinks,
+   look at vibration / analog averaging of the whole shadow, not flute width.
 
-4. **Endmill RPM sweep**  
-   Same MDI, same Z DROP on full OD. Interpretation:
+5. **Endmill RPM sweep** — same MDI, same Z DROP on full OD:
 
    | Curve | Meaning |
    |-------|---------|
    | RPM=0 small, ~500 largest, then falling | Parked land missed OD; then pulses too short |
-   | Monotone falling from 500 → 6000 | Temporal occlusion — use the plateau / peak, not 6000 |
-   | Flat like the pin | Flute is optically thick enough at these speeds |
+   | Monotone falling from 500 → 6000 | Size × time — use the peak / plateau, not 6000 |
+   | Flat like the pin | Land is optically thick enough at these speeds |
    | Miss / FAIL only at high RPM | Pulse never reaches the G38 threshold |
 
-   `#5510` **tip_z** should be stable across the sweep — tip-find is always
-   static. If tip_z jumps, the *tip* is the flaky part; fix Y centering / Z
-   DROP before chasing RPM.
+6. **Z DROP sweep** — only to confirm you are on the **flute OD**, not the
+   end-face teeth. `o<laser_zdrop_sweep> call` at 1 / 2 / 3 / 4 / 6 mm.
+   Diameter should rise then plateau. Keep Z DROP on the plateau.
 
-5. **Z DROP sweep (tip vs full OD)**  
-   Pick a moderate RPM from step 4 (start with 500). Then:
+7. **Repeatability vs accuracy**  
+   At the RPM and Z DROP you keep: `o<laser_diameter_stats> call`.
+   Low sample stdev + mean off the mic = repeatable thin-land bias.
+   High stdev = still barely occluding.
 
-   ```text
-   o<laser_zdrop_sweep> call
-   ```
-
-   Points: **1, 2, 3, 4, 6 mm** below tip. Diameter should **rise then plateau**
-   once you are off the end teeth / chamfer / dish. Measure on the plateau.
-   6 mm may hit shank or holder on a stubby cutter — abort if the number
-   jumps to shank size.
-
-6. **Repeatability vs accuracy**  
-   At the RPM and Z DROP you keep, run `o<laser_diameter_stats> call`.
-   Low sample stdev + mean off the mic = repeatable bias (cal / fudge).
-   High stdev = still barely occluding (slow down, more Z DROP, or that
-   tool is a bad fit for this sensor).
-
-Each sweep point is **one** `o<laser_diameter>` (9+9 hits), not 20×. Follow up
-with stats at the RPM/Z DROP you intend to use. Hit CSVs under
-`logs/laser_hits/` already stamp `rpm=` in the header.
+Each sweep point is **one** `o<laser_diameter>` (9+9 hits). Follow up with
+stats at the RPM you intend to use. Hit CSVs under `logs/laser_hits/` already
+stamp `rpm=` in the header.
 
 ### Related drive note
 
@@ -471,10 +468,10 @@ with stats at the RPM/Z DROP you intend to use. Hit CSVs under
 | *forward break not beyond -X clear* / *transit never reached -X clear* | Stale FILT after last +X hit — macro now waits FILT/RAW clear and retries transit; restart LinuxCNC so that NGC is loaded |
 | Raw width &lt; 0.025 mm / edge order bad | Tip never seen — check polarity, spin RPM; inspect hit CSV / dots |
 | Fluted OD still off after recal | Check Z DROP on full OD; expect runout ≥ mic land OD possible |
-| Diameter shrinks as PROBE RPM rises | Flute pulse too short — parked-LED test + `o<laser_rpm_sweep> call`; slow down |
-| Pin OD flat vs RPM, cutter is not | Temporal flute occlusion, not “tip can never break the beam” |
-| Diameter grows with Z DROP then plateaus | You were on the tip/chamfer — keep Z DROP on the plateau |
-| tip_z (#5510) jumps between runs | Static tip barely occludes — recentre Y; do not chase RPM |
+| Diameter shrinks as PROBE RPM rises | Flute-land pulse too short — parked-land LED + `o<laser_rpm_sweep> call`; slow down |
+| Pin OD flat vs RPM, cutter is not | Thin land × time — pin cal will not cancel it; use the RPM plateau |
+| Parked flute land never breaks LED | That cutting edge is spatially too small for this beam |
+| Diameter grows with Z DROP then plateaus | Side hits were on the end-face teeth — keep Z DROP on the plateau |
 | Last −X hit dot stays red | Restart Probe Basic so the tab’s hit-event poll + post-hit `G4 P0.20` is loaded |
 | G38 does not follow FILT | Restart after HAL change — mux must be `laser-flute-hold.out` → `and2.7.in0` |
 | Footer FAILED, old diameter gone | That’s correct — success is gated on `M68 E1` |

@@ -196,7 +196,7 @@ ethercat_mill.ini
 | PROBE SPINDLE NOSE crashes Z | Touch probe T#3014 was loaded — unload and load a cutter first; macro aborts if `#3014` is in the spindle |
 | Pocket probe flies too fast | Local `[3017]` vs `[#3017]` typo — fixed in this tree; re-check after PB merges |
 | Laser diameter never trips | `laser-beam-broken` polarity / BEAM OFFSET — [LASER_TOOL_SETTER](LASER_TOOL_SETTER.md) |
-| Laser diameter shrinks at high RPM | Flute pulse too short — [LASER_TOOL_SETTER](LASER_TOOL_SETTER.md#occlusion-rpm-and-small-tools) |
+| Laser diameter shrinks at high RPM | Flute-land pulse too short — [LASER_TOOL_SETTER](LASER_TOOL_SETTER.md#flute-land-vs-beam--occlusion-and-rpm) |
 | Pendant Z jog blocked | Homing flags — see `xhc-whb04b-6.hal` machine.is-on tie-in |
 | Spindle runs wrong direction | `custom.hal` M3/M4 swap comment — `REVERT` line |
 | Fusion post missing M600 / 4th axis | Cached post — [TOOLSETTER.md](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps) |
