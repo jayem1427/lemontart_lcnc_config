@@ -6,6 +6,7 @@
 (After +X hits: G38.3 entrance → G38.5 exit → G1 −1 mm = backside start.)
 (G38 uses flute envelope so clear-pass works; first-tooth trips still on-delay 0.)
 (Tip-find at BEAM XY; then 9x G38.3 from each side; keep outermost edges.)
+(+X-side miss stop = MAX TRAVEL x_stop; -X-side miss stop = forward break x_plus.)
 (M62 P0 ONLY around G38 — never during G0/G1 or Probe tripped during non-probe move.)
 (M63 P0 restores contact mux. M66 P3 = RAW dig-in-03; M66 P4 = FILT dig-in-04.)
 (Before each G38 wait FILT clear so trip is a rising edge - beep + real travel.)
@@ -344,7 +345,16 @@ o<laser_diameter> sub
       o<laser_diameter> return
     o<far_blocked> endif
 
-    (--- -X side: Nx G38.3 +X toward START; keep MIN X / outermost ---)
+    (--- -X side: Nx G38.3 +X toward forward +X break; keep MIN X / outermost ---)
+    (Miss stop = x_plus — do not run past the known +X tip toward START.)
+    o<minus_window> if [#<x_plus> LE #<minus_clear_x>]
+      (DEBUG, LASER DIAM: forward break not beyond -X clear — cannot reverse-probe)
+      G0 G53 Z#<z_safe>
+      M5
+      M63 P0
+      o<laser_diameter> return
+    o<minus_window> endif
+
     #<x_minus> = 999999
     #<minus_i> = 0
     o<minus_hits> while [#<minus_i> LT #<n_hits>]
@@ -393,7 +403,7 @@ o<laser_diameter> sub
           #<x_hit0> = #<_abs_x>
           M62 P0
           G91
-          G38.3 X[#<start_x> - #<_abs_x>] F#<slow_x_fr>
+          G38.3 X[#<x_plus> - #<_abs_x>] F#<slow_x_fr>
           G90
           M63 P0
           #<hit_travel> = [ABS[#<_abs_x> - #<x_hit0>]]
@@ -410,7 +420,7 @@ o<laser_diameter> sub
       o<minus_try> endwhile
 
       o<minus_miss> if [#<hit_ok> EQ 0]
-        (DEBUG, LASER DIAM: -X-side no valid tip hit after retries)
+        (DEBUG, LASER DIAM: -X-side no valid tip hit before forward +X break)
         G0 G53 Z#<z_safe>
         M5
         M63 P0
