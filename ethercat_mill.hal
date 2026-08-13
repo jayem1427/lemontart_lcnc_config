@@ -2,7 +2,7 @@
 # 1. CORE MOTION CONTROLLER
 # =========================================================
 loadrt [KINS]KINEMATICS
-loadrt [EMCMOT]EMCMOT servo_period_nsec=[EMCMOT]SERVO_PERIOD num_joints=[KINS]JOINTS num_aio=4
+loadrt [EMCMOT]EMCMOT servo_period_nsec=[EMCMOT]SERVO_PERIOD num_joints=[KINS]JOINTS num_aio=4 num_dio=5
 
 # =========================================================
 # 2. ETHERCAT DRIVER & HELPERS
@@ -259,12 +259,15 @@ net probe-in          or2.3.out => motion.probe-input
 # HCMOS 5 V — level-shift before the A6 DI. TRUE when tool blocks the beam.
 # If your DI is TRUE when clear instead, insert not.N on the di-5 -> laser-beam-broken net.
 #
-# Diameter uses RAW on the G38 mux (max-of-N first-tooth triggers; no gullet envelope).
-# laser-flute-hold remains loaded for SCOPE "FILT" comparison only — not in the probe path.
+# Raw → LED / M66 P3 (instant). timedelay envelope → G38 mux + M66 P4.
+# on-delay=0 (trip on first flute), off-delay bridges gullets ([LASER]BEAM_OFF_DELAY).
+# Needed so G38.5 can feed through to a true exit clear + 1 mm backside start.
+# digital-in-04 = FILT so macros can wait for probe-path clear before G38
+# (RAW clear alone is not enough — avoids silent instant trips / no beep).
 setp laser-flute-hold.on-delay 0
 setp laser-flute-hold.off-delay [LASER]BEAM_OFF_DELAY
-net laser-beam-broken     lcec.0.2.di-5 => motion.digital-in-03 and2.7.in0 laser-flute-hold.in
-net laser-beam-filtered   laser-flute-hold.out
+net laser-beam-broken     lcec.0.2.di-5 => motion.digital-in-03 laser-flute-hold.in
+net laser-beam-filtered   laser-flute-hold.out => and2.7.in0 motion.digital-in-04
 
 # Standard Software GUI E-Stop Loop (Physical Master E-Stop cuts Mains Power)
 # Software E-stop switch is NC on Slave 3 DI1 / DB15 pin 10.

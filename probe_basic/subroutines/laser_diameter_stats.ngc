@@ -1,0 +1,86 @@
+(Laser diameter repeatability - 20x measure, avg + sample stdev + raw list.)
+(MDI: o<laser_diameter_stats> call)
+(Needs BEAM XY / params already set - same as MEASURE DIAMETER.)
+(Stores corr #5531-#5550, raw #5551-#5570; mean #5571, stdev #5572, n #5573.)
+(Keep params under 5600 - LinuxCNC RS274NGC_MAX_PARAMETERS.)
+(Each sample: up to 3 measure attempts before abort.)
+
+o<laser_diameter_stats> sub
+    o<400> if [#<_task> EQ 1]
+
+    #<n_runs> = 20
+    #<max_attempts> = 3
+    #<sum> = 0
+    #<i> = 1
+    #<corr_base> = 5530
+    #<raw_base> = 5550
+
+    #5573 = #<n_runs>
+    #5571 = 0
+    #5572 = 0
+    M68 E1 Q0
+
+    (DEBUG, LASER STATS: starting #<n_runs> diameter measures)
+
+    o<stats_run> while [#<i> LE #<n_runs>]
+      #<got> = 0
+      #<attempt> = 0
+      o<stats_try> while [[#<got> EQ 0] AND [#<attempt> LT #<max_attempts>]]
+        o<laser_diameter> call
+        o<stats_ok> if [#5515 NE 0]
+          #<got> = 1
+        o<stats_ok> else
+          #<attempt> = [#<attempt> + 1]
+          (DEBUG, LASER STATS: sample #<i> measure failed - retry #<attempt> / #<max_attempts>)
+          G4 P0.5
+        o<stats_ok> endif
+      o<stats_try> endwhile
+
+      o<stats_fail> if [#<got> EQ 0]
+        (DEBUG, LASER STATS: aborted - measure failed on sample #<i> after retries)
+        M68 E1 Q0
+        o<laser_diameter_stats> return
+      o<stats_fail> endif
+
+      #<corr> = [#5512 + #5516]
+      #<raw> = #5512
+      #[#<corr_base> + #<i>] = #<corr>
+      #[#<raw_base> + #<i>] = #<raw>
+      #<sum> = [#<sum> + #<corr>]
+
+      (DEBUG, LASER STATS: sample #<i> / #<n_runs> corr=#<corr> raw=#<raw>)
+
+      G4 P0.25
+      #<i> = [#<i> + 1]
+    o<stats_run> endwhile
+
+    #<mean> = [#<sum> / #<n_runs>]
+    #5571 = #<mean>
+
+    #<ss> = 0
+    #<i> = 1
+    o<stats_ss> while [#<i> LE #<n_runs>]
+      #<d> = [#[#<corr_base> + #<i>] - #<mean>]
+      #<ss> = [#<ss> + [#<d> * #<d>]]
+      #<i> = [#<i> + 1]
+    o<stats_ss> endwhile
+
+    #<stdev> = SQRT[#<ss> / [#<n_runs> - 1]]
+    #5572 = #<stdev>
+
+    M68 E0 Q#<mean>
+    M68 E1 Q1
+
+    (DEBUG, LASER STATS: DONE n=#<n_runs> avg=#<mean> sample_stdev=#<stdev>)
+    (DEBUG, LASER STATS: corr #5531-#5550 raw #5551-#5570 mean #5571 stdev #5572)
+
+    #<i> = 1
+    o<stats_dump> while [#<i> LE #<n_runs>]
+      (DEBUG, LASER STATS DATA #<i>: corr=#[#<corr_base> + #<i>] raw=#[#<raw_base> + #<i>])
+      #<i> = [#<i> + 1]
+    o<stats_dump> endwhile
+
+    o<400> endif
+o<laser_diameter_stats> endsub
+
+M2

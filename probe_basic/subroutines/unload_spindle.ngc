@@ -1,17 +1,29 @@
 (author: Chris P)
-(version: 0.1)
-(date: 04/20/24)
-
-(unloads tool in spindle in software)
-; This is called form the ATC and tool pages
+(version: 0.2)
+(date: 2026-08-12)
+(Unload spindle: park at tool-load XY, then clear tool in software.)
+(Park matches go_to_g30 / abort_tool_change / tool_touch_off — G53 X270 Y100.)
+; Called from the ATC and tool pages
 
 o<unload_spindle> sub
-(PRINT, o<load_spindle_safety>)
+    o<400> if [#<_task> EQ 1]
 
-M61 Q0
-G49
-#3991 = 0
+    M73
+    M5
+    M9
+    G90
+    G40
 
+    (Z clear first so XY traverse is safe, then park XY)
+    G53 G0 Z0
+    G53 G0 X270 Y100
+
+    (clear loaded tool in software)
+    M61 Q0
+    G49
+    #3991 = 0
+
+    o<400> endif
 o<unload_spindle> endsub
 
-M2 (end program)
+M2

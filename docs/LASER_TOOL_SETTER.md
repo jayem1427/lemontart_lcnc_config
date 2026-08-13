@@ -38,7 +38,7 @@ systems don't fight when you're not measuring.
 |---------|--------|
 | Live beam LED on the tab | Works (keeps updating during measure) |
 | **SCOPE** / **SAVE PNG** | Live plot; auto-captures each measure to `logs/laser_scope/` |
-| **MEASURE DIAMETER** | Works — raw G38, 5+5 max first-tooth triggers |
+| **MEASURE DIAMETER** | Works — raw G38, 9+9 max first-tooth triggers |
 | **CALIBRATE BEAM** / editable **MEASURED BEAM WIDTH** | Works — master pin − raw → `#5516` |
 | **MEASURE LENGTH** | Experimental (needs `#5504` BEAM Z via MDI; not a contact TLO replacement) |
 | Runout / broken-tool / air blast | Not built yet (roadmap only — no fake buttons) |
@@ -55,14 +55,14 @@ So for diameter:
 - **Y** ≈ center of the slot  
 - **BEAM X/Y** = eyeball position with the tool **blocking** the light (LED broken)  
 - **START** = `BEAM + START OFFSET` (+X, clear side away from the toolsetter)  
-- **MINUS START** = `BEAM − START OFFSET` (−X clear, clamped to MAX TRAVEL stop)  
-- Macro tip-finds at **BEAM**, then **5× G38.3** from each side (keep outermost edges)
+- Macro tip-finds at **BEAM**, then **9× G38.3** from +X clear; **probe-feeds** through
+  the tool (break→clear + 1 mm) before **9× G38.3** from the −X clear — never **G0**
+  through the beam toward the far wall
 
 | Label | Meaning |
 |-------|---------|
 | **BEAM** | Where you CAPTURE — tool blocking the light; tip-find XY |
 | **START** | +X clear approach = `BEAM X + START OFFSET` (default +15 mm) |
-| **MINUS START** | −X clear = `BEAM X − START OFFSET` (clamped to travel stop) |
 | **MAX TRAVEL** | How far from START toward **−X** you’re willing to search — **stop before the far wall / toolsetter** |
 
 ---
@@ -94,9 +94,10 @@ restarted after any HAL/tab change.
 4. Back off / fine tip-find the same way (M62 ↔ G38 ↔ M63).  
 5. Retract ~5 mm above tip, **`G0 G53`** to **START**, drop to tip − Z DROP.  
 6. Pre-touch **G38 −X**, back off, optional **M3**.  
-7. **5×** `G38.3 −X` from +X clear — keep **max X** (outermost +X flute tip).  
-8. **`G0`** to −X clear (mux off; may pass through beam).  
-9. **5×** `G38.3 +X` from −X clear — keep **min X** (outermost −X flute tip).  
+7. **9×** `G38.3 −X` from +X clear — keep **max X** (outermost +X flute tip).  
+8. Probe transit: `G38.3 −X` entrance → `G38.5 −X` exit → **G1 −1 mm**
+   = backside start (same break/clear/overshoot as before).  
+9. **9×** `G38.3 +X` from that −X clear — keep **min X** (outermost −X flute tip).  
 10. `raw = x_plus − x_minus`; corrected = raw + `#5516`; retract to Z0, **M5**, **M63 P0**.
 
 LinuxCNC only allows **G53 with G0 or G1** — never with G38. Probes use **G91**
@@ -153,7 +154,7 @@ lcec.0.2.di-5 → laser-beam-broken → motion.digital-in-03 (LED / M66)
 contact probe / toolsetter → or2.0 → and2.8 (gated off when M62 P0) → or2.3
 ```
 
-G38 uses **raw** `laser-beam-broken`. Diameter is **max-of-5 first-tooth triggers**
+G38 uses **raw** `laser-beam-broken`. Diameter is **max-of-9 first-tooth triggers**
 from each side of the beam (no gullet envelope / timedelay on the probe path).
 `laser-flute-hold` remains loaded so SCOPE can still show FILT for comparison.
 LED / `M66 P3` stay **raw**.
@@ -238,7 +239,7 @@ teach (`#5181–#5186`) or ATC `M66` (`#5399`).
 | `#5507` | Z DROP | Below tip for side sweep |
 | `#5508` | MAX TRAVEL | Max −X from START |
 | `#5509` | START OFFSET | BEAM → clear START (+X); also mirrors −X clear |
-| `#5512` | Raw diameter | `x_plus − x_minus` (max-of-5 each side) |
+| `#5512` | Raw diameter | `x_plus − x_minus` (max-of-9 each side) |
 | `#5513` | x_plus | Outermost +X-side trigger |
 | `#5514` | x_minus | Outermost −X-side trigger |
 | `#5515` | Success | 1 = OK (`M68 E1`) |
@@ -260,12 +261,13 @@ Diameter does **not** reconstruct a solid silhouette with a gullet envelope.
 It measures **effective cutting diameter** by spinning the tool and taking
 **first-tooth triggers** from both sides:
 
-1. **5×** `G38.3 −X` from +X clear → keep **max X** (`#5513`)  
-2. **G0** to −X clear (mux off)  
-3. **5×** `G38.3 +X` from −X clear → keep **min X** (`#5514`)  
+1. **9×** `G38.3 −X` from +X clear → keep **max X** (`#5513`)  
+2. Probe transit: `G38.3` entrance → `G38.5` exit → **G1 −1 mm** backside start  
+3. **9×** `G38.3 +X` from that −X clear → keep **min X** (`#5514`)  
 4. `raw = x_plus − x_minus`; `corrected = raw + #5516`
 
-G38 is wired to **raw** `laser-beam-broken` (1 kHz servo). No `G38.5` clear pass.
+G38 uses the **flute envelope** again (`on-delay=0`, `off-delay=BEAM_OFF_DELAY`) so
+`G38.5` can clear through gullets. First-tooth `G38.3` still trips immediately.
 Max-of-5 randomizes flute phase so the outermost tip is usually caught.
 
 Recommended PROBE RPM for flutes: about **1000–6000**. Pins: **RPM = 0**.
@@ -341,7 +343,7 @@ land near the geometric OD. X axis must be **0…T seconds** for the whole run.
 2. ~~G38 via M62 P0 mux; capture BEAM XY; START OFFSET / MAX TRAVEL (−X sweep)~~  
 3. ~~Beam-width / master-pin calibration (true diameter)~~  
 4. ~~Flute envelope filter (`timedelay`) + SCOPE PNG capture~~ (superseded for G38)  
-5. ~~Max-of-N first-tooth diameter (raw G38, 5+5 sides)~~  
+5. ~~Max-of-N first-tooth diameter (raw G38, 9+9 sides)~~  
 6. Optional measure axis (X vs Y)  
 7. Runout / broken-tool check  
 8. Length → real TLO vs gauge line  

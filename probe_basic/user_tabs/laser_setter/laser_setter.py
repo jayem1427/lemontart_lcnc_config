@@ -960,8 +960,8 @@ class UserTab(QWidget):
             "(custom.hal swaps M3/M4 to the VFD). Fluted tools: try ~1000–6000.\n"
             "6. MEASURE DIAMETER (M62 P0 enables RAW laser on probe-input for G38):\n"
             "   tip-find at BEAM → START → tip−ZDROP → pre-touch → M3 → "
-            "5× G38.3 from +X (keep max X) → G0 to −X clear → "
-            "5× G38.3 from −X (keep min X) → raw = x_plus − x_minus + beam cal.\n"
+            "9× G38.3 from +X (keep max X) → feed −X until clear + 1 mm → "
+            "9× G38.3 from −X (keep min X) → raw = x_plus − x_minus + beam cal.\n"
             "7. Beam-width cal: enter MASTER PIN size → MEASURE DIAMETER on that pin → "
             "CALIBRATE BEAM. MEASURED BEAM WIDTH = master − raw; later diameters add "
             "that offset. Re-calibrate after this max-trigger method change.\n"
@@ -1330,7 +1330,7 @@ class UserTab(QWidget):
             self.lblResDiam.setText("{:.4f}".format(self._mm_to_ui(diameter_mm)))
             if abs(self._beam_width_mm) > 1e-12:
                 self._set_status(
-                    "DIAMETER {:.4f} (max 5+5; raw {:.4f} + beam width {:.4f})".format(
+                    "DIAMETER {:.4f} (max 9+9; raw {:.4f} + beam width {:.4f})".format(
                         self._mm_to_ui(diameter_mm),
                         self._mm_to_ui(self._last_raw_diam_mm or 0.0),
                         self._mm_to_ui(self._beam_width_mm),
@@ -1338,7 +1338,7 @@ class UserTab(QWidget):
                 )
             else:
                 self._set_status(
-                    "DIAMETER {:.4f} (max 5+5 raw — CALIBRATE BEAM for master-pin offset)".format(
+                    "DIAMETER {:.4f} (max 9+9 raw — CALIBRATE BEAM for master-pin offset)".format(
                         self._mm_to_ui(diameter_mm)
                     )
                 )
