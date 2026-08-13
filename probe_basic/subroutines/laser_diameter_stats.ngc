@@ -48,7 +48,7 @@ o<laser_diameter_stats> sub
       #[#<raw_base> + #<i>] = #<raw>
       #<sum> = [#<sum> + #<corr>]
 
-      (DEBUG, LASER STATS: sample #<i> / #<n_runs> corr=#<corr> raw=#<raw>)
+      (DEBUG, LASER STATS: sample #<i> / #<n_runs> corr=#<corr> raw=#<raw> tip_z=#5510)
 
       G4 P0.25
       #<i> = [#<i> + 1]

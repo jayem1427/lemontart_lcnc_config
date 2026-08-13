@@ -1,0 +1,56 @@
+(author: jayem)
+(date: 2026)
+(Laser diameter vs Z DROP — tip/chamfer vs full OD test.)
+(MDI: o<laser_zdrop_sweep> call)
+(Needs same BEAM / PROBE RPM / travel as MEASURE DIAMETER.)
+(Restores #5507 when finished. Abort mid-sweep may leave last test Z DROP.)
+(Stay on the flutes — 6 mm may reach shank or holder on a stubby cutter.)
+
+o<laser_zdrop_sweep> sub
+    o<400> if [#<_task> EQ 1]
+
+    #<zdrop_saved> = #5507
+    #<n> = 5
+    #<i> = 1
+    #<ok_n> = 0
+
+    o<zd_def> if [#<zdrop_saved> LE 0]
+      #<zdrop_saved> = 2
+    o<zd_def> endif
+
+    (DEBUG, LASER ZDROP SWEEP: starting RPM=#5503 saved Z DROP=#<zdrop_saved>)
+
+    o<zd_sw> while [#<i> LE #<n>]
+      o<zset> if [#<i> EQ 1]
+        #5507 = 1
+      o<zset> elseif [#<i> EQ 2]
+        #5507 = 2
+      o<zset> elseif [#<i> EQ 3]
+        #5507 = 3
+      o<zset> elseif [#<i> EQ 4]
+        #5507 = 4
+      o<zset> else
+        #5507 = 6
+      o<zset> endif
+
+      (DEBUG, LASER ZDROP SWEEP: measure #<i> / #<n> Z DROP=#5507)
+      o<laser_diameter> call
+      o<zd_ok> if [#5515 NE 0]
+        #<ok_n> = [#<ok_n> + 1]
+        #<corr> = [#5512 + #5516]
+        (DEBUG, LASER ZDROP SWEEP DATA zdrop=#5507 raw=#5512 corr=#<corr> tip_z=#5510 xplus=#5513 xminus=#5514)
+      o<zd_ok> else
+        (DEBUG, LASER ZDROP SWEEP FAIL zdrop=#5507 — no diameter this height)
+      o<zd_ok> endif
+
+      G4 P0.5
+      #<i> = [#<i> + 1]
+    o<zd_sw> endwhile
+
+    #5507 = #<zdrop_saved>
+    (DEBUG, LASER ZDROP SWEEP: DONE ok=#<ok_n> / #<n> restored Z DROP=#5507)
+
+    o<400> endif
+o<laser_zdrop_sweep> endsub
+
+M2

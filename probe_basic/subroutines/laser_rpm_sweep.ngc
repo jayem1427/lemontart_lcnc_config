@@ -1,0 +1,54 @@
+(author: jayem)
+(date: 2026)
+(Laser diameter vs PROBE RPM — solid pin vs fluted occlusion test.)
+(MDI: o<laser_rpm_sweep> call)
+(Needs same BEAM / Z DROP / travel as MEASURE DIAMETER.)
+(Restores #5503 when finished. Abort mid-sweep may leave last test RPM.)
+(RPM=0 is the pin case; on flutes it measures the parked land only.)
+
+o<laser_rpm_sweep> sub
+    o<400> if [#<_task> EQ 1]
+
+    #<rpm_saved> = #5503
+    #<n> = 6
+    #<i> = 1
+    #<ok_n> = 0
+
+    (DEBUG, LASER RPM SWEEP: starting — saved RPM=#<rpm_saved>)
+
+    o<rpm_sw> while [#<i> LE #<n>]
+      o<rset> if [#<i> EQ 1]
+        #5503 = 0
+      o<rset> elseif [#<i> EQ 2]
+        #5503 = 500
+      o<rset> elseif [#<i> EQ 3]
+        #5503 = 1000
+      o<rset> elseif [#<i> EQ 4]
+        #5503 = 2000
+      o<rset> elseif [#<i> EQ 5]
+        #5503 = 4000
+      o<rset> else
+        #5503 = 6000
+      o<rset> endif
+
+      (DEBUG, LASER RPM SWEEP: measure #<i> / #<n> RPM=#5503)
+      o<laser_diameter> call
+      o<rpm_ok> if [#5515 NE 0]
+        #<ok_n> = [#<ok_n> + 1]
+        #<corr> = [#5512 + #5516]
+        (DEBUG, LASER RPM SWEEP DATA RPM=#5503 raw=#5512 corr=#<corr> tip_z=#5510 xplus=#5513 xminus=#5514)
+      o<rpm_ok> else
+        (DEBUG, LASER RPM SWEEP FAIL RPM=#5503 — no diameter this speed)
+      o<rpm_ok> endif
+
+      G4 P0.5
+      #<i> = [#<i> + 1]
+    o<rpm_sw> endwhile
+
+    #5503 = #<rpm_saved>
+    (DEBUG, LASER RPM SWEEP: DONE ok=#<ok_n> / #<n> restored RPM=#5503)
+
+    o<400> endif
+o<laser_rpm_sweep> endsub
+
+M2
