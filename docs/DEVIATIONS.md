@@ -4,7 +4,8 @@ This document lists deliberate differences between **this config** and typical u
 
 Stock references:
 
-- [Probe Basic INI template](../probe_basic/pb_required_ini_settings.ini) and [stock hallib](../probe_basic/hallib/)
+- [Probe Basic INI template](../probe_basic/pb_required_ini_settings.ini)
+- Upstream Probe Basic **sim hallib** (not shipped here — this mill uses EtherCAT HAL only)
 - [LinuxCNC tool change](https://linuxcnc.org/docs/html/config/ini-config.html#sub:emcio-section)
 - [RS274NGC remapping](https://linuxcnc.org/docs/html/remap/remap.html)
 
@@ -26,12 +27,12 @@ Stock references:
 | A axis homing | Real switch sequence | **Disabled** — `HOME_SEQUENCE = 3` (after Z/X/Y), zero search vel |
 | Z− limit | Usually wired | **Commented out** in HAL (pin free) |
 | Feed override max | 100–200% | **250%** (`MAX_FEED_OVERRIDE = 2.5`) |
-| Fusion post | Stock `linuxcnc.cps`, `M6`, preload `T` | **`linuxcnc-djr.cps`**, M600 default, no preload |
+| Fusion post | Stock `linuxcnc.cps`, `M6`, preload `T` | **`post-processor/linuxcnc-djr.cps`**, M600 default, no preload |
 | `PROGRAM_PREFIX` | Relative to config | **Absolute path** in committed INI — change on clone |
 | Joint following error | Tight (e.g. ~2 mm / 1 mm) | **Relaxed** `FERROR = 1270`, `MIN_FERROR = 254` for bench — tighten later |
 | M600 collet pause | Often same as setter / G30 | **Separate tool-load XY** (default G53 270, 100) vs taught setter `#5181–#5183` |
 | Manual Tool Change dialog | Stock QtPyVCP; Esc cancels | **Custom dialog** with **ABORT**; Esc/close ignored — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
-| Drive position deviation | Drive defaults | **SDO 6065/6066** ≈ 1.0 mm / 1.0° / 250 ms — [A6_TUNING](A6_TUNING.md) |
+| Drive position deviation | Drive defaults | **SDO 6065/6066** **0.5 mm / 0.5° / 250 ms** (6065 → **2.0** during one-click / inertia moves) — [A6_TUNING](A6_TUNING.md) |
 | Laser tool setter | M62 P0 mux to `motion.probe-input` for G38 | [LASER_TOOL_SETTER](LASER_TOOL_SETTER.md) |
 | Pocket probe traverse feed | `#3017` from Probe Basic | **Local fix** — several `probe_*.ngc` had bare `[3017]` (3017 mm/min literal) |
 | PROBE SPINDLE NOSE ZERO | Runs on setter input | **Aborts if T#3014 loaded** — HAL routes touch probe only when that tool is in spindle |
@@ -102,7 +103,7 @@ MIN_FERROR = 254.0
 
 Stock servo configs often use ~2 mm / 1 mm. These values are **intentionally wide** so LinuxCNC does not fault during jog / homing / bench bring-up while EtherCAT following error is still being tuned.
 
-**For production:** tighten per axis after drive tuning and confirm no false trips under cutting loads. Drive-side windows (SDO 6065/6066 ≈ **1.0 mm / 1.0° / 250 ms**) are separate — see [A6_TUNING.md](A6_TUNING.md) and [CiA 402 following error](https://linuxcnc.org/docs/html/config/ini-config.html#sub:joint-section).
+**For production:** tighten per axis after drive tuning and confirm no false trips under cutting loads. Drive-side windows (SDO 6065/6066 **0.5 mm / 0.5° / 250 ms** at startup) are separate from INI `FERROR` — see [A6_TUNING.md](A6_TUNING.md) and [CiA 402 following error](https://linuxcnc.org/docs/html/config/ini-config.html#sub:joint-section).
 
 ---
 
@@ -250,13 +251,17 @@ Upstream `probe_*.ngc` in this tree include **machine-specific fixes** not in st
 
 ## Probe Basic UI
 
-### `probe_basic_postgui.hal` vs stock `hallib/`
+### `probe_basic_postgui.hal` vs stock Probe Basic sim
 
-| Stock hallib | This repo `probe_basic/probe_basic_postgui.hal` |
-|--------------|--------------------------------------------------|
+Stock Probe Basic sim hallib (upstream package; removed from this repo) differs from our postgui:
+
+| Stock Probe Basic sim | This repo `probe_basic/probe_basic_postgui.hal` |
+|-----------------------|--------------------------------------------------|
 | `net probe-in => qtpyvcp.probe-in.out` (sim loopback) | **Not connected** — avoids duplicate driver on `motion.probe-input` |
 | `scale_to_rpm.out` → spindle RPM widget | **`spindle-speed-in`** from VFD (`custom.hal`) |
 | `not.0` on `halui.program.is-idle` | Uses **`pdnt.program.is-idle`** net (shared with WHB) |
+
+No `BASE_PERIOD` / `base-thread` here — those exist only for software stepgen / sim encoders.
 
 ### Custom DRO display
 
@@ -276,15 +281,16 @@ Replaces stock QtPyVCP dialog with **ABORT CYCLE** button. See [PROBE_BASIC_UI.m
 
 Most PB machine params still live in `linuxcnc.var` / Probe screens.
 
-### `launch.sh`
+### Qt Quick rendering
 
-Forces `QT_QUICK_BACKEND=software` — workaround for some Qt Quick + GPU combinations.
+If Probe Basic fails to render on your GPU, launch with
+`QT_QUICK_BACKEND=software linuxcnc ethercat_mill.ini`.
 
 ---
 
 ## CAM / post processor
 
-`linuxcnc-djr.cps` fork of Autodesk LinuxCNC post:
+`post-processor/linuxcnc-djr.cps` fork of Autodesk LinuxCNC post:
 
 - Default **`toolChangeMode: "M600"`**
 - **`preloadTool: false`**

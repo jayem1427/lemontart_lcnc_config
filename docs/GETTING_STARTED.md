@@ -17,7 +17,7 @@ that is where “why doesn’t this match the manual?” usually lives.
 | `ethercat-conf.xml` slave order / PDOs | Chain layout and drive firmware |
 | `[JOINT_*] SCALE`, limits, homing | Ball screws, encoders, switch placement |
 | `h100.mb2hal` serial port | `/dev/ttyUSB0` is not universal |
-| `PROGRAM_PREFIX` in `ethercat_mill.ini` | Currently a developer path; point at your `nc_files/` |
+| `PROGRAM_PREFIX` in `ethercat_mill.ini` | Currently a developer path; point at your NC programs directory |
 | Probe tool number (default T99) | Must match tool table, `#3014`, and HAL — see [TOOLSETTER.md](TOOLSETTER.md) |
 
 ## Recommended learning path
@@ -92,7 +92,7 @@ Homing and limit wiring live in [`ethercat_mill.hal`](../ethercat_mill.hal), not
 - [`h100.mb2hal`](../h100.mb2hal) — register map; set `SERIAL_PORT`
 - [`custom.hal`](../custom.hal) — RPM scaling, at-speed compare + 5 s settle, fault → estop
 
-H100 manual: search vendor PDF for register `0x0201` (freq set), `0x000A` (current fault).
+H100 manual: [`reference/h100 manual.pdf`](reference/h100%20manual.pdf) — register `0x0201` (freq set), `0x000A` (current fault).
 
 Modbus HAL: [mb2hal documentation](https://linuxcnc.org/docs/html/man/man1/mb2hal.1.html)
 
@@ -109,13 +109,13 @@ When XYZ motion is trustworthy:
 
 1. Copy this repo’s `probe_basic/` tree and INI `[DISPLAY]` / `[RS274NGC]` sections.
 2. Align [`probe_basic/pb_required_ini_settings.ini`](../probe_basic/pb_required_ini_settings.ini) with your INI (geometry, paths, `OWORD_NARGS`, etc.).
-3. Launch: [`launch.sh`](../launch.sh) or `linuxcnc /path/to/ethercat_mill.ini`
+3. Launch: `linuxcnc /path/to/ethercat_mill.ini` (optionally `QT_QUICK_BACKEND=software` if Qt Quick fails to render)
 4. Teach toolsetter and probe params — [TOOLSETTER.md](TOOLSETTER.md)
 5. UI extras — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md)
 
 ### Stage 7 — CAM
 
-- Fusion post: [`linuxcnc-djr.cps`](../linuxcnc-djr.cps) — see [TOOLSETTER.md § CAM](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps)
+- Fusion post: [`post-processor/linuxcnc-djr.cps`](../post-processor/linuxcnc-djr.cps) — see [TOOLSETTER.md § CAM](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps)
 - Default tool change: **`T<n> M600`** (toolsetter probe), not stock `M6` motion
 
 ### Stage 8 — Validate M600 and probing
@@ -123,13 +123,15 @@ When XYZ motion is trustworthy:
 Before trusting CAM:
 
 1. Teach setter (**SET TOOL TOUCH OFF POS**) and spindle zero (**PROBE SPINDLE NOSE ZERO**) — unload touch probe first; see [TOOLSETTER.md](TOOLSETTER.md#teach-before-first-use).
-2. Air-cut test: [`nc_files/m600_tool_change_test.ngc`](../nc_files/m600_tool_change_test.ngc) — `T3 M600`, jog, `T9`/`T10 M600`. Each stop is at **tool-load XY** (default 270, 100), not the setter.
+2. Air-cut test: MDI or a short AUTO program with `T3 M600`, jog, then `T9`/`T10 M600`. Each stop is at **tool-load XY** (default 270, 100), not the setter.
 3. Confirm **ABORT** on the Manual Tool Change dialog parks cleanly — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md).
 4. MDI metrology: `o<probe_z_repeat_stats> call [10]` — [metrology README](../probe_basic/subroutines/metrology/README.md).
 5. Confirm HAL routing: `halcmd show pin halui.tool.number` and trip each sensor.
 6. Optional: Laser Setter diameter smoke test — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md).
 
-**EtherCAT note:** committed INI `FERROR` values are wide for bring-up (1270 / 254 mm); drives also set SDO `6065`/`6066` (~1.0 mm / 250 ms). Tighten both after motion is stable — [DEVIATIONS.md](DEVIATIONS.md#relaxed-ferror--min_ferror) and [A6_TUNING.md](A6_TUNING.md).
+**EtherCAT note:** committed INI `FERROR` values are wide for bring-up (1270 / 254 mm); drives also set SDO `6065`/`6066` (**0.5 mm / 0.5° / 250 ms** at startup). One-click and inertia tuning temporarily widen 6065 to **2.0** during moves, then restore production windows. Tighten INI `FERROR` after motion is stable — [DEVIATIONS.md](DEVIATIONS.md#relaxed-ferror--min_ferror) and [A6_TUNING.md](A6_TUNING.md).
+
+**Tuning G-code:** example frozen programs for semi-auto tuning live in [TUNING_PROGRAMS.md](TUNING_PROGRAMS.md) (copy into your `PROGRAM_PREFIX` directory).
 
 ## How the config fits together
 
@@ -143,7 +145,7 @@ ethercat_mill.ini
 ├── POSTGUI probe_basic/probe_basic_postgui.hal
 ├── probe_basic/custom_config.yml
 ├── probe_basic/subroutines/   → probing, M600, tool change
-└── nc_files/                  → PROGRAM_PREFIX (edit path!)
+└── PROGRAM_PREFIX             → your NC programs directory (edit path!)
 ```
 
 | Subsystem | Primary files | Deep dive |
@@ -153,16 +155,16 @@ ethercat_mill.ini
 | Laser tool setter | `laser_*.ngc`, Laser Setter tab | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
 | Probe Basic UI | `probe_basic/`, custom DRO, abort dialog | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Metrology macros | `probe_z_three_samples.ngc`, etc. | [probe_basic/subroutines/metrology/README.md](../probe_basic/subroutines/metrology/README.md) |
-| CAM | `linuxcnc-djr.cps` | [TOOLSETTER.md](TOOLSETTER.md) |
+| CAM | `post-processor/linuxcnc-djr.cps` | [TOOLSETTER.md](TOOLSETTER.md) |
 
 ## First boot on this repo
 
 1. Clone repo; `cd` into it.
 2. Edit `ethercat_mill.ini`:
-   - `PROGRAM_PREFIX` → your `nc_files` directory (repo includes `./nc_files/`).
+   - `PROGRAM_PREFIX` → your NC programs directory.
 3. Edit `/etc/ethercat.conf` and `ethercat-conf.xml` for your NIC and slaves.
 4. Edit `h100.mb2hal` → `SERIAL_PORT`.
-5. `./launch.sh` (sets `QT_QUICK_BACKEND=software` for Qt Quick on some GPUs).
+5. `linuxcnc ethercat_mill.ini` (use `QT_QUICK_BACKEND=software` if Probe Basic fails to render on your GPU).
 6. **Machine On** → if estop loops, check Slave 3 DI1 (software estop NC).
 7. Home X/Y (Z/A behavior depends on bench flags — read [DEVIATIONS.md](DEVIATIONS.md)).
 8. MDI smoke test: `G0 X10`, `M3 S500`, watch `halcmd show pin spindle.0.at-speed`.
@@ -173,7 +175,7 @@ ethercat_mill.ini
 |------|-----|
 | Load cutter + measure length | Probe Basic **LOAD SPINDLE** or CAM `T<n> M600` |
 | Cancel mid M600 | **ABORT** on Manual Tool Change dialog |
-| Multi-tool air test | `nc_files/m600_tool_change_test.ngc` |
+| Multi-tool air test | MDI/AUTO: `T3 M600`, then `T9`/`T10 M600` |
 | Measure diameter (laser) | Laser Setter tab — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
 | Load touch probe only | **LOAD SPINDLE** with probe tool — skips M600 |
 | Set WCO Z after shim touch-off | XYZA DRO **SET Z** field → [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
@@ -197,7 +199,7 @@ ethercat_mill.ini
 | Pendant Z jog blocked | Homing flags — see `xhc-whb04b-6.hal` machine.is-on tie-in |
 | Spindle runs wrong direction | `custom.hal` M3/M4 swap comment — `REVERT` line |
 | Fusion post missing M600 / 4th axis | Cached post — [TOOLSETTER.md](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps) |
-| Probe Basic spindle RPM blank | `probe_basic_postgui.hal` must net `spindle-speed-in` (already done here; stock hallib uses `scale_to_rpm` from sim) |
+| Probe Basic spindle RPM blank | `probe_basic_postgui.hal` must net `spindle-speed-in` (already done here; stock Probe Basic sim uses `scale_to_rpm`) |
 
 **Useful commands**
 

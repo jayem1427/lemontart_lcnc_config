@@ -71,10 +71,10 @@ net spindle-current => mult2.7.in0
 net spindle-load-percent mult2.7.out => qtpyvcp.spindle-load-indicator.in-f
 ```
 
-- **RPM** comes from VFD feedback (`custom.hal` → `spindle-speed-in`), not from the sim hallib `scale_to_rpm` block.
+- **RPM** comes from VFD feedback (`custom.hal` → `spindle-speed-in`), not from a sim `scale_to_rpm` block.
 - **Load %** assumes ~4.2 A max motor current (`mult2.7.in1 = 23.81`). Tune if your spindle current scale differs.
 
-Stock hallib also loops `probe-in` through QtPyVCP for simulation. This config **leaves that disconnected** so only `ethercat_mill.hal` drives `motion.probe-input`.
+Stock Probe Basic sim loops `probe-in` through QtPyVCP. This config **leaves that disconnected** so only `ethercat_mill.hal` drives `motion.probe-input`.
 
 ---
 
@@ -143,7 +143,22 @@ Only the path named by `DRO_DISPLAY` in the INI is loaded.
 
 ## Launch note
 
-[`launch.sh`](../launch.sh) sets `QT_QUICK_BACKEND=software`. Use it if Probe Basic fails to render on your GPU driver.
+If Probe Basic fails to render on your GPU driver, launch with
+`QT_QUICK_BACKEND=software linuxcnc ethercat_mill.ini`.
+
+---
+
+---
+
+## Custom Probe Basic tabs
+
+| Tab | Folder | Doc |
+|-----|--------|-----|
+| Servo Tuning | `probe_basic/user_tabs/servo_tuner/` | [A6_TUNING.md](A6_TUNING.md) |
+| Logging | `probe_basic/user_tabs/signal_monitor/` | [SIGNAL_LOGGING.md](SIGNAL_LOGGING.md) |
+| Laser Setter | `probe_basic/user_tabs/laser_setter/` | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
+
+Probe Basic auto-loads every subfolder under `USER_TABS_PATH`. `template_*` folders are upstream scaffolding only.
 
 ---
 

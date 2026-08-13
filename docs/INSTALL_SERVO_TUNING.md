@@ -46,7 +46,7 @@ probe_basic/python/signal_plot_widget.py
 scripts/run_auto_tune.py                    # headless one-click CLI
 config/tuning/presets/                      # or start empty and SAVE from the tab
 config/logging/signals.json
-nc_files/*_tuning.ngc                       # frozen Tune Trial stimuli
+# frozen Tune Trial stimuli — copy examples from docs/TUNING_PROGRAMS.md into your PROGRAM_PREFIX
 docs/SEMI_AUTO_TUNING.md docs/SERVO_TUNING.md docs/SERVO_TUNING_LLM.md docs/ONE_CLICK_TUNING.md   # optional but recommended
 ```
 

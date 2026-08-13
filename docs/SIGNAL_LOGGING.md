@@ -175,26 +175,32 @@ Configured in `ethercat-conf.xml` per slave via EtherCAT SDO at startup (no Step
 
 | SDO | Meaning | XYZ value | A value |
 |-----|---------|-----------|---------|
-| **6065h** | Max position deviation (encoder counts) | `0x3333` = 13107 counts ≈ **1.0 mm** @ 13107.2 counts/mm | `0x016C` = 364 counts ≈ **1.0°** @ 364.09 counts/deg |
+| **6065h** | Max position deviation (encoder counts) | `0x199A` = 6554 counts ≈ **0.5 mm** @ 13107.2 counts/mm | `0xB6` = 182 counts ≈ **0.5°** @ 364.09 counts/deg |
 | **6066h** | Fault delay (ms deviation must persist) | `0x00FA` = **250 ms** | same |
 
-Drive fault **Er47.0** compares internal position demand vs feedback (CiA 6062 vs 6064). This is **separate** from LinuxCNC `joint.N.f-error` and the INI `FERROR` limit (2.0 mm on this machine).
+Drive fault **Er47.0** compares internal position demand vs feedback (CiA 6062 vs 6064). This is **separate** from LinuxCNC `joint.N.f-error` and the INI `FERROR` limit (1270 / 254 mm on this machine — intentionally wide for bench bring-up).
 
-> **Note:** Startup defaults are intentionally loose for tuning (1.0 mm / 1.0°). Tighten 6065h later once loops are stable if you want earlier Er47.0 protection.
+> **Note:** Production startup windows are **0.5 mm / 0.5°**. One-click and inertia
+> tuning temporarily raise 6065 to **2.0 mm / 2.0°** during stimulus moves, then
+> restore the production value. Tighten 6065 further only if you want earlier Er47.0
+> protection after loops are stable.
 
 ---
 
 ## Tuning G-code
 
-`nc_files/x_tuning.ngc` — 10 oscillation cycles on X between 0 and 80 mm at F1000 (mm/min), 0.5 s dwell each end. Same 10-cycle pattern for `y_tuning.ngc`, `y_tuning_85.ngc`, and `a_tuning.ngc`. `z_tuning.ngc` is **1 cycle** 0↔15 mm @ F10000 (same dwell). Use with **LOG NEXT PROGRAM** and **DRIVE** (or TORQUE / VEL) on the plot.
+Use a frozen back-and-forth on the edit axis while logging. Example envelopes used on this mill:
 
-`ethercat_mill.ini` sets:
+| Axis | Pattern |
+|------|---------|
+| X | 10× 0↔80 mm @ F1000, 0.5 s dwell each end |
+| Y | 10× 0↔15 mm @ F30000 (alternate: 0↔85 mm) |
+| Z | 1× 0↔15 mm @ F10000 |
+| A | 10× 0↔90° @ F3600 |
 
-```ini
-PROGRAM_PREFIX = /home/jon/linuxcnc/nc_files:nc_files
-```
+Use with **LOG NEXT PROGRAM** and **DRIVE** (or TORQUE / VEL) on the plot.
 
-so programs in the config `nc_files/` directory are found alongside the system path.
+`ethercat_mill.ini` sets `PROGRAM_PREFIX` to your NC programs directory (edit the path for your machine).
 
 ---
 
@@ -328,7 +334,6 @@ Context columns on every row: `line`, `feed`, `enabled`.
 | `A6_TUNING.md` | A6 SDO gain defaults + Servo Tuning GUI / revert |
 | `INSTALL_SERVO_TUNING.md` | How to install Servo Tuning + Logging on another machine |
 | `ethercat-conf.xml` | PDO 606C/6077/60F4 + SDO 6065/6066 |
-| `nc_files/x_tuning.ngc` | Example axis tuning program |
 | `scripts/run_signal_logger.py` | Headless CLI logger (optional) |
 
 ---

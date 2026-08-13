@@ -1482,7 +1482,7 @@ class UserTab(QWidget):
         layout.addLayout(res_row)
 
         self.resonance_label = QLabel(
-            "RESONANCE: run START PLOT + nc_files/x_resonance.ngc → ANALYZE",
+            "RESONANCE: run START PLOT + short high-accel reversals → ANALYZE",
             group,
         )
         self.resonance_label.setObjectName("lblParamHint")
