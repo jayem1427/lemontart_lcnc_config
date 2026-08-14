@@ -112,7 +112,8 @@ toolsetter). Details: [TOOLSETTER.md](docs/TOOLSETTER.md).
 ## Laser tool setter overview
 
 The Kexin DS-5V-M is a U-slot beam-break sensor. The Laser Setter tab measures
-diameter by finding the tip in Z, then sweeping across the beam in X. Measure
+diameter by finding the tip in Z, then a coarse G38 plus a **static-X** peak
+hunt (park X, wait for any flute, step inward). Measure
 macros use **M62 P0** only around each **G38** (never during G0/G1); **M63 P0**
 restores the contact probe mux. Capture BEAM XY with the tool blocking the light,
 set START OFFSET / MAX TRAVEL / Z DROP, then MEASURE DIAMETER. Optional

@@ -17,8 +17,9 @@ out of the way, it says “clear.”
 This mill uses that tripwire to:
 
 1. Find the **tip** (lower until the beam breaks).
-2. From each side, trip the beam **9 times** on a spinning tool and keep the
-   **outermost** flute tips (max-of-N first-tooth triggers).
+2. From each side, **park X**, wait for any flute to break the beam, then
+   step inward until the first parked peak — that station is the
+   **outermost** flute tip.
 3. Report that width, then optionally correct it with a
    **master-pin beam-width calibration**.
 
@@ -37,9 +38,9 @@ systems don't fight when you're not measuring.
 | Feature | Status |
 |---------|--------|
 | Live beam LED on the tab | Works (keeps updating during measure) |
-| **+X / −X hit dots** | Works — 9+9 red→green from accepted `G38.3` trips (`M68 E2/E3`) |
+| **+X / −X scan dots** | Works — red→gray (clear) / green (peak) from parked-X samples (`M68 E2/E3`) |
 | **Hit CSV** | Works — `logs/laser_hits/<stamp>_diameter.csv` after MEASURE |
-| **MEASURE DIAMETER** | Works — G38, 9+9 max first-tooth triggers |
+| **MEASURE DIAMETER** | Works — coarse G38 + static-X peak hunt (0.02 mm then 0.001 mm) |
 | **20× stats** | Works — MDI `o<laser_diameter_stats> call` (avg + sample stdev) |
 | **CALIBRATE BEAM** / editable **MEASURED BEAM WIDTH** | Works — master pin − raw → `#5516` |
 | **MEASURE LENGTH** | Experimental (needs `#5504` BEAM Z via MDI; not a contact TLO replacement) |
@@ -57,8 +58,9 @@ So for diameter:
 - **Y** ≈ center of the slot  
 - **BEAM X/Y** = eyeball position with the tool **blocking** the light (LED broken)  
 - **START** = `BEAM + START OFFSET` (+X, clear side away from the toolsetter)  
-- Macro tip-finds at **BEAM**, then **9× G38.3** from +X clear; **probe-feeds** through
-  the tool (break→clear + 1 mm) before **9× G38.3** from the −X clear — never **G0**
+- Macro tip-finds at **BEAM**, coarse-G38s the +X flute, then **parks X** and
+  steps inward until a RAW peak; **probe-feeds** through the tool (break→clear
+  + 1 mm) before the same coarse+static hunt from the −X clear — never **G0**
   through the beam toward the far wall
 
 | Label | Meaning |
@@ -84,7 +86,8 @@ restarted after any HAL/tab change.
    - **Z DROP** — how far below the tip to sit for the side sweep (default `2`)
    - **PROBE RPM** — `0` = static (pins); `>0` = reverse (**M3**) during diameter hits (~1000–6000 for flutes)  
 5. Press **MEASURE DIAMETER**.  
-6. Watch **+X HITS / −X HITS** dots go red→green. On success, **DIAMETER** updates.
+6. Watch **+X SCAN / −X SCAN** dots: gray = parked X was clear, green = a peak
+   fired. On success, **DIAMETER** updates.
 
 **Rule of thumb:** `START OFFSET` must be **less than** `MAX TRAVEL` (ideally `MAX TRAVEL ≥ 2 × START OFFSET` so −X clear fits).
 
@@ -96,12 +99,14 @@ restarted after any HAL/tab change.
 4. Back off / fine tip-find the same way (M62 ↔ G38 ↔ M63).  
 5. Retract ~5 mm above tip, **`G0 G53`** to **START**, drop to tip − Z DROP.  
 6. Pre-touch **G38 −X**, back off, optional **M3**.  
-7. **9×** `G38.3 −X` from +X clear — keep **max X** (outermost +X flute tip).  
-   Miss before **MAX TRAVEL** (`x_stop`) → fail.  
+7. **Static-X hunt** from just outside that coarse trip: park, wait for a RAW
+   peak (`M66 P3 L3`), step **0.02 mm** inward until the first peak, then
+   **0.001 mm** from the last clear station until the first peak — that X is
+   `#5513`. Miss before **MAX TRAVEL** (`x_stop`) → fail.  
 8. Probe transit: `G38.3 −X` entrance → `G38.5 −X` exit → **G1 −1 mm**
    = backside start (same break/clear/overshoot as before).  
-9. **9×** `G38.3 +X` from that −X clear toward the **forward (+X) break** (`#5513`) — keep **min X**.  
-   Miss before that known +X tip → fail (do not run out to START / +X clear).  
+9. One coarse **G38.3 +X** toward the known +X tip, then the same static-X
+   hunt from the −X side — keep `#5514`. Miss before that known +X tip → fail.  
 10. `raw = x_plus − x_minus`; corrected = raw + `#5516`; retract to Z0, **M5**, **M63 P0**.
 
 LinuxCNC only allows **G53 with G0 or G1** — never with G38. Probes use **G91**
@@ -160,14 +165,15 @@ contact probe / toolsetter → or2.0 → and2.8 (gated off when M62 P0) → or2.
 ```
 
 G38 uses the **flute envelope** (`on-delay=0`, `off-delay=BEAM_OFF_DELAY`) so
-`G38.5` can clear through gullets. First-tooth `G38.3` still trips immediately.
+`G38.5` can clear through gullets. Coarse `G38.3` still trips immediately.
 LED / `M66 P3` stay **raw**. Macros wait **FILT** (`M66 P4`) clear before each
-hit so G38 starts from a falling envelope — real travel + beep.
+G38 so the probe starts from a falling envelope — real travel + beep. The
+static hunt does **not** use G38: mux off, `M66 P3 L3` wait for RAW HIGH.
 
-**+X / −X HITS** dots (RESULTS) are the live progress display: red until that
-slot’s `G38.3` is accepted, then green. After MEASURE, a CSV of every hit X is
-written to `logs/laser_hits/<timestamp>_diameter.csv`. Each accepted hit dwells
-`G4 P0.20` so the last −X slot is not skipped by the UI poll.
+**+X / −X SCAN** dots (RESULTS) are the live progress display: red until
+sampled, gray = parked clear, green = parked peak. After MEASURE, a CSV of
+every sample X is written to `logs/laser_hits/<timestamp>_diameter.csv`.
+Each sample dwells `G4 P0.08` so the UI poll can catch `M68` events.
 
 Measure macros: **M62 P0** only around each **G38** (never during G0/G1),
 **M63 P0** immediately after each probe and on every exit — otherwise LinuxCNC
@@ -214,6 +220,7 @@ Each accepted (or final-failed) tip hit also publishes `M68 E2` (X mm) and `M68 
 |------|------|
 | `probe_basic/user_tabs/laser_setter/` | Tab UI + tool-setter photo |
 | `laser_diameter.ngc` | Diameter sequence |
+| `laser_static_edge.ngc` | Park-X peak hunt (medium 0.02 mm, then fine 0.001 mm) |
 | `laser_diameter_stats.ngc` | 20× diameter, mean + sample stdev (`o<laser_diameter_stats> call`) |
 | `laser_length.ngc` | Length experiment |
 | `laser_set_start_xy.ngc` | BEAM X/Y + RPM → `#5501–#5503` (UI usually writes params directly) |
@@ -239,9 +246,9 @@ teach (`#5181–#5186`) or ATC `M66` (`#5399`).
 | `#5507` | Z DROP | Below tip for side sweep |
 | `#5508` | MAX TRAVEL | Max −X from START |
 | `#5509` | START OFFSET | BEAM → clear START (+X); also mirrors −X clear |
-| `#5512` | Raw diameter | `x_plus − x_minus` (max-of-9 each side) |
-| `#5513` | x_plus | Outermost +X-side trigger |
-| `#5514` | x_minus | Outermost −X-side trigger |
+| `#5512` | Raw diameter | `x_plus − x_minus` (static-X first peak each side) |
+| `#5513` | x_plus | Outermost +X-side parked peak |
+| `#5514` | x_minus | Outermost −X-side parked peak |
 | `#5515` | Success | 1 = OK (`M68 E1`) |
 | `#5516` | Beam width | `master − raw` offset; corrected = raw + `#5516` |
 | `#5517` | Master pin | Last master-pin size used for cal |
@@ -257,28 +264,37 @@ tab rewrites the file sorted when it saves `#5516` / `#5517` / `#5518`.
 
 ---
 
-## Fluted tools and max-trigger diameter (notes for humans + AI)
+## Fluted tools and static-X peak diameter (notes for humans + AI)
 
 ### Current method (use this)
 
 Diameter does **not** reconstruct a solid silhouette with a gullet envelope.
-It measures **effective cutting diameter** by spinning the tool and taking
-**first-tooth triggers** from both sides:
+It measures **effective cutting diameter** by spinning the tool and asking, at
+a **parked X**, whether **any** flute can break the beam:
 
-1. **9×** `G38.3 −X` from +X clear → keep **max X** (`#5513`); miss stop = `x_stop`  
-2. Probe transit: `G38.3` entrance → `G38.5` exit → **G1 −1 mm** backside start  
-3. **9×** `G38.3 +X` from that −X clear → keep **min X** (`#5514`); miss stop = `#5513` (forward break)  
-4. `raw = x_plus − x_minus`; `corrected = raw + #5516`
+1. Coarse `G38.3 −X` from +X clear → rough station; miss stop = `x_stop`  
+2. Static hunt from ~0.20 mm **outside** that trip: park, `M66 P3 L3` wait for
+   RAW HIGH, step **0.02 mm** inward until the first peak, back up to the last
+   clear, then **0.001 mm** until the first peak → `#5513`  
+3. Probe transit: `G38.3` entrance → `G38.5` exit → **G1 −1 mm** backside start  
+4. One coarse `G38.3 +X` toward `#5513`, then the same static hunt → `#5514`  
+5. `raw = x_plus − x_minus`; `corrected = raw + #5516`
 
-G38 uses the **flute envelope** again (`on-delay=0`, `off-delay=BEAM_OFF_DELAY`) so
-`G38.5` can clear through gullets. First-tooth `G38.3` still trips immediately.
-Max-of-9 randomizes flute phase so the outermost tip is usually caught.
+A moving G38 trip is wherever the axis happened to be when **some** flute
+broke the beam — you never sample the same X twice, and a short flute can
+trip early and undersize the tool. Parking X and waiting several revolutions
+means the first station that sees a peak **is** the outermost tip, within the
+0.001 mm step.
 
-Recommended PROBE RPM for flutes: about **1000–6000**. Pins: **RPM = 0**.
-Fine hit feed is **F50** (≈0.0008 mm per 1 ms sample).
+G38 is still used for tip-find, the coarse locate, and the gullet-bridging
+transit (`on-delay=0`, `off-delay=BEAM_OFF_DELAY`). The static hunt keeps the
+mux **off** and reads RAW via `M66 P3`.
+
+Dwell is **3 spindle revolutions** (clamped 0.12–1.5 s). Pins (`RPM = 0`) use
+a 0.05 s settled read. Coarse G38 feed stays **F50**.
 
 **Re-run CALIBRATE BEAM** on a master pin after switching to this method — old
-`#5516` values included envelope clear-delay bias.
+`#5516` values included moving-G38 phase scatter.
 
 ### Repeatability (20× stats)
 
@@ -302,36 +318,44 @@ open — that is expected.
 | Break→clear `G38.5` without hold | First gullet looks like “left the tool” |
 | Envelope `timedelay` + break→clear | Stops gullet aborts but left ~0.2 mm skinny silhouette vs mic OD |
 | “Just spin faster” with silhouette method | Optical averaging undersizes further |
+| Max-of-N moving `G38.3` | Trip X is a random flute at a moving axis — never the same station twice; a short flute undersizes |
 
 ### Hit dots + per-hit CSV
 
-RESULTS shows two rows of **9 dots** (+X / −X):
+RESULTS shows two rows of **9 dots** (+X / −X SCAN). Slots cycle through the
+parked-X samples; the last green on each row is the accepted tip.
 
 | State | Meaning |
 |-------|---------|
-| Red | Hit slot not yet accepted |
-| Green | That `G38.3` trip succeeded (`#5070 != 0` and travel ≥ min) |
-| Red with yellow ring | That slot exhausted retries / miss |
+| Red | Slot not yet sampled |
+| Gray | Parked X was clear — no RAW peak during the dwell |
+| Green | RAW peak while X was parked |
+| Red with yellow ring | Unused for the static hunt; hunt miss is a footer FAIL |
 
-Reset all red when **MEASURE DIAMETER** starts. Dots are driven from **accepted
-G38 trips** (`M68 E2/E3`), not from RAW waveform sampling.
+Reset all red when **MEASURE DIAMETER** starts. Dots are driven from **parked
+samples** (`M68 E2/E3`), not from RAW waveform sampling.
 
 After MEASURE, Laser Setter writes `logs/laser_hits/<stamp>_diameter.csv`:
 
 ```text
 # raw=... corr=... beam=... tip_z=... rpm=... success=0|1
 side,hit,x_mm,ok
-plus,1,12.341,1
+plus,1,12.541,0
+plus,2,12.521,0
+plus,3,12.501,1
 minus,1,6.012,1
 ```
 
-Plot in a spreadsheet or script (hit index vs X, two series). Do **not** reuse
+`ok=1` is a parked peak; `ok=0` is a parked clear. Hit is a per-side sample
+index, not the 1–9 dot slot. Plot hit index vs X, two series. Do **not** reuse
 the HAL signal logger for this — wrong data shape.
 
 ### Accuracy notes
 
 - Spinning laser OD may read **slightly larger** than a static micrometer (runout
   included) — that is closer to cutting radius than land OD.  
+- Static-X first-peak is repeatable to the **0.001 mm** step plus optical
+  threshold; beam cal still absorbs the sensor's trigger width.  
 - If still systematically skinny, check **Z DROP** on full OD and tip trigger
   threshold / beam cal — not feedrate.  
 - Pin cal: `corrected = raw + (master − raw_pin)` → `#5516`.  
@@ -358,11 +382,12 @@ the HAL signal logger for this — wrong data shape.
 | “Beam already broken at START” / −X clear | START OFFSET too small — increase it so both clears are open |
 | Never trips before MAX TRAVEL | Raise MAX TRAVEL (still short of the wall) or fix START OFFSET / polarity / RPM |
 | −X clear still broken | Need `MAX TRAVEL ≥ ~2× START OFFSET`, or raise START OFFSET |
-| −X-side hit missed before forward (+X) break | No tip between −X clear and `#5513` — polarity / RPM / tool not in path; reverse no longer searches past the known +X tip |
-| *forward break not beyond -X clear* / *transit never reached -X clear* | Stale FILT after last +X hit — macro now waits FILT/RAW clear and retries transit; restart LinuxCNC so that NGC is loaded |
+| +X/−X static peak hunt missed | Coarse G38 was too far from the tip, or dwell too short for RPM — check CSV for all-clear samples; try 1000–6000 RPM |
+| −X-side coarse G38 missed before forward (+X) break | No tip between −X clear and `#5513` — polarity / RPM / tool not in path; reverse no longer searches past the known +X tip |
+| *forward break not beyond -X clear* / *transit never reached -X clear* | Stale FILT after last +X hunt — macro now waits FILT/RAW clear and retries transit; restart LinuxCNC so that NGC is loaded |
 | Raw width &lt; 0.025 mm / edge order bad | Tip never seen — check polarity, spin RPM; inspect hit CSV / dots |
 | Fluted OD still off after recal | Check Z DROP on full OD; expect runout ≥ mic land OD possible |
-| Last −X hit dot stays red | Restart Probe Basic so the tab’s hit-event poll + post-hit `G4 P0.20` is loaded |
+| Scan dots stay red / CSV missing samples | Restart Probe Basic so the tab’s hit-event poll is loaded |
 | G38 does not follow FILT | Restart after HAL change — mux must be `laser-flute-hold.out` → `and2.7.in0` |
 | Footer FAILED, old diameter gone | That’s correct — success is gated on `M68 E1` |
 | Contact probe acting weird | MDI **M63 P0** if a laser measure aborted; then check contact mux / tool number |
@@ -376,7 +401,8 @@ the HAL signal logger for this — wrong data shape.
 3. ~~Beam-width / master-pin calibration (true diameter)~~  
 4. ~~Flute envelope filter (`timedelay`)~~  
 5. ~~Max-of-N first-tooth diameter (G38, 9+9 sides)~~  
-6. ~~Hit feedback + per-hit CSV~~ — red→green 9+9 dots; `logs/laser_hits/`  
+6. ~~Hit feedback + per-hit CSV~~ — scan dots; `logs/laser_hits/`  
+6b. ~~Static-X peak hunt~~ — park X, wait for RAW, 0.02 mm then 0.001 mm  
 7. Optional measure axis (X vs Y)  
 8. Runout / broken-tool check  
 9. Length → real TLO vs gauge line  

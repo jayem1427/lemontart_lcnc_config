@@ -5,14 +5,16 @@ DS-5V-M on Slave 2 DI5 (DB15 pin 11). Live LASER LED mirrors HAL signal
 laser-beam-broken (clear vs tool in beam). CAPTURE stores BEAM X/Y while
 the tool blocks the light. START OFFSET (+X, default 15 mm) is the clear
 approach point away from the toolsetter. MEASURE DIAMETER tip-finds Z at
-BEAM XY, then takes 9 first-tooth G38.3 hits from each side (keep outermost
-edges). G38 uses the flute envelope; first-tooth G38.3 still trips immediately.
+BEAM XY, then a coarse G38 near each flute tip and a static-X peak hunt:
+park X, wait for any RAW beam peak, step inward, first peak is the
+outermost tip. G38 is still used for tip-find, coarse locate, and the
+break/clear transit through the slot.
 
 Measure macros use M62 P0 to route the laser onto motion.probe-input for
 continuous G38 moves; M63 P0 restores the contact probe mux. M66 P3 on
-motion.digital-in-03 is RAW; M66 P4 is FILT. G38 uses the flute envelope.
-Diameter takes 9 first-tooth G38.3 hits per side (keep outermost). Per-hit
-X is published on M68 E2/E3 for the RESULTS hit dots and logs/laser_hits/.
+motion.digital-in-03 is RAW; M66 P4 is FILT. The static hunt reads RAW
+with the mux off. Per-sample X is published on M68 E2/E3 for the RESULTS
+scan dots and logs/laser_hits/.
 
 Params live in #5501+ (never G30/toolsetter #5181-#5186).
 #5516 = measured beam width offset (master pin − last raw diameter).
@@ -568,15 +570,17 @@ class UserTab(QWidget):
             "5. PROBE RPM: 0 = static (pins); >0 = M3 reverse on diameter hits "
             "(custom.hal swaps M3/M4 to the VFD). Fluted tools: try ~1000–6000.\n"
             "6. MEASURE DIAMETER (M62 P0 enables FILT laser on probe-input for G38):\n"
-            "   tip-find at BEAM → START → tip−ZDROP → pre-touch → M3 → "
-            "9× G38.3 from +X (keep max X) → feed −X until clear + 1 mm → "
-            "9× G38.3 from −X toward forward +X break (keep min X) → "
-            "raw = x_plus − x_minus + beam cal. +X/−X hit dots + logs/laser_hits CSV.\n"
+            "   tip-find at BEAM → START → tip−ZDROP → coarse G38 pre-touch → M3 → "
+            "static-X hunt from +X (park, wait for a RAW peak, step 0.02 mm then "
+            "0.001 mm inward; first peak is the +X tip) → feed −X until clear + 1 mm → "
+            "coarse G38 from −X → static-X hunt toward the known +X tip → "
+            "raw = x_plus − x_minus + beam cal. +X/−X scan dots + logs/laser_hits CSV.\n"
             "7. Beam-width cal: enter MASTER PIN size → MEASURE DIAMETER on that pin → "
             "CALIBRATE BEAM. MEASURED BEAM WIDTH = master − raw; later diameters add "
-            "that offset. Re-calibrate after this max-trigger method change.\n"
+            "that offset. Re-calibrate after this static-X hunt change.\n"
             "8. Optional: MEASURE LENGTH (uses #5504 BEAM Z if already taught).\n"
-            "While measuring, M62 P0 routes the FILT envelope onto motion.probe-input; "
+            "While measuring, M62 P0 routes the FILT envelope onto motion.probe-input "
+            "for G38; the static-X hunt reads RAW via M66 P3 with the mux off. "
             "M63 P0 restores the contact probe / toolsetter mux.",
         )
 
@@ -828,17 +832,18 @@ class UserTab(QWidget):
     HIT_N = 9
     HIT_DOT_PENDING = "background-color: #cc0000; border: 1px solid #2a2a2a; border-radius: 7px;"
     HIT_DOT_OK = "background-color: #4e9a06; border: 1px solid #2a2a2a; border-radius: 7px;"
+    HIT_DOT_CLEAR = "background-color: #555753; border: 1px solid #2a2a2a; border-radius: 7px;"
     HIT_DOT_FAIL = "background-color: #ef2929; border: 2px solid #f5c211; border-radius: 7px;"
 
     def _init_hit_dots(self):
-        """Two rows of 9 dots in RESULTS — live G38 accept feedback."""
+        """Two rows of 9 dots in RESULTS — live static-X scan feedback."""
         layout = getattr(self, "resultsLayout", None)
         self._hit_dots = {"plus": [], "minus": []}
         if layout is None:
             return
         for row, side, cap, obj in (
-            (2, "plus", "+X HITS", "lblHitsPlusCap"),
-            (3, "minus", "-X HITS", "lblHitsMinusCap"),
+            (2, "plus", "+X SCAN", "lblHitsPlusCap"),
+            (3, "minus", "-X SCAN", "lblHitsMinusCap"),
         ):
             lab = QLabel(cap)
             lab.setObjectName(obj)
@@ -874,19 +879,19 @@ class UserTab(QWidget):
         dots = self._hit_dots.get(side, [])
         idx = int(slot) - 1
         if 0 <= idx < len(dots):
-            dots[idx].setStyleSheet(self.HIT_DOT_OK if ok else self.HIT_DOT_FAIL)
-            dots[idx].setToolTip("{:.4f} mm".format(x_mm) if ok else "miss")
-        rec = {
+            if ok:
+                dots[idx].setStyleSheet(self.HIT_DOT_OK)
+                dots[idx].setToolTip("{:.4f} mm peak".format(x_mm))
+            else:
+                dots[idx].setStyleSheet(self.HIT_DOT_CLEAR)
+                dots[idx].setToolTip("{:.4f} mm clear".format(x_mm))
+        n = 1 + sum(1 for ev in self._hit_events if ev["side"] == side)
+        self._hit_events.append({
             "side": side,
-            "hit": int(slot),
+            "hit": n,
             "x_mm": float(x_mm),
             "ok": 1 if ok else 0,
-        }
-        for i, ev in enumerate(self._hit_events):
-            if ev["side"] == side and ev["hit"] == rec["hit"]:
-                self._hit_events[i] = rec
-                return
-        self._hit_events.append(rec)
+        })
 
     def _poll_hit_events(self):
         """Decode M68 E3 packed hit events; E2 is tip X."""
@@ -926,7 +931,7 @@ class UserTab(QWidget):
         return os.path.abspath(os.path.join(here, "..", "..", "..", "logs", "laser_hits"))
 
     def _write_hit_csv(self, success):
-        """Event log of each G38 accept/miss."""
+        """Event log of each static-X sample (ok=1 peak, ok=0 clear)."""
         if not self._hit_events:
             return None
         stamp = time.strftime("%Y%m%d_%H%M%S")
@@ -1010,7 +1015,7 @@ class UserTab(QWidget):
             self._wait_complete_pump(10.0, poll_hits=False)
             self._cmd.mdi(mdi_cmd)
             self._set_status("MEASURING…")
-            self._wait_complete_pump(120.0, poll_hits=True)
+            self._wait_complete_pump(180.0, poll_hits=True)
 
             csv_path = None
             if btn_name == 'btnMeasureLength':

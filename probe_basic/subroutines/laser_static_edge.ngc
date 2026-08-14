@@ -1,0 +1,174 @@
+(author: jayem)
+(date: 2026)
+(Static-X laser edge hunt. Park X, wait for a RAW peak, then step inward.)
+(A moving G38 trip is wherever the axis was when some flute broke the beam.)
+(Parking X and waiting for any flute means the first peak IS the outermost tip.)
+(#1 start X — first sample, expected clear / outside the tip)
+(#2 inward sign: -1 = walk -X for the +X-side tip; +1 = walk +X for the -X-side tip)
+(#3 inward limit — do not step past)
+(#4 side: 1=+X, 2=-X for M68 E3 packing)
+(#5 dwell seconds — M66 P3 L3 wait for RAW HIGH)
+(#6 medium step mm)
+(#7 fine step mm)
+(#8 outward limit — do not back up past this when seeking a clear start)
+(Results: #<_se_ok> 1/0, #<_se_found_x> settled commanded X of first static peak.)
+(Increments global #<_hit_seq>. Mux stays OFF — M66 P3 is RAW, no G38.)
+
+o<laser_static_edge> sub
+    o<400> if [#<_task> EQ 1]
+
+    #<se_x> = #1
+    #<se_sign> = #2
+    #<se_limit> = #3
+    #<se_side> = #4
+    #<se_dwell> = #5
+    #<se_med> = #6
+    #<se_fine> = #7
+    #<se_out> = #8
+    #<_se_ok> = 0
+    #<_se_found_x> = 0
+    #<se_fr> = 80
+    #<se_settle> = 0.04
+    #<se_max> = 80
+    #<se_n> = 0
+    #<se_ui> = 0.08
+
+    o<se_dmin> if [#<se_dwell> LT 0.05]
+      #<se_dwell> = 0.05
+    o<se_dmin> endif
+    o<se_mmin> if [#<se_med> LE 0]
+      #<se_med> = 0.020
+    o<se_mmin> endif
+    o<se_fmin> if [#<se_fine> LE 0]
+      #<se_fine> = 0.001
+    o<se_fmin> endif
+
+    G90
+
+    (--- back up until the start sample is clear ---)
+    #<se_clear> = 0
+    #<se_bi> = 0
+    o<se_backup> while [[#<se_clear> EQ 0] AND [#<se_bi> LT 20]]
+      o<se_bout> if [#<se_sign> LT 0]
+        o<se_bpast> if [#<se_x> GT #<se_out>]
+          o<laser_static_edge> return
+        o<se_bpast> endif
+      o<se_bout> else
+        o<se_bpast2> if [#<se_x> LT #<se_out>]
+          o<laser_static_edge> return
+        o<se_bpast2> endif
+      o<se_bout> endif
+
+      G1 G53 X#<se_x> F#<se_fr>
+      G4 P#<se_settle>
+      M66 P3 L3 Q#<se_dwell>
+      #<se_peak> = 0
+      o<se_bhit> if [#5399 GT 0]
+        #<se_peak> = 1
+      o<se_bhit> endif
+      #<_hit_seq> = [#<_hit_seq> + 1]
+      #<se_n> = [#<se_n> + 1]
+      #<se_slot> = [[[#<se_n> - 1] MOD 9] + 1]
+      M68 E2 Q#<_abs_x>
+      M68 E3 Q[#<_hit_seq> * 10000 + #<se_side> * 100 + #<se_slot> * 10 + #<se_peak>]
+      G4 P#<se_ui>
+
+      o<se_bclr> if [#<se_peak> EQ 0]
+        #<se_clear> = 1
+      o<se_bclr> else
+        #<se_x> = [#<se_x> - #<se_sign> * #<se_med>]
+        #<se_bi> = [#<se_bi> + 1]
+      o<se_bclr> endif
+    o<se_backup> endwhile
+
+    o<se_noclear> if [#<se_clear> EQ 0]
+      o<laser_static_edge> return
+    o<se_noclear> endif
+
+    #<se_last_clear> = #<_abs_x>
+
+    (--- medium: step inward until the first parked peak ---)
+    #<se_med_found> = 0
+    #<se_mi> = 0
+    o<se_medium> while [[#<se_med_found> EQ 0] AND [#<se_mi> LT #<se_max>]]
+      #<se_x> = [#<se_x> + #<se_sign> * #<se_med>]
+      o<se_minw> if [#<se_sign> LT 0]
+        o<se_mpast> if [#<se_x> LT #<se_limit>]
+          o<laser_static_edge> return
+        o<se_mpast> endif
+      o<se_minw> else
+        o<se_mpast2> if [#<se_x> GT #<se_limit>]
+          o<laser_static_edge> return
+        o<se_mpast2> endif
+      o<se_minw> endif
+
+      G1 G53 X#<se_x> F#<se_fr>
+      G4 P#<se_settle>
+      M66 P3 L3 Q#<se_dwell>
+      #<se_peak> = 0
+      o<se_mhit> if [#5399 GT 0]
+        #<se_peak> = 1
+      o<se_mhit> endif
+      #<_hit_seq> = [#<_hit_seq> + 1]
+      #<se_n> = [#<se_n> + 1]
+      #<se_slot> = [[[#<se_n> - 1] MOD 9] + 1]
+      M68 E2 Q#<_abs_x>
+      M68 E3 Q[#<_hit_seq> * 10000 + #<se_side> * 100 + #<se_slot> * 10 + #<se_peak>]
+      G4 P#<se_ui>
+
+      o<se_mgot> if [#<se_peak> NE 0]
+        #<se_med_found> = 1
+        #<se_med_x> = #<_abs_x>
+      o<se_mgot> else
+        #<se_last_clear> = #<_abs_x>
+        #<se_mi> = [#<se_mi> + 1]
+      o<se_mgot> endif
+    o<se_medium> endwhile
+
+    o<se_nomed> if [#<se_med_found> EQ 0]
+      o<laser_static_edge> return
+    o<se_nomed> endif
+
+    (--- fine: from last clear medium station, 0.001 mm inward until first peak ---)
+    #<se_x> = #<se_last_clear>
+    #<se_fine_found> = 0
+    #<se_fi> = 0
+    o<se_fine> while [[#<se_fine_found> EQ 0] AND [#<se_fi> LT #<se_max>]]
+      #<se_x> = [#<se_x> + #<se_sign> * #<se_fine>]
+      o<se_finw> if [#<se_sign> LT 0]
+        o<se_fpast> if [#<se_x> LT #<se_limit>]
+          o<laser_static_edge> return
+        o<se_fpast> endif
+      o<se_finw> else
+        o<se_fpast2> if [#<se_x> GT #<se_limit>]
+          o<laser_static_edge> return
+        o<se_fpast2> endif
+      o<se_finw> endif
+
+      G1 G53 X#<se_x> F#<se_fr>
+      G4 P#<se_settle>
+      M66 P3 L3 Q#<se_dwell>
+      #<se_peak> = 0
+      o<se_fhit> if [#5399 GT 0]
+        #<se_peak> = 1
+      o<se_fhit> endif
+      #<_hit_seq> = [#<_hit_seq> + 1]
+      #<se_n> = [#<se_n> + 1]
+      #<se_slot> = [[[#<se_n> - 1] MOD 9] + 1]
+      M68 E2 Q#<_abs_x>
+      M68 E3 Q[#<_hit_seq> * 10000 + #<se_side> * 100 + #<se_slot> * 10 + #<se_peak>]
+      G4 P#<se_ui>
+
+      o<se_fgot> if [#<se_peak> NE 0]
+        #<se_fine_found> = 1
+        #<_se_found_x> = #<_abs_x>
+        #<_se_ok> = 1
+      o<se_fgot> else
+        #<se_fi> = [#<se_fi> + 1]
+      o<se_fgot> endif
+    o<se_fine> endwhile
+
+    o<400> endif
+o<laser_static_edge> endsub
+
+M2

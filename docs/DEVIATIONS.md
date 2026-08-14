@@ -141,7 +141,8 @@ Here: `halui.tool.number` compared to constant **99** (`probe-tool-num`):
 - Not equal → toolsetter `lcec.0.1.di-2`
 
 Laser **M62 P0** muxes **raw** `laser-beam-broken` onto `motion.probe-input` for
-G38 measure macros (max-of-N first-tooth diameter; no gullet envelope);
+G38 measure macros (tip-find, coarse locate, slot transit); diameter edges use
+a **static-X** RAW peak hunt with the mux off;
 **M63 P0** restores contact-only routing —
 [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md).
 

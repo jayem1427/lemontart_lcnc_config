@@ -1,19 +1,20 @@
 (author: jayem)
 (date: 2026)
-(Laser diameter — max-of-N first-tooth triggers, raw beam — no gullet envelope.)
+(Laser diameter — coarse G38, then static-X peak hunt at 0.001 mm.)
 (CAPTURE stores BEAM XY; tool blocking light.)
 (START = BEAM_X + START_OFFSET; +X clear side away from toolsetter.)
-(After +X hits: G38.3 entrance → G38.5 exit → G1 −1 mm = backside start.)
+(A moving G38 trip is wherever X was when some flute broke the beam.)
+(Static hunt: park X, wait for any RAW peak, step inward, first peak = tip.)
+(After +X edge: G38.3 entrance → G38.5 exit → G1 −1 mm = backside start.)
 (G38 uses flute envelope so clear-pass works; first-tooth trips still on-delay 0.)
-(Tip-find at BEAM XY; then 9x G38.3 from each side; keep outermost edges.)
 (+X-side miss stop = MAX TRAVEL x_stop; -X-side miss stop = forward break x_plus.)
 (M62 P0 ONLY around G38 — never during G0/G1 or Probe tripped during non-probe move.)
-(M63 P0 restores contact mux. M66 P3 = RAW dig-in-03; M66 P4 = FILT dig-in-04.)
+(Static hunt uses M66 P3 RAW with mux OFF. M66 P4 = FILT dig-in-04.)
 (Before each G38 wait FILT clear so trip is a rising edge - beep + real travel.)
 (Prereqs: BEAM X/Y + RPM #5501-#5503; Z-drop #5507; max travel #5508;)
 (        start offset #5509 = +X from BEAM to clear START; reverse #5518)
 (Results: #5512 raw diameter, #5513 x_plus, #5514 x_minus, #5515=1 on success, M68 E0/E1)
-(Per-hit: M68 E2 = tip X; E3 = seq*10000 + side*100 + slot*10 + ok. side 1=+X, 2=-X)
+(Per-hit: M68 E2 = sample X; E3 = seq*10000 + side*100 + slot*10 + ok. side 1=+X, 2=-X)
 (#5516 beam-width offset: corrected = raw + #5516; set by CALIBRATE BEAM in UI)
 (Probe RPM >0: #5518=1 → M3 reverse; 0 → M4 forward. custom.hal swaps M3/M4.)
 
@@ -28,7 +29,7 @@ o<laser_diameter> sub
     M68 E1 Q0
     M68 E2 Q0
     M68 E3 Q0
-    #<hit_seq> = 0
+    #<_hit_seq> = 0
 
     #<beam_x> = #5501
     #<beam_y> = #5502
@@ -48,9 +49,12 @@ o<laser_diameter> sub
     #<slow_z_fr> = 50
     #<x_backoff> = 2.0
     #<x_overshoot> = 1.0
-    #<n_hits> = 9
     #<hit_retries> = 5
     #<min_hit_travel> = 0.25
+    #<hunt_margin> = 0.20
+    #<med_step> = 0.020
+    #<fine_step> = 0.001
+    #<peak_revs> = 3
     #<min_remain> = 0.50
     #<z_safe> = 0
     #<z_floor> = [#<_ini[AXIS_Z]MIN_LIMIT> + 1]
@@ -214,80 +218,39 @@ o<laser_diameter> sub
         M4 S#<probe_rpm>
       o<diam_dir> endif
       G4 P2.0
+      #<peak_dwell> = [#<peak_revs> * 60 / #<probe_rpm>]
+      o<dwell_min> if [#<peak_dwell> LT 0.12]
+        #<peak_dwell> = 0.12
+      o<dwell_min> endif
+      o<dwell_max> if [#<peak_dwell> GT 1.5]
+        #<peak_dwell> = 1.5
+      o<dwell_max> endif
+    o<diam_spin> else
+      #<peak_dwell> = 0.05
     o<diam_spin> endif
 
-    (--- +X side: Nx G38.3 -X; keep MAX X / outermost ---)
-    (Reject zero-travel instant trips — those often have no beep.)
-    #<x_plus> = -999999
-    #<plus_i> = 0
-    o<plus_hits> while [#<plus_i> LT #<n_hits>]
-      #<hit_ok> = 0
-      #<try_i> = 0
-      o<plus_try> while [[#<hit_ok> EQ 0] AND [#<try_i> LT #<hit_retries>]]
-        G0 G53 X#<plus_clear_x>
-        G4 P0.12
+    (--- +X side: coarse G38 already at x_pre; static hunt from just outside ---)
+    (Publish the moving pre-touch as sample 1 so the UI shows the rough station.)
+    #<_hit_seq> = [#<_hit_seq> + 1]
+    M68 E2 Q#<x_pre>
+    M68 E3 Q[#<_hit_seq> * 10000 + 110 + 1]
+    G4 P0.10
 
-        (wait until FILT clear — matches G38 path, not just RAW)
-        #<fw> = 0
-        M66 P4 L0
-        o<plus_filt> while [[#5399 NE 0] AND [#<fw> LT 40]]
-          G4 P0.02
-          M66 P4 L0
-          #<fw> = [#<fw> + 1]
-        o<plus_filt> endwhile
+    #<plus_hunt_start> = [#<x_pre> + #<hunt_margin>]
+    o<phs_cap> if [#<plus_hunt_start> GT #<plus_clear_x>]
+      #<plus_hunt_start> = #<plus_clear_x>
+    o<phs_cap> endif
 
-        M66 P3 L0
-        o<plus_blocked> if [#5399 NE 0]
-          #<try_i> = [#<try_i> + 1]
-          G4 P0.2
-        o<plus_blocked> else
-          o<plus_respin> if [#<probe_rpm> GT 0]
-            o<plus_dir> if [#<spindle_reverse> GE 0.5]
-              M3 S#<probe_rpm>
-            o<plus_dir> else
-              M4 S#<probe_rpm>
-            o<plus_dir> endif
-          o<plus_respin> endif
-
-          #<x_hit0> = #<_abs_x>
-          M62 P0
-          G91
-          G38.3 X[#<x_stop> - #<_abs_x>] F#<slow_x_fr>
-          G90
-          M63 P0
-          #<hit_travel> = [ABS[#<_abs_x> - #<x_hit0>]]
-          o<plus_got> if [[#5070 NE 0] AND [#<hit_travel> GE #<min_hit_travel>]]
-            #<hit_ok> = 1
-            o<plus_max> if [#<_abs_x> GT #<x_plus>]
-              #<x_plus> = #<_abs_x>
-            o<plus_max> endif
-            #<hit_seq> = [#<hit_seq> + 1]
-            M68 E2 Q#<_abs_x>
-            M68 E3 Q[#<hit_seq> * 10000 + 100 + [#<plus_i> + 1] * 10 + 1]
-            G4 P0.20
-          o<plus_got> else
-            #<try_i> = [#<try_i> + 1]
-            G4 P0.25
-          o<plus_got> endif
-        o<plus_blocked> endif
-      o<plus_try> endwhile
-
-      o<plus_miss> if [#<hit_ok> EQ 0]
-        #<hit_seq> = [#<hit_seq> + 1]
-        M68 E2 Q#<_abs_x>
-        M68 E3 Q[#<hit_seq> * 10000 + 100 + [#<plus_i> + 1] * 10 + 0]
-        G4 P0.20
-        (DEBUG, LASER DIAM: +X-side no valid tip hit after retries)
-        G0 G53 Z#<z_safe>
-        M5
-        M63 P0
-        o<laser_diameter> return
-      o<plus_miss> endif
-
-      (desync flute phase before next approach)
-      G4 P0.041
-      #<plus_i> = [#<plus_i> + 1]
-    o<plus_hits> endwhile
+    o<laser_static_edge> call [#<plus_hunt_start>] [-1] [#<x_stop>] [1] [#<peak_dwell>] [#<med_step>] [#<fine_step>] [#<plus_clear_x>]
+    o<plus_static_fail> if [#<_se_ok> EQ 0]
+      (DEBUG, LASER DIAM: +X-side static peak hunt missed — no tip with X parked)
+      G0 G53 Z#<z_safe>
+      M5
+      M63 P0
+      o<laser_diameter> return
+    o<plus_static_fail> endif
+    #<x_plus> = #<_se_found_x>
+    G0 G53 X#<plus_clear_x>
 
     #5513 = #<x_plus>
 
@@ -301,7 +264,7 @@ o<laser_diameter> sub
     o<diam_risk> endif
 
     (--- transit: wait FILT/RAW clear, then G38.3 break + G38.5 clear with mux held ---)
-    (Last +X hit dwells in the beam for the UI; FILT stays high for BEAM_OFF_DELAY.)
+    (Static hunt ends at the +X tip in the beam; G0 to plus_clear lets FILT drop.)
     (G38.3 without that wait instant-trips at +X clear; G38.5 then "clears" on the same side.)
     #<transit_ok> = 0
     #<try_i> = 0
@@ -392,7 +355,7 @@ o<laser_diameter> sub
       o<laser_diameter> return
     o<far_blocked> endif
 
-    (--- -X side: Nx G38.3 +X toward forward +X break; keep MIN X / outermost ---)
+    (--- -X side: one coarse G38.3 toward x_plus, then static hunt from just outside ---)
     (Miss stop = x_plus — do not run past the known +X tip toward START.)
     o<minus_window> if [#<x_plus> LE #<minus_clear_x>]
       (DEBUG, LASER DIAM: forward break not beyond -X clear — x_plus=#<x_plus> clear=#<minus_clear_x>)
@@ -402,93 +365,100 @@ o<laser_diameter> sub
       o<laser_diameter> return
     o<minus_window> endif
 
-    #<x_minus> = 999999
-    #<minus_i> = 0
-    o<minus_hits> while [#<minus_i> LT #<n_hits>]
-      #<hit_ok> = 0
-      #<try_i> = 0
-      o<minus_try> while [[#<hit_ok> EQ 0] AND [#<try_i> LT #<hit_retries>]]
-        G0 G53 X#<minus_clear_x>
-        G4 P0.12
+    #<minus_coarse_ok> = 0
+    #<try_i> = 0
+    o<minus_coarse> while [[#<minus_coarse_ok> EQ 0] AND [#<try_i> LT #<hit_retries>]]
+      G0 G53 X#<minus_clear_x>
+      G4 P0.12
 
+      #<fw> = 0
+      M66 P4 L0
+      o<minus_filt> while [[#5399 NE 0] AND [#<fw> LT 40]]
+        G4 P0.02
+        M66 P4 L0
+        #<fw> = [#<fw> + 1]
+      o<minus_filt> endwhile
+
+      M66 P3 L0
+      o<minus_nudge> if [#5399 NE 0]
+        #<nudge_x> = [#<minus_clear_x> - 0.5]
+        o<nudge_lim> if [#<nudge_x> LT #<x_stop>]
+          #<nudge_x> = #<x_stop>
+        o<nudge_lim> endif
+        G1 G53 X#<nudge_x> F#<fast_x_fr>
+        #<minus_clear_x> = #<_abs_x>
+        G4 P0.12
         #<fw> = 0
         M66 P4 L0
-        o<minus_filt> while [[#5399 NE 0] AND [#<fw> LT 40]]
+        o<minus_filt2> while [[#5399 NE 0] AND [#<fw> LT 40]]
           G4 P0.02
           M66 P4 L0
           #<fw> = [#<fw> + 1]
-        o<minus_filt> endwhile
-
+        o<minus_filt2> endwhile
         M66 P3 L0
-        o<minus_nudge> if [#5399 NE 0]
-          #<nudge_x> = [#<minus_clear_x> - 0.5]
-          o<nudge_lim> if [#<nudge_x> LT #<x_stop>]
-            #<nudge_x> = #<x_stop>
-          o<nudge_lim> endif
-          G1 G53 X#<nudge_x> F#<fast_x_fr>
-          #<minus_clear_x> = #<_abs_x>
-          G4 P0.12
-          #<fw> = 0
-          M66 P4 L0
-          o<minus_filt2> while [[#5399 NE 0] AND [#<fw> LT 40]]
-            G4 P0.02
-            M66 P4 L0
-            #<fw> = [#<fw> + 1]
-          o<minus_filt2> endwhile
-          M66 P3 L0
-        o<minus_nudge> endif
+      o<minus_nudge> endif
 
-        M66 P3 L0
-        o<minus_blocked> if [#5399 NE 0]
+      M66 P3 L0
+      o<minus_blocked> if [#5399 NE 0]
+        #<try_i> = [#<try_i> + 1]
+        G4 P0.25
+      o<minus_blocked> else
+        o<minus_respin> if [#<probe_rpm> GT 0]
+          o<minus_dir> if [#<spindle_reverse> GE 0.5]
+            M3 S#<probe_rpm>
+          o<minus_dir> else
+            M4 S#<probe_rpm>
+          o<minus_dir> endif
+        o<minus_respin> endif
+
+        #<x_hit0> = #<_abs_x>
+        M62 P0
+        G91
+        G38.3 X[#<x_plus> - #<_abs_x>] F#<slow_x_fr>
+        G90
+        M63 P0
+        #<hit_travel> = [ABS[#<_abs_x> - #<x_hit0>]]
+        o<minus_got> if [[#5070 NE 0] AND [#<hit_travel> GE #<min_hit_travel>]]
+          #<minus_coarse_ok> = 1
+          #<x_pre_minus> = #<_abs_x>
+        o<minus_got> else
           #<try_i> = [#<try_i> + 1]
           G4 P0.25
-        o<minus_blocked> else
-          o<minus_respin> if [#<probe_rpm> GT 0]
-            o<minus_dir> if [#<spindle_reverse> GE 0.5]
-              M3 S#<probe_rpm>
-            o<minus_dir> else
-              M4 S#<probe_rpm>
-            o<minus_dir> endif
-          o<minus_respin> endif
+        o<minus_got> endif
+      o<minus_blocked> endif
+    o<minus_coarse> endwhile
 
-          #<x_hit0> = #<_abs_x>
-          M62 P0
-          G91
-          G38.3 X[#<x_plus> - #<_abs_x>] F#<slow_x_fr>
-          G90
-          M63 P0
-          #<hit_travel> = [ABS[#<_abs_x> - #<x_hit0>]]
-          o<minus_got> if [[#5070 NE 0] AND [#<hit_travel> GE #<min_hit_travel>]]
-            #<hit_ok> = 1
-            o<minus_min> if [#<_abs_x> LT #<x_minus>]
-              #<x_minus> = #<_abs_x>
-            o<minus_min> endif
-            #<hit_seq> = [#<hit_seq> + 1]
-            M68 E2 Q#<_abs_x>
-            M68 E3 Q[#<hit_seq> * 10000 + 200 + [#<minus_i> + 1] * 10 + 1]
-            G4 P0.20
-          o<minus_got> else
-            #<try_i> = [#<try_i> + 1]
-            G4 P0.25
-          o<minus_got> endif
-        o<minus_blocked> endif
-      o<minus_try> endwhile
+    o<minus_miss> if [#<minus_coarse_ok> EQ 0]
+      #<_hit_seq> = [#<_hit_seq> + 1]
+      M68 E2 Q#<_abs_x>
+      M68 E3 Q[#<_hit_seq> * 10000 + 210 + 0]
+      G4 P0.20
+      (DEBUG, LASER DIAM: -X-side coarse G38 missed before forward +X break)
+      G0 G53 Z#<z_safe>
+      M5
+      M63 P0
+      o<laser_diameter> return
+    o<minus_miss> endif
 
-      o<minus_miss> if [#<hit_ok> EQ 0]
-        #<hit_seq> = [#<hit_seq> + 1]
-        M68 E2 Q#<_abs_x>
-        M68 E3 Q[#<hit_seq> * 10000 + 200 + [#<minus_i> + 1] * 10 + 0]
-        G4 P0.20
-        (DEBUG, LASER DIAM: -X-side no valid tip hit before forward +X break)
-        G0 G53 Z#<z_safe>
-        M5
-        M63 P0
-        o<laser_diameter> return
-      o<minus_miss> endif
+    #<_hit_seq> = [#<_hit_seq> + 1]
+    M68 E2 Q#<x_pre_minus>
+    M68 E3 Q[#<_hit_seq> * 10000 + 210 + 1]
+    G4 P0.10
 
-      G4 P0.041
-      #<minus_i> = [#<minus_i> + 1]
-    o<minus_hits> endwhile
+    #<minus_hunt_start> = [#<x_pre_minus> - #<hunt_margin>]
+    o<mhs_cap> if [#<minus_hunt_start> LT #<minus_clear_x>]
+      #<minus_hunt_start> = #<minus_clear_x>
+    o<mhs_cap> endif
+
+    o<laser_static_edge> call [#<minus_hunt_start>] [1] [#<x_plus>] [2] [#<peak_dwell>] [#<med_step>] [#<fine_step>] [#<minus_clear_x>]
+    o<minus_static_fail> if [#<_se_ok> EQ 0]
+      (DEBUG, LASER DIAM: -X-side static peak hunt missed — no tip with X parked)
+      G0 G53 Z#<z_safe>
+      M5
+      M63 P0
+      o<laser_diameter> return
+    o<minus_static_fail> endif
+    #<x_minus> = #<_se_found_x>
 
     (Leave the beam so the last -X event stays on E2/E3 long enough for the UI)
     G0 G53 X#<minus_clear_x>
@@ -540,7 +510,7 @@ o<laser_diameter> sub
     G0 G53 X#<beam_x> Y#<beam_y>
     M63 P0
 
-    (done: plus=#5513 minus=#5514 raw=#5512 corr=#<diameter> cal=#5516 hits=9+9)
+    (done: plus=#5513 minus=#5514 raw=#5512 corr=#<diameter> cal=#5516 static-X hunt)
     o<400> endif
 o<laser_diameter> endsub
 
