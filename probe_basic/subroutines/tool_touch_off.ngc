@@ -176,6 +176,8 @@ o<10>endif
 
 ;-10- Check for manual tool calibration and new parameters
 G92.1
+; Fusion posts G93 in the header; M600 G1/G38 must run in G94 units-per-minute.
+G94
 o<feed_lock> if [#<mode> EQ 0]
   M50 P0
 o<feed_lock> endif
@@ -203,6 +205,14 @@ o<validate_tool> if [#<mode> EQ 1 AND #<tool_selected> LE 0]
   (ABORT, M600 requires T before M600 — no tool prepared)
 o<validate_tool> endif
 (LOG, Old tool: #<tool_in_spindle> / New tool: #<tool_selected>)
+
+; CAM M600: spindle already has this tool — apply G43 and continue, no park/dialog/probe
+o<90> if [#<mode> EQ 1 AND #<tool_in_spindle> EQ #<tool_selected>]
+  G43
+  (LOG, END same tool already in spindle)
+  (LOGCLOSE)
+  o<tool_touch_off> return
+o<90> endif
 
 
 ;-50- Change to T0

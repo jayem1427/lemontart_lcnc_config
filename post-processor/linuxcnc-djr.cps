@@ -556,8 +556,10 @@ function onOpen() {
     }
   }
 
-  // absolute coordinates, inverse time feed, and incremental arc center mode
-  writeBlock(gAbsIncModal.format(90), gFeedModeModal.format(93), gPlaneModal.format(17), gFormat.format(91.1));
+  // Absolute, G94 units/min, incremental arc centers. Do not start in G93 —
+  // M600/tool_touch_off uses G1 F as mm/min, and 3-axis cuts are G94.
+  // Simultaneous XYZA blocks switch to G93 in onLinear5D.
+  writeBlock(gAbsIncModal.format(90), gFeedModeModal.format(94), gPlaneModal.format(17), gFormat.format(91.1));
 
   switch (unit) {
   case IN:
