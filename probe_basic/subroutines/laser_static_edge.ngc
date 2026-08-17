@@ -33,8 +33,8 @@ o<laser_static_edge> sub
     #<se_n> = 0
     #<se_ui> = 0.08
 
-    o<se_dmin> if [#<se_dwell> LT 0.05]
-      #<se_dwell> = 0.05
+    o<se_dmin> if [#<se_dwell> LT 0.01]
+      #<se_dwell> = 0.01
     o<se_dmin> endif
     o<se_mmin> if [#<se_med> LE 0]
       #<se_med> = 0.020

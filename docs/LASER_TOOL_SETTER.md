@@ -282,16 +282,20 @@ a **parked X**, whether **any** flute can break the beam:
 
 A moving G38 trip is wherever the axis happened to be when **some** flute
 broke the beam — you never sample the same X twice, and a short flute can
-trip early and undersize the tool. Parking X and waiting several revolutions
-means the first station that sees a peak **is** the outermost tip, within the
+trip early and undersize the tool. Parking X and waiting for any RAW peak
+means the first station that sees a break **is** the outermost tip, within the
 0.001 mm step.
 
 G38 is still used for tip-find, the coarse locate, and the gullet-bridging
 transit (`on-delay=0`, `off-delay=BEAM_OFF_DELAY`). The static hunt keeps the
 mux **off** and reads RAW via `M66 P3`.
 
-Dwell is **3 spindle revolutions** (clamped 0.12–1.5 s). Pins (`RPM = 0`) use
-a 0.05 s settled read. Coarse G38 feed stays **F50**.
+Peak wait is a **fixed** `M66 P3 L3` timeout (`#<peak_dwell>` = **0.05 s**),
+not N revolutions. `M66` returns as soon as RAW goes HIGH; the timeout only
+runs out on a **clear** station. 10 ms is not too long — it is too *short*
+except at high RPM (1 rev = `60/RPM` s: 10 ms at 6000 RPM, 60 ms at 1000 RPM).
+50 ms ≈ 1 rev at 1200 RPM. Pins (`RPM = 0`) use the same settled read.
+Coarse G38 feed stays **F50**.
 
 **Re-run CALIBRATE BEAM** on a master pin after switching to this method — old
 `#5516` values included moving-G38 phase scatter.

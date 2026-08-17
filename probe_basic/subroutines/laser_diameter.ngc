@@ -54,7 +54,11 @@ o<laser_diameter> sub
     #<hunt_margin> = 0.20
     #<med_step> = 0.020
     #<fine_step> = 0.001
-    #<peak_revs> = 3
+    (Fixed M66 timeout at a parked X. Returns immediately on RAW HIGH.)
+    (Timeout only matters on a clear station. 1 rev = 60/RPM s, so 10 ms)
+    (is ~1 rev at 6000 RPM and only 1/6 rev at 1000 RPM — too short to)
+    (guarantee the high flute. 50 ms ≈ 1 rev at 1200 RPM.)
+    #<peak_dwell> = 0.05
     #<min_remain> = 0.50
     #<z_safe> = 0
     #<z_floor> = [#<_ini[AXIS_Z]MIN_LIMIT> + 1]
@@ -218,15 +222,6 @@ o<laser_diameter> sub
         M4 S#<probe_rpm>
       o<diam_dir> endif
       G4 P2.0
-      #<peak_dwell> = [#<peak_revs> * 60 / #<probe_rpm>]
-      o<dwell_min> if [#<peak_dwell> LT 0.12]
-        #<peak_dwell> = 0.12
-      o<dwell_min> endif
-      o<dwell_max> if [#<peak_dwell> GT 1.5]
-        #<peak_dwell> = 1.5
-      o<dwell_max> endif
-    o<diam_spin> else
-      #<peak_dwell> = 0.05
     o<diam_spin> endif
 
     (--- +X side: coarse G38 already at x_pre; static hunt from just outside ---)
