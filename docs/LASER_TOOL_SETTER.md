@@ -290,11 +290,10 @@ G38 is still used for tip-find, the coarse locate, and the gullet-bridging
 transit (`on-delay=0`, `off-delay=BEAM_OFF_DELAY`). The static hunt keeps the
 mux **off** and reads RAW via `M66 P3`.
 
-Peak wait is a **fixed** `M66 P3 L3` timeout (`#<peak_dwell>` = **0.05 s**),
+Peak wait is a **fixed** `M66 P3 L3` timeout (`#<peak_dwell>` = **0.10 s**),
 not N revolutions. `M66` returns as soon as RAW goes HIGH; the timeout only
-runs out on a **clear** station. 10 ms is not too long — it is too *short*
-except at high RPM (1 rev = `60/RPM` s: 10 ms at 6000 RPM, 60 ms at 1000 RPM).
-50 ms ≈ 1 rev at 1200 RPM. Pins (`RPM = 0`) use the same settled read.
+runs out on a **clear** station. 100 ms ≈ 1 rev at 600 RPM, about 1.7 revs
+at 1000 RPM, 5 revs at 3000 RPM. Pins (`RPM = 0`) use the same settled read.
 Coarse G38 feed stays **F50**.
 
 **Re-run CALIBRATE BEAM** on a master pin after switching to this method — old
