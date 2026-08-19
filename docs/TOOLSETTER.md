@@ -181,7 +181,7 @@ If options still look like the old stock list, Fusion is still using a cached co
 | **Preload tool** | **Off** (`preloadTool: false`) | Avoids a bare `T` for the next tool after tool change |
 | **Fourth axis mounted along** | **Along X** (`fourthAxisAround: "x"`) | **Multi-Axis Setup** — enables A output and kinematics |
 | **4th axis is a table** | **On** (`fourthAxisIsTable: true`) | Table rotary on X (Lemontart `trivkins coordinates=XYZA`) |
-| **G93 inverse time** | **On** (`useInverseTimeFeed: true`) | Simultaneous `G1 X Y Z A` uses inverse-time `F` |
+| **G93 inverse time** | **On** (`useInverseTimeFeed: true`) | Inverse-time `F` only while 4th axis is enabled and moving; otherwise `G94` |
 | Spindle after tool change | Post emits `M3`/`M4` after tool change M-code | M600 stops spindle; CAM must restart it (post does this) |
 
 In Fusion’s post dialog, open **Tool Change** and **Multi-Axis Setup**. If you use a Fusion **Machine Definition** on the setup, its kinematics override the post’s hardcoded A axis (set **Fourth axis mounted along** to **None** only if you intentionally want 3-axis output).
@@ -222,10 +222,10 @@ The post outputs standard LinuxCNC blocks for coordinated **X Y Z A** moves:
 G93 G1 X... Y... Z... A... F...
 ```
 
-- **Indexing** (tilt A, then 3-axis cut): `G0`/`G1` with A on plane changes — no special token.
-- **Simultaneous** (swarf / multi-axis): `onLinear5D` uses **`getMultiaxisFeed`** to compute an inverse-time **`F`** from the combined linear + rotary move length, then posts **`G93 G1`** (not the invalid `linear5D` word).
-- **Program header** is **`G90 G94 G17 G91.1`** (units per minute). Do not start CAM in `G93` — M600 `G1`/`G38` feeds are mm/min. Simultaneous XYZA blocks still switch to `G93` in `onLinear5D`.
-- **Plain 3-axis** cuts still use **`G94`** and a normal feed-per-minute `F`.
+- **Indexing** (tilt A, then 3-axis cut): `G0`/`G1` with A on plane changes — stays **`G94`**.
+- **Simultaneous** (swarf / multi-axis): `onLinear5D` uses **`getMultiaxisFeed`** only while the 4th axis is **enabled** (`fourthAxisAround` not None, machine has a rotary) **and active** (this block interpolates A). Then it posts **`G93 G1`** with inverse-time **`F`**. XYZ-only segments in a 4-axis op, 3-axis ops, and 3-axis-only posting stay **`G94`**.
+- **Program header** is **`G90 G94 G17 G91.1`** (units per minute). Do not start CAM in `G93` — M600 `G1`/`G38` feeds are mm/min. A simultaneous section restores **`G94`** at `onSectionEnd`.
+- **Plain 3-axis** cuts always use **`G94`** and a normal feed-per-minute `F`. A forced `A` word (parked angle) does not switch to inverse time.
 
 Machine definition in the post: **table A along X** (`fourthAxisAround: "x"`, `fourthAxisIsTable: true`), **`optimizeMachineAngles2(1)`** (map tip, non-TCP) to match **`trivkins coordinates=XYZA`** in `ethercat_mill.ini`. Do not enable TCP in Fusion for this config unless you add TCP kinematics in LinuxCNC.
 

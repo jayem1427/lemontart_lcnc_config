@@ -17,7 +17,7 @@ legal = "Copyright (C) 2012-2018 by Autodesk, Inc.";
 certificationLevel = 2;
 minimumRevision = 45702;
 
-longDescription = "LinuxCNC XYZA, optional M600 toolsetter probing or M6 manual tool change, G93 inverse time on simultaneous 4-axis moves";
+longDescription = "LinuxCNC XYZA, optional M600 toolsetter probing or M6 manual tool change, G93 inverse time only while the 4th axis is enabled and moving";
 
 extension = "ngc";
 setCodePage("ascii");
@@ -131,7 +131,7 @@ properties = {
   },
   useInverseTimeFeed: {
     title: "G93 inverse time (simultaneous XYZA)",
-    description: "Coordinated X/Y/Z/A cuts use G93 with inverse-time F. Plain 3-axis moves still use G94 feed/min.",
+    description: "Use G93 inverse-time F only when the 4th axis is enabled and actually moving. 3-axis, indexed, and XYZ-only moves stay in G94 feed/min.",
     group: "multiAxis",
     type: "boolean",
     value: true,
@@ -311,7 +311,7 @@ var gRetractModal = createModal({}, gFormat); // modal group 10 // G98-99
 
 // fixed settings
 var firstFeedParameter = 100;
-var useInverseTimeFeed = true; // G93 inverse time on simultaneous X/Y/Z/A moves
+var useInverseTimeFeed = false; // G93 only when 4th axis is enabled and moving; set in configureMultiAxisFeedrate
 var maxInverseTime = 99999.999; // max F word in G93 mode (minutes^-1 scale from getInverseTime)
 
 var WARNING_WORK_OFFSET = 0;
@@ -328,11 +328,44 @@ var previousABC = new Vector(0, 0, 0);
 // machine configuration (MillenniumOS-style setup in onOpen)
 var receivedMachineConfiguration = false;
 
+/** True when the post/machine has a rotary 4th axis (not 3-axis-only). */
+function isFourthAxisEnabled() {
+  if (getProperty("fourthAxisAround") == "none") {
+    return false;
+  }
+  return machineConfiguration.isMultiAxisConfiguration() &&
+    (machineConfiguration.isMachineCoordinate(0) ||
+     machineConfiguration.isMachineCoordinate(1) ||
+     machineConfiguration.isMachineCoordinate(2));
+}
+
+/**
+  True when this linear move interpolates the rotary axis.
+  A formatted A/B/C word is not enough — forceABC() re-outputs the parked
+  angle on 3-axis and indexed moves, which must stay in G94.
+*/
+function isFourthAxisActive(_a, _b, _c) {
+  if (!isFourthAxisEnabled()) {
+    return false;
+  }
+  if (!currentSection || !currentSection.isMultiAxis()) {
+    return false;
+  }
+  var start = (typeof getCurrentDirection === "function") ? getCurrentDirection() : currentMachineABC;
+  if (!start) {
+    start = new Vector(0, 0, 0);
+  }
+  return (machineConfiguration.isMachineCoordinate(0) && abcFormat.areDifferent(_a, start.x)) ||
+         (machineConfiguration.isMachineCoordinate(1) && abcFormat.areDifferent(_b, start.y)) ||
+         (machineConfiguration.isMachineCoordinate(2) && abcFormat.areDifferent(_c, start.z));
+}
+
 function configureMultiAxisFeedrate() {
-  if (!machineConfiguration.isMultiAxisConfiguration()) {
+  useInverseTimeFeed = false;
+  if (!isFourthAxisEnabled()) {
     return;
   }
-  if (getProperty("useInverseTimeFeed")) {
+  if (getProperty("useInverseTimeFeed") !== false) {
     machineConfiguration.setMultiAxisFeedrate(
       FEED_INVERSE_TIME,
       maxInverseTime,
@@ -340,6 +373,7 @@ function configureMultiAxisFeedrate() {
       0.5,
       dpmBPW
     );
+    useInverseTimeFeed = true;
   } else {
     machineConfiguration.setMultiAxisFeedrate(
       FEED_FPM,
@@ -353,7 +387,6 @@ function configureMultiAxisFeedrate() {
     setMachineConfiguration(machineConfiguration);
   }
   optimizeMachineAngles2(1); // map tip mode, non-TCP (matches trivkins XYZA)
-  useInverseTimeFeed = getProperty("useInverseTimeFeed") !== false;
 }
 
 /**
@@ -424,7 +457,7 @@ function onOpen() {
       machineConfiguration = new MachineConfiguration(aAxis);
       machineConfiguration.setVendor("LinuxCNC");
       machineConfiguration.setModel("Lemontart XYZA");
-      machineConfiguration.setDescription("Table A on X, non-TCP, G93 inverse time on simultaneous moves");
+      machineConfiguration.setDescription("Table A on X, non-TCP, G93 inverse time only while A is moving");
       setMachineConfiguration(machineConfiguration);
     } else {
       machineConfiguration = new MachineConfiguration();
@@ -558,7 +591,8 @@ function onOpen() {
 
   // Absolute, G94 units/min, incremental arc centers. Do not start in G93 —
   // M600/tool_touch_off uses G1 F as mm/min, and 3-axis cuts are G94.
-  // Simultaneous XYZA blocks switch to G93 in onLinear5D.
+  // Simultaneous XYZA blocks switch to G93 in onLinear5D only when the 4th
+  // axis is enabled and actually interpolating.
   writeBlock(gAbsIncModal.format(90), gFeedModeModal.format(94), gPlaneModal.format(17), gFormat.format(91.1));
 
   switch (unit) {
@@ -608,8 +642,10 @@ function FeedContext(id, description, feed) {
 }
 
 function getFeed(f) {
-  if (useInverseTimeFeed) {
-		forceFeed();
+  // Inverse time F is not modal. Only force it during simultaneous 4-axis
+  // sections; G94 3-axis / indexed F is modal and must not be spammed.
+  if (useInverseTimeFeed && isFourthAxisEnabled() && currentSection && currentSection.isMultiAxis()) {
+    forceFeed();
   }
   if (activeMovements) {
     var feedContext = activeMovements[movement];
@@ -1375,7 +1411,7 @@ function getMultiaxisFeed(_x, _y, _z, _a, _b, _c, feed) {
 
   var length = getMoveLength(_x, _y, _z, _a, _b, _c);
 
-  if (useInverseTimeFeed) { // G93 inverse time (G93) for coordinated XYZA
+  if (useInverseTimeFeed) { // G93 inverse time for coordinated XYZA while rotary is moving
     f.frn = inverseTimeOutput.format(getInverseTime(length, feed));
     f.fmode = 93;
     feedOutput.reset();
@@ -1554,9 +1590,10 @@ function onLinear5D(_x, _y, _z, _a, _b, _c, feed) {
   var b = bOutput.format(_b);
   var c = cOutput.format(_c);
   
-  // get feedrate number
-  var f = {frn:0, fmode:0};
-  if (a || b || c) {
+  // G93 only when 4th axis is enabled and this block interpolates it.
+  // Parked / forced A words (forceABC) and XYZ-only 5D moves stay G94.
+  var f = {frn:0, fmode:94};
+  if (isFourthAxisActive(_a, _b, _c)) {
     f = getMultiaxisFeed(_x, _y, _z, _a, _b, _c, feed);
   } else {
     f.frn = feedOutput.format(feed);
@@ -1802,6 +1839,7 @@ function onCommand(command) {
 
 function onSectionEnd() {
   if (currentSection.isMultiAxis()) {
+    writeBlock(gFeedModeModal.format(94)); // restore units/min after simultaneous 4-axis
     writeBlock(gMotionModal.format(49));
   }
   writeBlock(gPlaneModal.format(17));

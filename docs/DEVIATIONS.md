@@ -87,7 +87,7 @@ Standard 4-axis mill table rotary. **Not TCP** — Fusion post uses `optimizeMac
 RS274NGC_STARTUP_CODE = F10 S300 G21 G17 G40 G49 G54 G64 P0.001 G80 G90 G91.1 G94 G97 G98
 ```
 
-Metric (`G21`), absolute (`G90`), **`G94`** feed per minute default. Simultaneous 4-axis CAM blocks use **`G93`** inverse time from the post — not in startup.
+Metric (`G21`), absolute (`G90`), **`G94`** feed per minute default. Simultaneous 4-axis CAM blocks use **`G93`** inverse time from the post only while the 4th axis is enabled and interpolating — not in startup.
 
 ### `MAX_FEED_OVERRIDE = 2.5`
 
@@ -294,7 +294,7 @@ If Probe Basic fails to render on your GPU, launch with
 
 - Default **`toolChangeMode: "M600"`**
 - **`preloadTool: false`**
-- **G93** on simultaneous `G1 XYZA`
+- **G93** only on simultaneous `G1 XYZA` while the 4th axis is enabled and moving; otherwise **G94**
 - Fourth axis **table on X**, non-TCP
 - Property groups require Fusion post engine **45702+**
 
