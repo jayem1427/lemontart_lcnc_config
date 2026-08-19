@@ -193,6 +193,10 @@ o<feed_lock> endif
 
 ;-30- Save tool number of old and new tool
 #<tool_in_spindle> = #<_current_tool>   ;Value from system variable
+; Fallback if _current_tool is unset but tool table still reports a loaded tool
+o<curr_fallback> if [#<tool_in_spindle> LE 0 AND #5400 GT 0]
+  #<tool_in_spindle> = #5400
+o<curr_fallback> endif
 #<tool_selected> = #<_selected_tool>    ;Value from system variable
 ; Manual touch-off (Probe Basic button): tool is in spindle via M61, selected_tool often still 0
 o<95> if [#<mode> EQ 0]
@@ -204,14 +208,19 @@ o<95> endif
 o<validate_tool> if [#<mode> EQ 1 AND #<tool_selected> LE 0]
   (ABORT, M600 requires T before M600 — no tool prepared)
 o<validate_tool> endif
-(LOG, Old tool: #<tool_in_spindle> / New tool: #<tool_selected>)
+(LOG, Old tool: #<tool_in_spindle> / New tool: #<tool_selected> / Length: #5403)
 
-; CAM M600: spindle already has this tool — apply G43 and continue, no park/dialog/probe
-o<90> if [#<mode> EQ 1 AND #<tool_in_spindle> EQ #<tool_selected>]
-  G43
-  (LOG, END same tool already in spindle)
-  (LOGCLOSE)
-  o<tool_touch_off> return
+; CAM M600: same tool already loaded and measured — keep G43, do not remesure.
+; Bare G43 is not enough after a prior G49; always re-apply H for this tool.
+; Length #5403 LE 0 means table entry was never measured — fall through to probe.
+o<90> if [#<mode> EQ 1 AND #<tool_selected> GT 0 AND #<tool_in_spindle> EQ #<tool_selected>]
+  o<91> if [#5403 GT 0]
+    G43 H#<tool_selected>
+    (LOG, END same tool already in spindle — length kept, no remesure)
+    (LOGCLOSE)
+    o<tool_touch_off> return
+  o<91> endif
+  (LOG, Same tool in spindle but length unset — measuring)
 o<90> endif
 
 

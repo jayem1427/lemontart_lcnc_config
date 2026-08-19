@@ -1840,7 +1840,8 @@ function onCommand(command) {
 function onSectionEnd() {
   if (currentSection.isMultiAxis()) {
     writeBlock(gFeedModeModal.format(94)); // restore units/min after simultaneous 4-axis
-    writeBlock(gMotionModal.format(49));
+    // Do NOT emit G49 here. This machine is non-TCP trivkins; G49 cancels G43
+    // tool length and makes work Z look like the WCS died. Keep G43 active.
   }
   writeBlock(gPlaneModal.format(17));
 

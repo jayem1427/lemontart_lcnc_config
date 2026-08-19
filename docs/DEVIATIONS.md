@@ -295,8 +295,10 @@ If Probe Basic fails to render on your GPU, launch with
 - Default **`toolChangeMode: "M600"`**
 - **`preloadTool: false`**
 - **G93** only on simultaneous `G1 XYZA` while the 4th axis is enabled and moving; otherwise **G94**
+- **No `G49` after multi-axis** — non-TCP; would cancel `G43` tool length
 - Fourth axis **table on X**, non-TCP
 - Property groups require Fusion post engine **45702+**
+- M600 **same-tool skip** when spindle tool matches CAM `T` and `#5403 > 0`
 
 Full property table: [TOOLSETTER.md](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps).
 

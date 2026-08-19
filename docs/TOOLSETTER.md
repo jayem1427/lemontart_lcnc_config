@@ -93,7 +93,7 @@ Update README cross-references if you document a non-99 default elsewhere.
 - Tool-change positioning uses **30000 / 10000 mm/min** traverse overrides (`#<traverse_xy_fr>` / `#<traverse_z_fr>`), not Probe Basic `#3006` alone
 - `M50 P1` runs **before** M6 so feed override is enabled when the OK dialog appears
 - No post-probe `M00`/`M01` — CAM resumes cutting immediately after the probe cycle
-- **Same tool already in spindle:** compare `#<_current_tool>` to CAM `T` captured as `#2002` in `m600.ngc`. Match → `G43` and return (no park, no OK dialog, no setter probe, no `M00`). Mismatch → full change+probe. Manual **TOUCH OFF CURRENT TOOL** always measures.
+- **Same tool already in spindle:** compare `#<_current_tool>` (fallback `#5400`) to CAM `T` captured as `#2002` in `m600.ngc`. Match **and** tool-table length `#5403 > 0` → `G43 H<tool>` and return (no park, no OK dialog, no setter probe). Match but length unset → full measure. Mismatch → full change+probe. Manual **TOUCH OFF CURRENT TOOL** always measures. This path never issues `G49`, so active WCS / length stay intact.
 
 ### Tool-load position (collet change)
 
@@ -225,6 +225,7 @@ G93 G1 X... Y... Z... A... F...
 - **Indexing** (tilt A, then 3-axis cut): `G0`/`G1` with A on plane changes — stays **`G94`**.
 - **Simultaneous** (swarf / multi-axis): `onLinear5D` uses **`getMultiaxisFeed`** only while the 4th axis is **enabled** (`fourthAxisAround` not None, machine has a rotary) **and active** (this block interpolates A). Then it posts **`G93 G1`** with inverse-time **`F`**. XYZ-only segments in a 4-axis op, 3-axis ops, and 3-axis-only posting stay **`G94`**.
 - **Program header** is **`G90 G94 G17 G91.1`** (units per minute). Do not start CAM in `G93` — M600 `G1`/`G38` feeds are mm/min. A simultaneous section restores **`G94`** at `onSectionEnd`.
+- **Do not post `G49` after multi-axis.** This machine is non-TCP; `G49` cancels `G43` tool length and makes work Z look like the WCS is gone. Keep `G43` active across section boundaries.
 - **Plain 3-axis** cuts always use **`G94`** and a normal feed-per-minute `F`. A forced `A` word (parked angle) does not switch to inverse time.
 
 Machine definition in the post: **table A along X** (`fourthAxisAround: "x"`, `fourthAxisIsTable: true`), **`optimizeMachineAngles2(1)`** (map tip, non-TCP) to match **`trivkins coordinates=XYZA`** in `ethercat_mill.ini`. Do not enable TCP in Fusion for this config unless you add TCP kinematics in LinuxCNC.
@@ -234,7 +235,7 @@ In Fusion, use **4-axis simultaneous** / multi-axis strategies with this post se
 ### Operator notes
 
 - At G30, click **OK** on the Manual Tool Change dialog to confirm the collet change; the program continues automatically — no extra Cycle Start or feed-unhold step
-- If the CAM `T` is already the spindle tool, M600 does not prompt or probe — it applies `G43` and the job starts. Reload LinuxCNC after changing `tool_touch_off.ngc`. Existing posted files do not need a re-post (`G94` is inside the macro). Copy the updated post into Fusion when you next post so new files start in `G94`.
+- If the CAM `T` is already the spindle tool **and** that tool has a measured length (`#5403 > 0`), M600 does not prompt or probe — it applies `G43 H` and the job continues. Reload LinuxCNC after changing `tool_touch_off.ngc`. Existing posted files do not need a re-post for the skip (`G94` is inside the macro). Copy the updated post into Fusion when you next post so multi-axis sections no longer emit `G49`.
 
 ## ATC compatibility
 
