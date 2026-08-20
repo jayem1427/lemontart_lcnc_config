@@ -1,14 +1,14 @@
-(Laser diameter repeatability - 20x measure, avg + sample stdev + raw list.)
+(Laser diameter repeatability - 5x measure, avg + sample stdev + raw list.)
 (MDI: o<laser_diameter_stats> call)
 (Needs BEAM XY / params already set - same as MEASURE DIAMETER.)
-(Stores corr #5531-#5550, raw #5551-#5570; mean #5571, stdev #5572, n #5573.)
+(Stores corr #5531-#5535, raw #5551-#5555; mean #5571, stdev #5572, n #5573.)
 (Keep params under 5600 - LinuxCNC RS274NGC_MAX_PARAMETERS.)
 (Each sample: up to 3 measure attempts before abort.)
 
 o<laser_diameter_stats> sub
     o<400> if [#<_task> EQ 1]
 
-    #<n_runs> = 20
+    #<n_runs> = 5
     #<max_attempts> = 3
     #<sum> = 0
     #<i> = 1
@@ -72,7 +72,7 @@ o<laser_diameter_stats> sub
     M68 E1 Q1
 
     (DEBUG, LASER STATS: DONE n=#<n_runs> avg=#<mean> sample_stdev=#<stdev>)
-    (DEBUG, LASER STATS: corr #5531-#5550 raw #5551-#5570 mean #5571 stdev #5572)
+    (DEBUG, LASER STATS: corr #5531+ raw #5551+ mean #5571 stdev #5572)
 
     #<i> = 1
     o<stats_dump> while [#<i> LE #<n_runs>]

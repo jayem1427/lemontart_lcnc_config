@@ -41,7 +41,7 @@ systems don't fight when you're not measuring.
 | **+X / −X scan dots** | Works — red→gray (clear) / green (peak) from parked-X samples (`M68 E2/E3`) |
 | **Hit CSV** | Works — `logs/laser_hits/<stamp>_diameter.csv` after MEASURE |
 | **MEASURE DIAMETER** | Works — coarse G38 + static-X peak hunt (0.02 mm then 0.001 mm) |
-| **20× stats** | Works — MDI `o<laser_diameter_stats> call` (avg + sample stdev) |
+| **5× stats** | Works — MDI `o<laser_diameter_stats> call` (avg + sample stdev) |
 | **CALIBRATE BEAM** / editable **MEASURED BEAM WIDTH** | Works — master pin − raw → `#5516` |
 | **MEASURE LENGTH** | Experimental (needs `#5504` BEAM Z via MDI; not a contact TLO replacement) |
 | Runout / broken-tool / air blast | Not built yet (roadmap only — no fake buttons) |
@@ -221,7 +221,7 @@ Each accepted (or final-failed) tip hit also publishes `M68 E2` (X mm) and `M68 
 | `probe_basic/user_tabs/laser_setter/` | Tab UI + tool-setter photo |
 | `laser_diameter.ngc` | Diameter sequence |
 | `laser_static_edge.ngc` | Park-X peak hunt (medium 0.02 mm, then fine 0.001 mm) |
-| `laser_diameter_stats.ngc` | 20× diameter, mean + sample stdev (`o<laser_diameter_stats> call`) |
+| `laser_diameter_stats.ngc` | 5× diameter, mean + sample stdev (`o<laser_diameter_stats> call`) |
 | `laser_length.ngc` | Length experiment |
 | `laser_set_start_xy.ngc` | BEAM X/Y + RPM → `#5501–#5503` (UI usually writes params directly) |
 | `laser_set_diam_params.ngc` | Z DROP / MAX TRAVEL / START OFFSET |
@@ -253,8 +253,8 @@ teach (`#5181–#5186`) or ATC `M66` (`#5399`).
 | `#5516` | Beam width | `master − raw` offset; corrected = raw + `#5516` |
 | `#5517` | Master pin | Last master-pin size used for cal |
 | `#5518` | Reverse spindle | 1 = **M3** (VFD reverse); 0 = **M4** (forward); `custom.hal` swaps M3/M4 |
-| `#5531–#5550` | Stats corr | 20 corrected diameters from `laser_diameter_stats` |
-| `#5551–#5570` | Stats raw | Matching raw widths |
+| `#5531–#5535` | Stats corr | 5 corrected diameters from `laser_diameter_stats` |
+| `#5551–#5555` | Stats raw | Matching raw widths |
 | `#5571` / `#5572` / `#5573` | Stats mean / sample stdev / n | MDI `o<laser_diameter_stats> call` |
 
 UI always syncs **millimeters** into these params, even if the Units combo shows inches.
@@ -290,16 +290,16 @@ G38 is still used for tip-find, the coarse locate, and the gullet-bridging
 transit (`on-delay=0`, `off-delay=BEAM_OFF_DELAY`). The static hunt keeps the
 mux **off** and reads RAW via `M66 P3`.
 
-Peak wait is a **fixed** `M66 P3 L3` timeout (`#<peak_dwell>` = **0.10 s**),
+Peak wait is a **fixed** `M66 P3 L3` timeout (`#<peak_dwell>` = **0.20 s**),
 not N revolutions. `M66` returns as soon as RAW goes HIGH; the timeout only
-runs out on a **clear** station. 100 ms ≈ 1 rev at 600 RPM, about 1.7 revs
-at 1000 RPM, 5 revs at 3000 RPM. Pins (`RPM = 0`) use the same settled read.
+runs out on a **clear** station. 200 ms ≈ 2 revs at 600 RPM, about 3.3 revs
+at 1000 RPM, 10 revs at 3000 RPM. Pins (`RPM = 0`) use the same settled read.
 Coarse G38 feed stays **F50**.
 
 **Re-run CALIBRATE BEAM** on a master pin after switching to this method — old
 `#5516` values included moving-G38 phase scatter.
 
-### Repeatability (20× stats)
+### Repeatability (5× stats)
 
 From MDI (same BEAM / RPM / Z DROP as MEASURE DIAMETER):
 
@@ -307,9 +307,9 @@ From MDI (same BEAM / RPM / Z DROP as MEASURE DIAMETER):
 o<laser_diameter_stats> call
 ```
 
-That calls `o<laser_diameter>` **20 times** (up to 3 retries per sample), then
+That calls `o<laser_diameter>` **5 times** (up to 3 retries per sample), then
 prints mean and sample stdev. Results stay in `#5531–#5573` (must stay below
-`#5600`). Hit dots will cycle through all 20 runs if the Laser Setter tab is
+`#5600`). Hit dots will cycle through all 5 runs if the Laser Setter tab is
 open — that is expected.
 
 ### What failed (do not resurrect)
