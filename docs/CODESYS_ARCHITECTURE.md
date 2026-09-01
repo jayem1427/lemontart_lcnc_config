@@ -51,7 +51,7 @@ Skip CODESYS WebVisu as the main operator UI. It is fine for a maintenance page.
 
 What those names mean if you are new to web tooling:
 
-- **Vue** — the UI framework (buttons, DRO, tabs). You mentioned it; it is the right pick. The Composition API maps cleanly onto “this screen watches these PLC tags.”
+- **Vue** — the UI framework (buttons, DRO, tabs). A kiosk SPA is the right *kind* of app; Vue 3 is a strong default, not a law of physics — see [Why Vue](#why-vue-and-what-the-hmi-actually-is).
 - **TypeScript** — JavaScript with types. Catches “wrote RPM into a bool” before you hit the machine.
 - **Vite** — the dev server. Save a `.vue` file, the kiosk browser hot-reloads in milliseconds. That is the rapid prototyping.
 - **Pinia** — the shared machine state in the browser (`estop`, `xpos`, `spindleRpm`…).
@@ -63,6 +63,51 @@ What those names mean if you are new to web tooling:
 **Not Node-RED, not Next.js SSR, not putting the interpolator in JavaScript.** Node-RED is a glue toy. Next.js server-rendering does nothing useful on a shop kiosk. A browser cannot close a 1 ms position loop.
 
 WebVisu can still ship as a **backup/maintenance page** (force enable, raw IO) so you can recover if the Vue stack is down.
+
+---
+
+## Why Vue (and what the HMI actually is)
+
+Two different questions get mixed together.
+
+### 1. Is a browser app the right *application*?
+
+Yes, for the operator UI. The “application” on the mill is not Vue. It is:
+
+| Process | Job |
+|---------|-----|
+| CODESYS runtime | Motion, IO, safety |
+| Gateway | OPC UA ↔ WebSocket/REST |
+| **Kiosk SPA** | Screens, plots, buttons |
+
+A shop HMI is a **single-page app** that stays open for hours, pushes a DRO at ~20 Hz, and opens modals that must not lose state. It is not a marketing site, not a document CMS, not a server-rendered Next.js app.
+
+Native Qt (Probe Basic today) is also a valid HMI. We are leaving it because iteration is slow and 3D/plotting/tablet access are painful. CODESYS WebVisu is a valid *industrial* HMI and a poor *product* HMI for this mill’s tuner/laser/probe density.
+
+So: browser SPA = proper application type. Vue = one implementation of that type.
+
+### 2. Why Vue 3 instead of React or Svelte?
+
+Vue is the default because it fits this project, not because it is “more mill-correct” than React.
+
+| | Vue 3 + Vite | React + Vite | Svelte 5 + Vite |
+|--|--------------|--------------|-----------------|
+| Kiosk SPA | Excellent | Excellent if you skip Next.js | Excellent |
+| Beginner slope | Gentlest (templates + script) | Steeper (hooks, render model) | Small API, fewer tutorials |
+| PLC-tag mental model | `ref` / `computed` ≈ watching a GVL | You invent that with stores | Runes are close too |
+| 3D backplot / uPlot | All three wrap the same canvas libs | Same | Same |
+| “Nerd default” 2026 | Strong | Strongest hiring pool | Fashion-forward, smaller bench |
+| What would actually bite you | Fewer React-only examples | Easy to drag in Next.js SSR you do not need | Ecosystem for kits and hired help |
+
+All three update a 20 Hz DRO without breaking a sweat. The 1 ms loop is not in the browser. Framework choice does not change EtherCAT, SoftMotion, or the plugin sockets.
+
+**Why not React here:** React is a peer, not a mistake. The trap is *Next.js*, which optimizes for websites with server rendering. A mill kiosk has no SEO, no server HTML, and a WebSocket that must stay up. If you later prefer React, use **React + Vite + TanStack Router/Query**, not Next.
+
+**Why not Svelte here:** It would get some nerds *more* excited (compiler, tiny bundle). It is a worse first bet for a beginner who will google “OPC UA websocket HMI” and find Vue/React answers. Revisit if the team already thinks in Svelte.
+
+**Keep TypeScript + Vite + a store + uPlot + Three.js** whichever UI library you pick. That set is the actual HMI stack. Vue is the templating layer on top.
+
+You mentioned Vue first; that is a real reason to pick it when the alternatives are ties. If you would rather write React, say so before stage 5. The PLC and gateway do not care.
 
 ---
 
@@ -422,8 +467,8 @@ The existing `probe_basic/` tree remains the behavior spec until each pack has a
 
 | Decision | Choice | Rejected |
 |----------|--------|----------|
-| Operator HMI | Custom Vue SPA | WebVisu as primary, Ignition, AdvancedHMI |
-| UI framework | Vue 3 + TS + Vite | React/Next (SSR unused), Svelte (fewer industrial examples), Qt in a browser |
+| Operator HMI | Kiosk SPA in a browser | WebVisu as primary, Ignition, staying on QtPyVCP |
+| UI library | Vue 3 + TS + Vite (default) | Next.js SSR; Svelte as first bet; React is a peer if it stays Vite |
 | PLC language | Structured Text | Ladder, Python-on-PLC |
 | Browser ↔ PLC | OPC UA → gateway → WebSocket | Polling REST for DRO, OPC UA from the browser, MQTT as the only bus |
 | Probe cycles | ST FBs + G31 | Shipping LinuxCNC `.ngc` unchanged |
@@ -431,7 +476,7 @@ The existing `probe_basic/` tree remains the behavior spec until each pack has a
 | Pendant | USB userspace bridge | Waiting for a CODESYS HID library |
 | Features | Declared packs + kernel sockets | Probe Basic “load every `user_tabs` folder” |
 
-If you want a different “nerd stack” (Svelte 5, Rust gateway, Tauri desktop wrapper), the PLC boundary does not change. Only apps/gateway and apps/hmi do.
+If you swap Vue for React+Vite or Svelte, or wrap the kiosk in Tauri later, the PLC boundary does not change. Only `apps/hmi` does.
 
 ---
 
@@ -439,4 +484,4 @@ If you want a different “nerd stack” (Svelte 5, Rust gateway, Tauri desktop 
 
 Do **not** scaffold the Vue app until stage 1 (one A6 jogging under CiA 402 in CODESYS) is true on the bench. The first document to write alongside the runtime is `GVL_Machine` — the tag list the HMI will bind to — so the web side can be mocked with fake OPC UA before the interpolator exists.
 
-When the shell exists, add packs one at a time (`spindle-h100` first) against the sockets in [CODESYS_PLUGINS.md](CODESYS_PLUGINS.md). Do not build a plugin marketplace before one pack has shipped.
+When the shell exists, add packs one at a time (`spindle-h100` first) against the sockets in [CODESYS_PLUGINS.md](CODESYS_PLUGINS.md). A curated catalog is a later product; do not start with an open plugin store.

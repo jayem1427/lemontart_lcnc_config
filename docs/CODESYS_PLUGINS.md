@@ -259,15 +259,29 @@ Laser measure requests `Laser`; M600 length probe requests `Toolsetter`; WCS rou
 
 ---
 
-## What we deliberately will not build
+## Marketplace vs catalog
 
-- A public plugin marketplace
-- Loading Vue packs from a USB stick on a running interpolator
-- Plugins that call `SMC_Interpolator` directly
-- Filesystem auto-discovery of folders (the Probe Basic trap)
-- One “misc” plugin for leftover buttons
+Nothing is wrong with a **catalog**. That is the product shape if other mills ever run this: a list of first-party packs, compatibility with a kernel version, one-click enable in the profile, doctor checks, signed downloads.
 
-If a feature needs a new kernel socket (for example a second spindle), **extend the kernel on purpose** and bump a kernel API version. Packs depend on `kernel.probeMux@1`. That is how you stay clean years later.
+What is wrong is treating a mill like VS Code’s marketplace on day one.
+
+| | Curated catalog (good, later) | Open marketplace (bad on a mill) |
+|--|-------------------------------|----------------------------------|
+| Who publishes | You / reviewed vendors | Anyone with a zip |
+| Install | Profile line + PLC download | “Install” while the interpolator is live |
+| Trust | Signed, version-pinned to `kernel.probeMux@1` | Unsigned Vue + ST that writes OPC UA commands |
+| Hardware | Pack declares DI/SDO/slave needs | “Works on my machine” laser mux on the wrong pin |
+| Failure mode | Doctor refuses a collision | Silent wrong probe source, or a tab that jogs |
+
+A public store implies **hot-install of untrusted code that can command motion**. That is a different threat model from a color theme. CODESYS Store and Beckhoff’s catalog work because they are curated, licensed, and still require an engineering download — they are not npm.
+
+Also: IEC cannot be USB-stick hot-plugged onto a 1 ms task. A marketplace UX that feels like “add laser from the shop floor, no rebuild” would be lying. The honest catalog still needs a PLC compile when a pack was never linked.
+
+**Start:** in-tree packs + `machines/lemontart.yaml`.  
+**Later, if this is a product:** a curated catalog UI that edits the same YAML, plus signed artifacts and a kernel API version.  
+**Not:** an open store, USB-drop Vue packs on a running interpolator, plugins that call `SMC_Interpolator` directly, filesystem auto-discovery, or a “misc” pack for leftover buttons.
+
+If a feature needs a new kernel socket (for example a second spindle), **extend the kernel on purpose** and bump a kernel API version. Packs depend on `kernel.probeMux@1`. That is how a future catalog stays safe.
 
 ---
 
@@ -312,3 +326,4 @@ The plugin SDK (`packages/plugin-sdk`) can start as a 50-line `definePlugin` + r
 | Shared IO | Kernel mux / dispatcher | Each pack writes DIs and M-codes |
 | PLC loading | Libraries + feature bits | Hot-plug ST at 1 ms |
 | First packs | Map of this mill’s subsystems | Generic “user buttons” pack |
+| Distribution | In-tree packs; curated catalog later | Open unsigned marketplace / hot-plug on a live interpolator |
