@@ -8,6 +8,8 @@ E-stop, interpolator, probe latch, drive enables, and following-error trips stay
 
 This page is the architecture and program map for porting **this repo’s features** (not “a generic CNC”) onto that stack. LinuxCNC stays the working machine until the CODESYS side can run air cuts.
 
+Features should not be baked into one blob. A small kernel plus opt-in packs is in **[CODESYS_PLUGINS.md](CODESYS_PLUGINS.md)** (machine profile, contribution points, why we will not auto-scan folders).
+
 ---
 
 ## What “all these features” actually means
@@ -45,7 +47,7 @@ Skip CODESYS WebVisu as the main operator UI. It is fine for a maintenance page.
 | HMI | **Vue 3 + TypeScript + Vite + Pinia + Tailwind + shadcn-vue** | Fastest path from “I have an idea” to a shop-floor screen |
 | Charts | **uPlot** (FERR / torque) | Tiny and fast enough for live traces |
 | Backplot | **Three.js** | 3D XYZA toolpath that Probe Basic cannot match |
-| Repo layout | **pnpm workspace monorepo** next to the CODESYS project | One git tree: PLC export + gateway + UI |
+| Repo layout | **pnpm workspace + `plugins/<id>/` packs** | Kernel apps + vertical feature slices; see [CODESYS_PLUGINS.md](CODESYS_PLUGINS.md) |
 
 What those names mean if you are new to web tooling:
 
@@ -368,20 +370,31 @@ Suggested first Vue milestone (stage 5): Machine ON, estop, four DROs (actual mm
 Not created yet. When it is, keep it **beside** this LinuxCNC tree rather than mixing HAL with Vite configs.
 
 ```
+machines/
+  lemontart.yaml             # kernel + enabled plugin ids (the one enablement file)
 codesys/
-  LemontartMill.project/     # CODESYS export / git-friendly ST if using Git integration
-  GVL_Machine.md             # tag dictionary (source of truth for OPC UA)
+  LemontartMill.project/     # kernel POUs + linked feature libraries
 apps/
-  gateway/                   # Hono + node-opcua
-  hmi/                       # Vue 3 + Vite
+  gateway/                   # kernel HTTP/WebSocket + plugin mount
+  hmi/                       # Vue shell; routes come from enabled packs
 packages/
-  auto-tune/                 # port of probe_basic/python/a6_*.py
-  machine-types/             # shared TypeScript types from GVL
+  plugin-sdk/                # definePlugin(), registry, doctor
+  machine-types/             # shared TypeScript types from GVLs
+plugins/
+  spindle-h100/              # plc/ + gateway/ + hmi/ + plugin.yaml
+  toolchange-m600/
+  laser-setter/
+  wcs-probe/
+  servo-tune/
+  signal-log/
+  pendant-whb/
 post-processor/
   codesys-smc-xyza.cps
 ```
 
-The existing `probe_basic/` tree remains the behavior spec until each feature has a checkbox on the CODESYS side.
+Enable a feature by adding its id to `machines/lemontart.yaml`, not by dropping a folder into a scanned directory. Details: [CODESYS_PLUGINS.md](CODESYS_PLUGINS.md).
+
+The existing `probe_basic/` tree remains the behavior spec until each pack has a checkbox on the CODESYS side.
 
 ---
 
@@ -401,6 +414,7 @@ The existing `probe_basic/` tree remains the behavior spec until each feature ha
 | Kiosk | Full-screen Chromium on the mill PC |
 | SDO / PDO | EtherCAT: PDOs every cycle (position); SDOs occasionally (gains) |
 | M-function | G-code `M600` that pauses interpolation until ST acknowledges |
+| Feature pack | Optional vertical slice (PLC + gateway + Vue) enabled in the machine profile |
 
 ---
 
@@ -415,6 +429,7 @@ The existing `probe_basic/` tree remains the behavior spec until each feature ha
 | Probe cycles | ST FBs + G31 | Shipping LinuxCNC `.ngc` unchanged |
 | Auto-tune math | TypeScript on gateway | FFT inside the PLC |
 | Pendant | USB userspace bridge | Waiting for a CODESYS HID library |
+| Features | Declared packs + kernel sockets | Probe Basic “load every `user_tabs` folder” |
 
 If you want a different “nerd stack” (Svelte 5, Rust gateway, Tauri desktop wrapper), the PLC boundary does not change. Only apps/gateway and apps/hmi do.
 
@@ -423,3 +438,5 @@ If you want a different “nerd stack” (Svelte 5, Rust gateway, Tauri desktop 
 ## Next concrete step
 
 Do **not** scaffold the Vue app until stage 1 (one A6 jogging under CiA 402 in CODESYS) is true on the bench. The first document to write alongside the runtime is `GVL_Machine` — the tag list the HMI will bind to — so the web side can be mocked with fake OPC UA before the interpolator exists.
+
+When the shell exists, add packs one at a time (`spindle-h100` first) against the sockets in [CODESYS_PLUGINS.md](CODESYS_PLUGINS.md). Do not build a plugin marketplace before one pack has shipped.

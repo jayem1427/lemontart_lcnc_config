@@ -7,7 +7,8 @@ things together.
 
 **Start here:** [GETTING_STARTED.md](GETTING_STARTED.md) (zero → hero) ·
 [DEVIATIONS.md](DEVIATIONS.md) (vs stock LinuxCNC / Probe Basic) ·
-[CODESYS_ARCHITECTURE.md](CODESYS_ARCHITECTURE.md) (CODESYS + browser HMI port map)
+[CODESYS_ARCHITECTURE.md](CODESYS_ARCHITECTURE.md) (CODESYS + browser HMI) ·
+[CODESYS_PLUGINS.md](CODESYS_PLUGINS.md) (kernel + feature packs)
 
 ---
 
@@ -39,6 +40,7 @@ things together.
 | Copy servo tuning tabs | [INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md) |
 | Fusion post (M600, XYZA, G93) | [TOOLSETTER.md § CAM](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps) |
 | Port this mill to CODESYS + a browser HMI | [CODESYS_ARCHITECTURE.md](CODESYS_ARCHITECTURE.md) |
+| Kernel + feature packs (plugin model) | [CODESYS_PLUGINS.md](CODESYS_PLUGINS.md) |
 
 ### Servo tuning
 
@@ -105,6 +107,7 @@ We do not claim these integrations are the only correct approach.
 |-----|--------|
 | [A6_TUNING.md](A6_TUNING.md) | A6 SDO map, Servo Tuning tab, 6065/6066 windows |
 | [CODESYS_ARCHITECTURE.md](CODESYS_ARCHITECTURE.md) | CODESYS SoftMotion + Vue browser HMI architecture and program map |
+| [CODESYS_PLUGINS.md](CODESYS_PLUGINS.md) | Base kernel + independent feature packs (manifest, mux sockets) |
 | [DEVIATIONS.md](DEVIATIONS.md) | Differences vs stock LinuxCNC / Probe Basic |
 | [GETTING_STARTED.md](GETTING_STARTED.md) | Zero-to-hero bring-up path |
 | [GRAPHICAL_INERTIA_TUNE.md](GRAPHICAL_INERTIA_TUNE.md) | Inertia identification panel (WIP) |

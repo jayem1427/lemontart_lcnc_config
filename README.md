@@ -32,7 +32,7 @@ If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page 
 |------------|-----------|
 | Bring the machine up from zero | **[GETTING_STARTED.md](docs/GETTING_STARTED.md)** |
 | Understand “why doesn’t this behave like stock?” | **[DEVIATIONS.md](docs/DEVIATIONS.md)** |
-| Port this mill to a CODESYS PLC + browser HMI | **[CODESYS_ARCHITECTURE.md](docs/CODESYS_ARCHITECTURE.md)** |
+| Port this mill to a CODESYS PLC + browser HMI | **[CODESYS_ARCHITECTURE.md](docs/CODESYS_ARCHITECTURE.md)** · plugins: **[CODESYS_PLUGINS.md](docs/CODESYS_PLUGINS.md)** |
 | Change tools and probe length (contact setter) | **[TOOLSETTER.md](docs/TOOLSETTER.md)** |
 | Measure diameter with the laser | **[LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md)** |
 | Copy tool-change onto another mill | **[INSTALL_TOOL_CHANGE.md](docs/INSTALL_TOOL_CHANGE.md)** |
