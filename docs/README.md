@@ -6,7 +6,8 @@ LinuxCNC and Probe Basic docs; use these pages to see how *this* machine wires
 things together.
 
 **Start here:** [GETTING_STARTED.md](GETTING_STARTED.md) (zero → hero) ·
-[DEVIATIONS.md](DEVIATIONS.md) (vs stock LinuxCNC / Probe Basic)
+[DEVIATIONS.md](DEVIATIONS.md) (vs stock LinuxCNC / Probe Basic) ·
+[CODESYS_ARCHITECTURE.md](CODESYS_ARCHITECTURE.md) (CODESYS + browser HMI port map)
 
 ---
 
@@ -37,6 +38,7 @@ things together.
 | Copy tool-change to another mill | [INSTALL_TOOL_CHANGE.md](INSTALL_TOOL_CHANGE.md) |
 | Copy servo tuning tabs | [INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md) |
 | Fusion post (M600, XYZA, G93) | [TOOLSETTER.md § CAM](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps) |
+| Port this mill to CODESYS + a browser HMI | [CODESYS_ARCHITECTURE.md](CODESYS_ARCHITECTURE.md) |
 
 ### Servo tuning
 
@@ -102,6 +104,7 @@ We do not claim these integrations are the only correct approach.
 | Doc | Covers |
 |-----|--------|
 | [A6_TUNING.md](A6_TUNING.md) | A6 SDO map, Servo Tuning tab, 6065/6066 windows |
+| [CODESYS_ARCHITECTURE.md](CODESYS_ARCHITECTURE.md) | CODESYS SoftMotion + Vue browser HMI architecture and program map |
 | [DEVIATIONS.md](DEVIATIONS.md) | Differences vs stock LinuxCNC / Probe Basic |
 | [GETTING_STARTED.md](GETTING_STARTED.md) | Zero-to-hero bring-up path |
 | [GRAPHICAL_INERTIA_TUNE.md](GRAPHICAL_INERTIA_TUNE.md) | Inertia identification panel (WIP) |
