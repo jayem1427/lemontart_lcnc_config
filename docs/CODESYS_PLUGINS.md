@@ -1,6 +1,6 @@
 # Plugin architecture — base mill + independent features
 
-The LinuxCNC tree in this repo is a **monolith with folders**. Probe Basic loads every `user_tabs/` directory; HAL files collide on `or2.0`; installing servo tuning means copying ten paths by hand; tool change is explicitly [not a tab drop-in](INSTALL_TOOL_CHANGE.md#what-this-is-not). A CODESYS + Vue port should not repeat that.
+The LinuxCNC tree in this repo is a **monolith with folders**. Probe Basic loads every `user_tabs/` directory; HAL files collide on `or2.0`; installing servo tuning means copying ten paths by hand; tool change is explicitly [not a tab drop-in](INSTALL_TOOL_CHANGE.md#what-this-is-not). A CODESYS + browser-HMI port should not repeat that.
 
 The model: a **small kernel** that can jog, run G-code, and show a DRO, plus **feature packs** that opt into named sockets on that kernel. Enable a pack in one machine profile. Disable it, and its tab, tags, M-codes, and PLC calls disappear together.
 
@@ -18,7 +18,7 @@ This sits on top of [CODESYS_ARCHITECTURE.md](CODESYS_ARCHITECTURE.md). Same har
 | Laser and contact probe share `motion.probe-input` | Features fight over a global pin unless the kernel arbitrates |
 | `or2.0` vs `or2.1` reserved in HAL | No registry of “who owns this resource” |
 
-A real plugin is a **vertical slice**: PLC + tags + gateway + Vue + persistence, registered through a **manifest**, turned on by a **machine profile**. Not a marketplace of random third-party widgets. Think VS Code contribution points, not WordPress themes.
+A real plugin is a **vertical slice**: PLC + tags + gateway + HMI + persistence, registered through a **manifest**, turned on by a **machine profile**. Not a marketplace of random third-party widgets. Think VS Code contribution points, not WordPress themes.
 
 ---
 
@@ -58,7 +58,7 @@ flowchart LR
   Pendant --> Motion
 ```
 
-**Kernel** (base installation): EtherCAT + CiA 402, XYZA limits, homing, jog, estop, work offsets, tool table *structure*, AUTO/MDI/file load, feed/spindle override, OPC UA heartbeat, Vue shell (Manual / Auto / MDI / Offsets / Settings). Plus empty **sockets**: probe sources, M-function slots, trace channels, CoE access, operator dialogs.
+**Kernel** (base installation): EtherCAT + CiA 402, XYZA limits, homing, jog, estop, work offsets, tool table *structure*, AUTO/MDI/file load, feed/spindle override, OPC UA heartbeat, HMI shell (Manual / Auto / MDI / Offsets / Settings). Plus empty **sockets**: probe sources, M-function slots, trace channels, CoE access, operator dialogs.
 
 **Not in the kernel:** H100 register map, M600 dance, laser peak hunt, Probe Basic pocket routines, one-click FFT, WHB HID.
 
@@ -92,7 +92,7 @@ A `plugin-doctor` command reads this file and fails the build if:
 
 - a plugin depends on a kernel socket or another plugin that is not enabled
 - two plugins claim `M62`, OPC UA prefix `Laser.`, or probe source id `laser`
-- a plugin lists a Vue route `/tune` that another plugin also lists
+- a plugin lists an HMI route `/tune` that another plugin also lists
 
 That doctor is the HAL `or2` collision detector you wished you had.
 
@@ -104,7 +104,7 @@ Each plugin exports one manifest. The kernel does not `import` laser internals. 
 
 | Socket | Kernel provides | Plugin fills in |
 |--------|-----------------|-----------------|
-| `nav` / `routes` | Vue shell + router | `/laser`, `/tune`, `/probe` |
+| `nav` / `routes` | React shell + router | `/laser`, `/tune`, `/probe` |
 | `modals` | dialog host (OK / Abort, Esc policy) | M600 tool-change modal |
 | `droExtras` | XYZA DRO | optional extras; SET Z stays kernel |
 | `mFunctions` | dispatcher (`wM` / `bAcknM`) | `M600`, `M62`/`M63` |
@@ -143,20 +143,20 @@ export default definePlugin({
 
 ## One pack, three layers, same id
 
-A feature is not “a Vue tab.” It is one package id in three trees:
+A feature is not “an HMI tab.” It is one package id in three trees:
 
 ```
 plugins/laser-setter/
   plugin.yaml              # id, version, dependsOn, contributes
   plc/                     # CODESYS library: GVL_Laser, FB_LaserMeasure
   gateway/                 # Hono routes, OPC UA node list
-  hmi/                     # Vue views, Pinia store
+  hmi/                     # React views, TanStack store
   persist.md               # keys and meaning (today’s #5501 table)
 ```
 
 | Layer | How it loads |
 |-------|----------------|
-| Vue | Vite includes only packs listed in `machines/*.yaml`. No glob-all-folders. |
+| HMI | Vite includes only packs listed in `machines/*.yaml`. No glob-all-folders. |
 | Gateway | `registerPlugin()` mounts routes and OPC UA subscriptions for enabled ids |
 | PLC | Feature library linked in the project; `PRG_Plugins` calls `FB_LaserMeasure` only when `GVL_Features.Laser` is TRUE |
 
@@ -201,7 +201,7 @@ Shared resources that **must** stay kernel sockets:
 
 ---
 
-## Vue and gateway: how enablement looks in code
+## HMI and gateway: how enablement looks in code
 
 Kernel shell:
 
@@ -230,7 +230,7 @@ for (const id of profile.plugins) {
 
 The browser only receives tags under prefixes it subscribed to. A mill without `servo-tune` never sees `Tune.*` and never ships `/tune` in the JS bundle.
 
-That last part is the rapid-prototyping win: a new pack is a new folder + one line in `lemontart.yaml`, not a tour of `App.vue`, HAL, and INI.
+That last part is the rapid-prototyping win: a new pack is a new folder + one line in `lemontart.yaml`, not a tour of `App.tsx`, HAL, and INI.
 
 ---
 
@@ -246,7 +246,7 @@ PRG_Plugins     (* enabled FBs only *)
   wcsProbe()        if GVL_Features.WcsProbe
 ```
 
-`GVL_Features` is generated from the same YAML as the Vue loader (a small codegen step, or a checked-in ST file you regenerate when the profile changes). Do not hand-edit a second feature list.
+`GVL_Features` is generated from the same YAML as the HMI loader (a small codegen step, or a checked-in ST file you regenerate when the profile changes). Do not hand-edit a second feature list.
 
 Kernel mux sketch:
 
@@ -269,7 +269,7 @@ What is wrong is treating a mill like VS Code’s marketplace on day one.
 |--|-------------------------------|----------------------------------|
 | Who publishes | You / reviewed vendors | Anyone with a zip |
 | Install | Profile line + PLC download | “Install” while the interpolator is live |
-| Trust | Signed, version-pinned to `kernel.probeMux@1` | Unsigned Vue + ST that writes OPC UA commands |
+| Trust | Signed, version-pinned to `kernel.probeMux@1` | Unsigned UI + ST that writes OPC UA commands |
 | Hardware | Pack declares DI/SDO/slave needs | “Works on my machine” laser mux on the wrong pin |
 | Failure mode | Doctor refuses a collision | Silent wrong probe source, or a tab that jogs |
 
@@ -279,7 +279,7 @@ Also: IEC cannot be USB-stick hot-plugged onto a 1 ms task. A marketplace UX tha
 
 **Start:** in-tree packs + `machines/lemontart.yaml`.  
 **Later, if this is a product:** a curated catalog UI that edits the same YAML, plus signed artifacts and a kernel API version.  
-**Not:** an open store, USB-drop Vue packs on a running interpolator, plugins that call `SMC_Interpolator` directly, filesystem auto-discovery, or a “misc” pack for leftover buttons.
+**Not:** an open store, USB-drop HMI packs on a running interpolator, plugins that call `SMC_Interpolator` directly, filesystem auto-discovery, or a “misc” pack for leftover buttons.
 
 If a feature needs a new kernel socket (for example a second spindle), **extend the kernel on purpose** and bump a kernel API version. Packs depend on `kernel.probeMux@1`. That is how a future catalog stays safe.
 
@@ -291,7 +291,7 @@ Do not design twenty packs on day one. Grow the sockets as the first packs need 
 
 | Stage | Kernel socket to add | First pack that proves it |
 |-------|----------------------|---------------------------|
-| Jog + DRO Vue | (none yet) | — |
+| Jog + DRO HMI | (none yet) | — |
 | Spindle | spindle cmd/fb + fault → estop | `spindle-h100` |
 | G31 | probe mux + M-dispatcher | `toolchange-m600` |
 | Laser | mux slot `laser` + M62/M63 | `laser-setter` |
@@ -308,7 +308,7 @@ The plugin SDK (`packages/plugin-sdk`) can start as a 50-line `definePlugin` + r
 | Term | Meaning |
 |------|---------|
 | Kernel | The mill that always exists: motion, safety, DRO, empty sockets |
-| Feature pack / plugin | One optional capability with PLC + gateway + Vue together |
+| Feature pack / plugin | One optional capability with PLC + gateway + HMI together |
 | Machine profile | YAML listing which packs this mill enables |
 | Contribution point / socket | A named hook (mux slot, M-code, route) the kernel owns |
 | Manifest | The pack’s `plugin.yaml` / `definePlugin()` listing what it hooks |

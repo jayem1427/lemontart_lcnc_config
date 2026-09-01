@@ -19,7 +19,7 @@ This mill is not just four servos and a G-code player. The current LinuxCNC conf
 | Area | What exists today | Why it matters on CODESYS |
 |------|-------------------|---------------------------|
 | Motion | XYZA `trivkins`, 1 ms servo, EtherCAT CiA 402 A6 drives | SoftMotion CNC interpolator + EtherCAT master |
-| UI | Probe Basic (QtPyVCP): DRO, jog, AUTO/MDI, offsets, probe tab, custom tabs | Vue SPA replacing the whole shell |
+| UI | Probe Basic (QtPyVCP): DRO, jog, AUTO/MDI, offsets, probe tab, custom tabs | React SPA replacing the whole shell |
 | Tool length | `T n M600` → park, dialog, contact setter, `G10`/`G43` | M-function handler + G31 probe, not a LinuxCNC remap |
 | Tool diameter | Kexin laser tab + `laser_*.ngc` + HAL mux | Same mux in ST; measure cycles as ST or CNC subprograms |
 | Touch probe | Probe Basic pocket/boss/corner/angle macros (~50 `.ngc`) | ST probe library driven from HMI buttons |
@@ -43,71 +43,75 @@ Skip CODESYS WebVisu as the main operator UI. It is fine for a maintenance page.
 | Motion | **CODESYS SoftMotion CNC** | Real interpolator, lookahead, G-code, M-functions, G31 probing |
 | Fieldbus | **CODESYS EtherCAT Master** + **Modbus RTU Master** | A6 drives and H100 VFD without IgH/`lcec`/`mb2hal` |
 | Tag bus | **CODESYS OPC UA Server** | Industrial standard; HMI never talks EtherCAT |
-| Gateway | **TypeScript + Hono + `node-opcua` + WebSocket** | Browser cannot speak OPC UA; this is the translator |
-| HMI | **Vue 3 + TypeScript + Vite + Pinia + Tailwind + shadcn-vue** | Fastest path from “I have an idea” to a shop-floor screen |
+| Gateway | **Node + TypeScript + `node-opcua` + WebSocket** (Fastify or Hono) | Same language as the HMI; browsers cannot speak OPC UA |
+| HMI | **React + TypeScript + Vite + TanStack + Tailwind + shadcn/ui** | Largest hiring pool; kiosk SPA without Next.js — see [Hirability](#the-honest-choice-for-hirability) |
 | Charts | **uPlot** (FERR / torque) | Tiny and fast enough for live traces |
 | Backplot | **Three.js** | 3D XYZA toolpath that Probe Basic cannot match |
 | Repo layout | **pnpm workspace + `plugins/<id>/` packs** | Kernel apps + vertical feature slices; see [CODESYS_PLUGINS.md](CODESYS_PLUGINS.md) |
 
 What those names mean if you are new to web tooling:
 
-- **Vue** — the UI framework (buttons, DRO, tabs). A kiosk SPA is the right *kind* of app; Vue 3 is a strong default, not a law of physics — see [Why Vue](#why-vue-and-what-the-hmi-actually-is).
-- **TypeScript** — JavaScript with types. Catches “wrote RPM into a bool” before you hit the machine.
-- **Vite** — the dev server. Save a `.vue` file, the kiosk browser hot-reloads in milliseconds. That is the rapid prototyping.
-- **Pinia** — the shared machine state in the browser (`estop`, `xpos`, `spindleRpm`…).
-- **Tailwind / shadcn-vue** — styling without fighting CSS files. Dark mill theme in days, not months.
-- **Hono** — a small TypeScript HTTP/WebSocket server. Not the motion controller.
+- **React** — the UI library (buttons, DRO, tabs). Not the mill; just the kiosk screens. See [Hirability](#the-honest-choice-for-hirability).
+- **TypeScript** — JavaScript with types. Catches “wrote RPM into a bool” before you hit the machine. This is the actual resume line.
+- **Vite** — the dev server. Save a file, the kiosk browser hot-reloads in milliseconds. That is the rapid prototyping. Use it *instead of* Next.js on this machine.
+- **TanStack Router / Query** — routing and server-state. What React shops actually want in 2026, without a Next.js server.
+- **Tailwind / shadcn/ui** — styling without fighting CSS files. Dark mill theme in days, not months. shadcn is a hiring signal; shadcn-vue is not.
+- **Hono or Fastify** — small TypeScript HTTP/WebSocket server. Not the motion controller. The hireable skill is Node + TypeScript, not the brand of framework.
 - **OPC UA** — how respectable industrial software reads/writes PLC variables. Think “typed HAL pins over the network.”
 - **pnpm** — installs JS packages once and shares them across `apps/hmi` and `apps/gateway`.
 
-**Not Node-RED, not Next.js SSR, not putting the interpolator in JavaScript.** Node-RED is a glue toy. Next.js server-rendering does nothing useful on a shop kiosk. A browser cannot close a 1 ms position loop.
+**Not Node-RED, not Next.js on the mill, not putting the interpolator in JavaScript.** Node-RED is a glue toy. Next.js is built for websites (server HTML, SEO). A mill kiosk has neither, and a WebSocket that must stay up. A browser cannot close a 1 ms position loop.
 
-WebVisu can still ship as a **backup/maintenance page** (force enable, raw IO) so you can recover if the Vue stack is down.
+WebVisu can still ship as a **backup/maintenance page** (force enable, raw IO) so you can recover if the SPA is down.
 
 ---
 
-## Why Vue (and what the HMI actually is)
+## The honest choice for hirability
 
-Two different questions get mixed together.
+Optimize for **who you can hire** (and what transfers if you leave), not for what is slightly nicer to learn.
 
-### 1. Is a browser app the right *application*?
+### What the mill application is
 
-Yes, for the operator UI. The “application” on the mill is not Vue. It is:
+The operator UI is a **kiosk single-page app**. Vue, React, and Svelte can all do that. The mill itself is still CODESYS + gateway + SPA. Framework choice does not change EtherCAT.
 
-| Process | Job |
-|---------|-----|
-| CODESYS runtime | Motion, IO, safety |
-| Gateway | OPC UA ↔ WebSocket/REST |
-| **Kiosk SPA** | Screens, plots, buttons |
+### If the question is web-job / contributor pool: React + TypeScript + Vite
 
-A shop HMI is a **single-page app** that stays open for hours, pushes a DRO at ~20 Hz, and opens modals that must not lose state. It is not a marketing site, not a document CMS, not a server-rendered Next.js app.
+US and general software hiring still looks like this, by a wide margin:
 
-Native Qt (Probe Basic today) is also a valid HMI. We are leaving it because iteration is slow and 3D/plotting/tablet access are painful. CODESYS WebVisu is a valid *industrial* HMI and a poor *product* HMI for this mill’s tuner/laser/probe density.
+| Skill | Hiring reality |
+|-------|----------------|
+| **TypeScript** | Table stakes. This matters more than React vs Vue. |
+| **React** | Default frontend on job posts. Bootcamps, contractors, “we need a UI person next month.” |
+| **Next.js** | On a huge number of *postings*. Still the **wrong runtime** for this kiosk. Learn it on a website if you want the buzzword; do not run it on the mill. |
+| **Vue 3** | Real #2. Employable, especially EU / Laravel / some product companies. Smaller pool when you post “HMI engineer, 3-month contract.” |
+| **Svelte** | Passion market. You will wait longer to hire. |
+| **Hono** | Almost nobody lists it. Node + TypeScript is what they list. |
+| **CODESYS ST + EtherCAT + SoftMotion** | Tiny pool, high rate, *different industry*. This is the rare skill if you want automation OEM work — not a substitute for React if you want a web hire. |
 
-So: browser SPA = proper application type. Vue = one implementation of that type.
+**The hireable mill HMI stack:** React + TypeScript + Vite + TanStack Router/Query + Tailwind + shadcn/ui + uPlot + Three.js.
 
-### 2. Why Vue 3 instead of React or Svelte?
+That is the same kiosk architecture as Vue+Vite. You are not “selling out” to Next.js. You are picking the library the largest number of frontend people already have in muscle memory.
 
-Vue is the default because it fits this project, not because it is “more mill-correct” than React.
+**Vue is not a career dead end.** It is the right pick if *you* want to write it and you are not hiring. It is the wrong pick if the point of the stack is “a random strong frontend can sit down and contribute.”
 
-| | Vue 3 + Vite | React + Vite | Svelte 5 + Vite |
-|--|--------------|--------------|-----------------|
-| Kiosk SPA | Excellent | Excellent if you skip Next.js | Excellent |
-| Beginner slope | Gentlest (templates + script) | Steeper (hooks, render model) | Small API, fewer tutorials |
-| PLC-tag mental model | `ref` / `computed` ≈ watching a GVL | You invent that with stores | Runes are close too |
-| 3D backplot / uPlot | All three wrap the same canvas libs | Same | Same |
-| “Nerd default” 2026 | Strong | Strongest hiring pool | Fashion-forward, smaller bench |
-| What would actually bite you | Fewer React-only examples | Easy to drag in Next.js SSR you do not need | Ecosystem for kits and hired help |
+**Do not pick Next.js for hirability of the machine.** You would be stuffing a website framework into a shop-floor process so resumes parse. Staffing is solved by React on the resume *and* Vite in `apps/hmi`. Candidates who only know Next can still work in React; you do not need the Next server.
 
-All three update a 20 Hz DRO without breaking a sweat. The 1 ms loop is not in the browser. Framework choice does not change EtherCAT, SoftMotion, or the plugin sockets.
+### If the question is industrial automation jobs
 
-**Why not React here:** React is a peer, not a mistake. The trap is *Next.js*, which optimizes for websites with server rendering. A mill kiosk has no SEO, no server HTML, and a WebSocket that must stay up. If you later prefer React, use **React + Vite + TanStack Router/Query**, not Next.
+React vs Vue is a rounding error. **Structured Text, CiA 402, EtherCAT, SoftMotion CNC, OPC UA** are what that market cannot find. A Vue-only mill HMI does not get you a PLC job; a React-only mill HMI does not either.
 
-**Why not Svelte here:** It would get some nerds *more* excited (compiler, tiny bundle). It is a worse first bet for a beginner who will google “OPC UA websocket HMI” and find Vue/React answers. Revisit if the team already thinks in Svelte.
+### Gateway
 
-**Keep TypeScript + Vite + a store + uPlot + Three.js** whichever UI library you pick. That set is the actual HMI stack. Vue is the templating layer on top.
+Node + TypeScript is the hireable gateway (same language as the HMI, one interview loop). Python (`asyncua`) is the hireable choice if you staff from LinuxCNC/scientific people — this repo is already Python. Do not pick Python vs Node for fashion; pick who you want to hire. Default here: **Node + TypeScript**, because the HMI hire already speaks it.
 
-You mentioned Vue first; that is a real reason to pick it when the alternatives are ties. If you would rather write React, say so before stage 5. The PLC and gateway do not care.
+### Capability is a tie
+
+| | Vue 3 + Vite | React + Vite | Svelte 5 + Vite | Next.js |
+|--|--------------|--------------|-----------------|---------|
+| Kiosk SPA | Yes | Yes | Yes | Wrong shape |
+| Beginner slope | Gentlest | Steeper | Small API, fewer mill tutorials | Extra concepts you do not need |
+| Hiring pool (web) | #2 | **#1** | Niche | #1 on *postings*, still wrong here |
+| 20 Hz DRO / Three.js | All fine | All fine | All fine | N/A |
 
 ---
 
@@ -141,7 +145,7 @@ flowchart TB
   subgraph host [Same IPC, non-realtime]
     Pend[pendant-bridge]
     GW[hmi-gateway TypeScript]
-    UI[Vue SPA in Chromium kiosk]
+    UI[React SPA in Chromium kiosk]
     WHB --> Pend
     Pend --> GW
     OPC -->|OPC UA| GW
@@ -158,7 +162,7 @@ Three processes, one IPC:
 
 1. **CODESYS runtime** — hard realtime. Owns EtherCAT, interpolator, safety.
 2. **`hmi-gateway`** — Node/Bun process. OPC UA client, WebSocket to browsers, G-code file drop, trace export, pendant ingest.
-3. **Chromium kiosk** — the Vue HMI. Can also be a tablet on the shop LAN.
+3. **Chromium kiosk** — the React HMI. Can also be a tablet on the shop LAN.
 
 The pendant stays a small Linux userspace program (USB HID → gateway → OPC UA write of jog commands). CODESYS will not grow a WHB04B driver for free.
 
@@ -254,7 +258,7 @@ Persistent data (today’s `linuxcnc.var` / `tool.tbl`):
 | `gcode.ts` | Drop file into SoftMotion NC directory, tell PLC to load |
 | `auth.ts` | Shop-LAN only at first; later operator vs admin roles |
 
-### 3. Vue HMI (`apps/hmi`) — screens that replace Probe Basic
+### 3. React HMI (`apps/hmi`) — screens that replace Probe Basic
 
 | Route | Replaces | Notes |
 |-------|----------|--------|
@@ -312,7 +316,7 @@ Operator must-haves from this repo, not generic CNC chrome:
 | `m600.ngc` | M600 in `PRG_MFunctions` → `FB_ToolChange` |
 | `tool_touch_off.ngc` | body of `FB_ToolChange` |
 | `go_to_g30.ngc` / `abort_tool_change.ngc` | methods on that FB |
-| `toolchange_dialog.py` | Vue modal |
+| `toolchange_dialog.py` | React modal |
 | Fusion M600 post | new `.cps` |
 
 ### Laser
@@ -384,7 +388,7 @@ Safety stays physical: master estop cuts mains. Software estop is extra.
 
 ---
 
-## Staged build path (do not start with Vue)
+## Staged build path (do not start with the HMI)
 
 Same spirit as [GETTING_STARTED.md](GETTING_STARTED.md): one subsystem at a time.
 
@@ -394,7 +398,7 @@ flowchart TD
   S1 --> S2[2 XYZA enable, scales, soft limits]
   S2 --> S3[3 Homing Z-X-Y-A + estop chain]
   S3 --> S4[4 SoftMotion G0/G1 file from CNC editor]
-  S4 --> S5[5 Gateway DRO-only Vue shell]
+  S4 --> S5[5 Gateway DRO-only React shell]
   S5 --> S6[6 Spindle Modbus + at-speed + faults]
   S6 --> S7[7 G31 probe mux + toolsetter length]
   S7 --> S8[8 M600 dialog + Fusion post air cut]
@@ -404,9 +408,9 @@ flowchart TD
   S11 --> S12[12 Pendant bridge]
 ```
 
-The Vue app starts at stage 5 as a **DRO and e-stop lamp**. If you build `/tune` before an axis jogs, you will debug the wrong layer.
+The React app starts at stage 5 as a **DRO and e-stop lamp**. If you build `/tune` before an axis jogs, you will debug the wrong layer.
 
-Suggested first Vue milestone (stage 5): Machine ON, estop, four DROs (actual mm/deg), homed bits, no jog until stage 3 is trusted from the CODESYS debugger.
+Suggested first HMI milestone (stage 5): Machine ON, estop, four DROs (actual mm/deg), homed bits, no jog until stage 3 is trusted from the CODESYS debugger.
 
 ---
 
@@ -421,7 +425,7 @@ codesys/
   LemontartMill.project/     # kernel POUs + linked feature libraries
 apps/
   gateway/                   # kernel HTTP/WebSocket + plugin mount
-  hmi/                       # Vue shell; routes come from enabled packs
+  hmi/                       # React shell; routes come from enabled packs
 packages/
   plugin-sdk/                # definePlugin(), registry, doctor
   machine-types/             # shared TypeScript types from GVLs
@@ -454,12 +458,12 @@ The existing `probe_basic/` tree remains the behavior spec until each pack has a
 | OPC UA | Network protocol for reading/writing those GVL tags |
 | Gateway | TypeScript process between OPC UA and the browser |
 | WebSocket | Persistent pipe so the DRO updates without refresh |
-| SPA | Single-page app: one Vue bundle, many routes |
+| SPA | Single-page app: one React bundle, many routes |
 | Vite | Dev server with instant hot reload |
 | Kiosk | Full-screen Chromium on the mill PC |
 | SDO / PDO | EtherCAT: PDOs every cycle (position); SDOs occasionally (gains) |
 | M-function | G-code `M600` that pauses interpolation until ST acknowledges |
-| Feature pack | Optional vertical slice (PLC + gateway + Vue) enabled in the machine profile |
+| Feature pack | Optional vertical slice (PLC + gateway + HMI) enabled in the machine profile |
 
 ---
 
@@ -468,7 +472,7 @@ The existing `probe_basic/` tree remains the behavior spec until each pack has a
 | Decision | Choice | Rejected |
 |----------|--------|----------|
 | Operator HMI | Kiosk SPA in a browser | WebVisu as primary, Ignition, staying on QtPyVCP |
-| UI library | Vue 3 + TS + Vite (default) | Next.js SSR; Svelte as first bet; React is a peer if it stays Vite |
+| UI library | React + TS + Vite (hirability) | Next.js on the mill; Vue if you are not hiring; Svelte as first bet |
 | PLC language | Structured Text | Ladder, Python-on-PLC |
 | Browser ↔ PLC | OPC UA → gateway → WebSocket | Polling REST for DRO, OPC UA from the browser, MQTT as the only bus |
 | Probe cycles | ST FBs + G31 | Shipping LinuxCNC `.ngc` unchanged |
@@ -476,12 +480,12 @@ The existing `probe_basic/` tree remains the behavior spec until each pack has a
 | Pendant | USB userspace bridge | Waiting for a CODESYS HID library |
 | Features | Declared packs + kernel sockets | Probe Basic “load every `user_tabs` folder” |
 
-If you swap Vue for React+Vite or Svelte, or wrap the kiosk in Tauri later, the PLC boundary does not change. Only `apps/hmi` does.
+If you swap React for Vue or Svelte, or wrap the kiosk in Tauri later, the PLC boundary does not change. Only `apps/hmi` does. Hirability is the reason React is the default.
 
 ---
 
 ## Next concrete step
 
-Do **not** scaffold the Vue app until stage 1 (one A6 jogging under CiA 402 in CODESYS) is true on the bench. The first document to write alongside the runtime is `GVL_Machine` — the tag list the HMI will bind to — so the web side can be mocked with fake OPC UA before the interpolator exists.
+Do **not** scaffold the React app until stage 1 (one A6 jogging under CiA 402 in CODESYS) is true on the bench. The first document to write alongside the runtime is `GVL_Machine` — the tag list the HMI will bind to — so the web side can be mocked with fake OPC UA before the interpolator exists.
 
 When the shell exists, add packs one at a time (`spindle-h100` first) against the sockets in [CODESYS_PLUGINS.md](CODESYS_PLUGINS.md). A curated catalog is a later product; do not start with an open plugin store.

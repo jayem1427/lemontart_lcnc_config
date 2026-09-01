@@ -106,7 +106,7 @@ We do not claim these integrations are the only correct approach.
 | Doc | Covers |
 |-----|--------|
 | [A6_TUNING.md](A6_TUNING.md) | A6 SDO map, Servo Tuning tab, 6065/6066 windows |
-| [CODESYS_ARCHITECTURE.md](CODESYS_ARCHITECTURE.md) | CODESYS SoftMotion + Vue browser HMI architecture and program map |
+| [CODESYS_ARCHITECTURE.md](CODESYS_ARCHITECTURE.md) | CODESYS SoftMotion + React browser HMI architecture and program map |
 | [CODESYS_PLUGINS.md](CODESYS_PLUGINS.md) | Base kernel + independent feature packs (manifest, mux sockets) |
 | [DEVIATIONS.md](DEVIATIONS.md) | Differences vs stock LinuxCNC / Probe Basic |
 | [GETTING_STARTED.md](GETTING_STARTED.md) | Zero-to-hero bring-up path |
