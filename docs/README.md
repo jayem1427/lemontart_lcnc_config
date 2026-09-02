@@ -6,7 +6,9 @@ LinuxCNC and Probe Basic docs; use these pages to see how *this* machine wires
 things together.
 
 **Start here:** [GETTING_STARTED.md](GETTING_STARTED.md) (zero → hero) ·
-[DEVIATIONS.md](DEVIATIONS.md) (vs stock LinuxCNC / Probe Basic)
+[DEVIATIONS.md](DEVIATIONS.md) (vs stock LinuxCNC / Probe Basic) ·
+[CODESYS_ARCHITECTURE.md](CODESYS_ARCHITECTURE.md) (CODESYS + browser HMI) ·
+[CODESYS_PLUGINS.md](CODESYS_PLUGINS.md) (kernel + feature packs)
 
 ---
 
@@ -37,6 +39,9 @@ things together.
 | Copy tool-change to another mill | [INSTALL_TOOL_CHANGE.md](INSTALL_TOOL_CHANGE.md) |
 | Copy servo tuning tabs | [INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md) |
 | Fusion post (M600, XYZA, G93) | [TOOLSETTER.md § CAM](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps) |
+| Port this mill to CODESYS + a browser HMI | [CODESYS_ARCHITECTURE.md](CODESYS_ARCHITECTURE.md) |
+| Kernel + feature packs (plugin model) | [CODESYS_PLUGINS.md](CODESYS_PLUGINS.md) |
+| Leadshine MC508 / `LS_IpoLib` vs `PMC_IpoLib` | [LEADSHINE_LIBRARIES.md](LEADSHINE_LIBRARIES.md) |
 
 ### Servo tuning
 
@@ -102,12 +107,14 @@ We do not claim these integrations are the only correct approach.
 | Doc | Covers |
 |-----|--------|
 | [A6_TUNING.md](A6_TUNING.md) | A6 SDO map, Servo Tuning tab, 6065/6066 windows |
+| [CODESYS_ARCHITECTURE.md](CODESYS_ARCHITECTURE.md) | Leadshine MC508CS interpolator + React browser HMI architecture and program map |
+| [CODESYS_PLUGINS.md](CODESYS_PLUGINS.md) | Base kernel + independent feature packs (manifest, mux sockets) |
 | [DEVIATIONS.md](DEVIATIONS.md) | Differences vs stock LinuxCNC / Probe Basic |
 | [GETTING_STARTED.md](GETTING_STARTED.md) | Zero-to-hero bring-up path |
 | [GRAPHICAL_INERTIA_TUNE.md](GRAPHICAL_INERTIA_TUNE.md) | Inertia identification panel (WIP) |
 | [INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md) | Drop tuning tabs onto another mill |
 | [INSTALL_TOOL_CHANGE.md](INSTALL_TOOL_CHANGE.md) | Copy M600 toolsetter integration |
-| [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) | Laser diameter, wiring, HAL mux |
+| [LEADSHINE_LIBRARIES.md](LEADSHINE_LIBRARIES.md) | MC508CS vs `LS_IpoLib` / `PMC_IpoLib` G-code (Jan 2025 command manual) |
 | [ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md) | Automated per-axis gain ladder |
 | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) | SET Z DRO, abort dialog, postgui HAL |
 | [PYTHON_PACKAGES.md](PYTHON_PACKAGES.md) | Optional Python deps for plots / FFT |
