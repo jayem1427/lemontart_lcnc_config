@@ -32,7 +32,7 @@ If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page 
 |------------|-----------|
 | Bring the machine up from zero | **[GETTING_STARTED.md](docs/GETTING_STARTED.md)** |
 | Understand “why doesn’t this behave like stock?” | **[DEVIATIONS.md](docs/DEVIATIONS.md)** |
-| Port this mill to a CODESYS PLC + browser HMI | **[CODESYS_ARCHITECTURE.md](docs/CODESYS_ARCHITECTURE.md)** · plugins: **[CODESYS_PLUGINS.md](docs/CODESYS_PLUGINS.md)** |
+| Port this mill to a CODESYS PLC + browser HMI | **[CODESYS_ARCHITECTURE.md](docs/CODESYS_ARCHITECTURE.md)** · plugins: **[CODESYS_PLUGINS.md](docs/CODESYS_PLUGINS.md)** · Leadshine FBs: **[LEADSHINE_LIBRARIES.md](docs/LEADSHINE_LIBRARIES.md)** |
 | Change tools and probe length (contact setter) | **[TOOLSETTER.md](docs/TOOLSETTER.md)** |
 | Measure diameter with the laser | **[LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md)** |
 | Copy tool-change onto another mill | **[INSTALL_TOOL_CHANGE.md](docs/INSTALL_TOOL_CHANGE.md)** |
@@ -40,7 +40,7 @@ If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page 
 | Example tuning / M600 test G-code | **[TUNING_PROGRAMS.md](docs/TUNING_PROGRAMS.md)** |
 | Log following error / tune servos | **[Servo auto-tuning](#servo-tuning--auto-tune)** · [docs index](docs/README.md) · [TUNING_PROGRAMS](docs/TUNING_PROGRAMS.md) · [SIGNAL_LOGGING](docs/SIGNAL_LOGGING.md) · [A6_TUNING](docs/A6_TUNING.md) · [SEMI_AUTO_TUNING](docs/SEMI_AUTO_TUNING.md) · [ONE_CLICK_TUNING](docs/ONE_CLICK_TUNING.md) · [GRAPHICAL_INERTIA_TUNE](docs/GRAPHICAL_INERTIA_TUNE.md) |
 
-Full list and learning paths: **[docs/README.md](docs/README.md)**. A proposed CODESYS SoftMotion + React HMI architecture (not implemented yet) is in **[docs/CODESYS_ARCHITECTURE.md](docs/CODESYS_ARCHITECTURE.md)**.
+Full list and learning paths: **[docs/README.md](docs/README.md)**. A proposed Leadshine CODESYS brick + React HMI architecture (not implemented yet) is in **[docs/CODESYS_ARCHITECTURE.md](docs/CODESYS_ARCHITECTURE.md)**; interpolator FB facts from the Jan 2025 command manual are in **[docs/LEADSHINE_LIBRARIES.md](docs/LEADSHINE_LIBRARIES.md)**.
 
 ---
 

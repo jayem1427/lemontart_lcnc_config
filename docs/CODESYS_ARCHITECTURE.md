@@ -10,24 +10,26 @@ This page is the architecture and program map for porting **this repo’s featur
 
 Features should not be baked into one blob. A small kernel plus opt-in packs is in **[CODESYS_PLUGINS.md](CODESYS_PLUGINS.md)** (machine profile, contribution points, why we will not auto-scan folders).
 
+**Motion on the candidate brick is Leadshine interpolator FBs, not CODESYS Store SoftMotion CNC.** Pin-level facts from the Jan 2025 command manual: **[LEADSHINE_LIBRARIES.md](LEADSHINE_LIBRARIES.md)**. G-code FBs are `PMC_IpoLib` (PMC600 chapter). Chapter-4 `LS_IpoLib` is line/circle/sequence only. That PDF does not settle whether **MC508CS** ships `PMC_IpoLib`.
+
 ---
 
 ## What “all these features” actually means
 
 This mill is not just four servos and a G-code player. The current LinuxCNC config is a bundle of subsystems that have to be rebuilt as **IEC programs + a web app**, not copied as `.ngc` files.
 
-| Area | What exists today | Why it matters on CODESYS |
-|------|-------------------|---------------------------|
-| Motion | XYZA `trivkins`, 1 ms servo, EtherCAT CiA 402 A6 drives | SoftMotion CNC interpolator + EtherCAT master |
+| Area | What exists today | Why it matters on this brick |
+|------|-------------------|------------------------------|
+| Motion | XYZA `trivkins`, 1 ms servo, EtherCAT CiA 402 A6 drives | Leadshine interp: `LS_IpoLib` (line) and, **if the SKU has it**, `PMC_IpoLib` G-code. Mill **A** is not a documented G-word. |
 | UI | Probe Basic (QtPyVCP): DRO, jog, AUTO/MDI, offsets, probe tab, custom tabs | React SPA replacing the whole shell |
-| Tool length | `T n M600` → park, dialog, contact setter, `G10`/`G43` | M-function handler + G31 probe, not a LinuxCNC remap |
-| Tool diameter | Kexin laser tab + `laser_*.ngc` + HAL mux | Same mux in ST; measure cycles as ST or CNC subprograms |
-| Touch probe | Probe Basic pocket/boss/corner/angle macros (~50 `.ngc`) | ST probe library driven from HMI buttons |
-| Spindle | H100 VFD over Modbus, 5 s at-speed delay, fault → estop | CODESYS Modbus master + same interlocks |
-| Pendant | XHC WHB04B-6 USB + jog smoothing | Userspace bridge (no native CODESYS driver) |
+| Tool length | `T n M600` → park, dialog, contact setter, `G10`/`G43` | ST handler + latch + Halt. No G43 in the book. 4-axis G-code FB has no `wM`/`AcknM`. |
+| Tool diameter | Kexin laser tab + `laser_*.ngc` + HAL mux | Same mux in ST; measure cycles as ST (not a G38 skip) |
+| Touch probe | Probe Basic pocket/boss/corner/angle macros (~50 `.ngc`) | ST probe library + hardware latch; not G31/G38 |
+| Spindle | H100 VFD over Modbus, 5 s at-speed delay, fault → estop | PLC Modbus master (MC508CS has RS485) + same interlocks |
+| Pendant | XHC WHB04B-6 USB + jog smoothing | Userspace bridge on the Windows PC (no native CODESYS driver) |
 | Tuning | Servo Tuning tab, one-click auto-tune, LLM clipboard loop | High-rate PLC trace + TypeScript FFT (not in the PLC) |
 | Logging | HAL CSV + live plot up to 1 kHz | PLC ring buffer dump, not browser polling |
-| CAM | Fusion post `linuxcnc-djr.cps` (M600, XYZA, G93) | New DIN 66025 / SoftMotion post |
+| CAM | Fusion post `linuxcnc-djr.cps` (M600, XYZA, G93) | New post. G93 / G43 / G64 are **unproven** on Leadshine G-code FBs. |
 
 ---
 
@@ -39,10 +41,10 @@ Skip CODESYS WebVisu as the main operator UI. It is fine for a maintenance page.
 
 | Layer | Choice | One-sentence why |
 |-------|--------|------------------|
-| PLC runtime | **CODESYS Control for Linux SL** (PREEMPT_RT) on the mill IPC | Same class of machine as today; EtherCAT on a dedicated NIC |
-| Motion | **CODESYS SoftMotion CNC** | Real interpolator, lookahead, G-code, M-functions, G31 probing |
-| Fieldbus | **CODESYS EtherCAT Master** + **Modbus RTU Master** | A6 drives and H100 VFD without IgH/`lcec`/`mb2hal` |
-| Tag bus | **CODESYS OPC UA Server** | Industrial standard; HMI never talks EtherCAT |
+| PLC runtime | **Leadshine MC508CS** (LeadSys / CODESYS 3.5 SP15-class) | Brick owns EtherCAT + IO + RS485; not Store Control for Linux SL |
+| Motion | **Leadshine `LS_IpoLib` / `PMC_IpoLib`** | Line FBs in ch. 4; G-code FBs are PMC600 / `PMC_IpoLib` if that SKU ships them. **Not** Store `SMC_Interpolator`. |
+| Fieldbus | Brick EtherCAT master + RS485 Modbus | A6s on EtherCAT only; H100 on RS485; PC Ethernet is HMI/IDE, not the drive bus |
+| Tag bus | OPC UA on the brick (or LeadSys equivalent) | HMI never talks EtherCAT |
 | Gateway | **Node + TypeScript + `node-opcua` + WebSocket** (Fastify or Hono) | Same language as the HMI; browsers cannot speak OPC UA |
 | HMI | **React + TypeScript + Vite + TanStack + Tailwind + shadcn/ui** | Largest hiring pool; kiosk SPA without Next.js — see [Hirability](#the-honest-choice-for-hirability) |
 | Charts | **uPlot** (FERR / torque) | Tiny and fast enough for live traces |
@@ -86,7 +88,7 @@ US and general software hiring still looks like this, by a wide margin:
 | **Vue 3** | Real #2. Employable, especially EU / Laravel / some product companies. Smaller pool when you post “HMI engineer, 3-month contract.” |
 | **Svelte** | Passion market. You will wait longer to hire. |
 | **Hono** | Almost nobody lists it. Node + TypeScript is what they list. |
-| **CODESYS ST + EtherCAT + SoftMotion** | Tiny pool, high rate, *different industry*. This is the rare skill if you want automation OEM work — not a substitute for React if you want a web hire. |
+| **CODESYS ST + EtherCAT + Leadshine interp** | Tiny pool, high rate, *different industry*. This is the rare skill if you want automation OEM work — not a substitute for React if you want a web hire. |
 
 **The hireable mill HMI stack:** React + TypeScript + Vite + TanStack Router/Query + Tailwind + shadcn/ui + uPlot + Three.js.
 
@@ -98,7 +100,7 @@ That is the same kiosk architecture as Vue+Vite. You are not “selling out” t
 
 ### If the question is industrial automation jobs
 
-React vs Vue is a rounding error. **Structured Text, CiA 402, EtherCAT, SoftMotion CNC, OPC UA** are what that market cannot find. A Vue-only mill HMI does not get you a PLC job; a React-only mill HMI does not either.
+React vs Vue is a rounding error. **Structured Text, CiA 402, EtherCAT, Leadshine interpolator FBs, OPC UA** are what that market cannot find. A Vue-only mill HMI does not get you a PLC job; a React-only mill HMI does not either.
 
 ### Gateway
 
@@ -126,31 +128,36 @@ flowchart TB
     WHB[XHC WHB04B-6 USB]
   end
 
-  subgraph plc [CODESYS Control Linux SL - realtime]
+  subgraph plc [Leadshine MC508CS - realtime]
     EtherCAT[EtherCAT Master]
-    Modbus[Modbus Master]
-    CNC[SoftMotion CNC interpolator 1 ms]
+    Modbus[RS485 Modbus]
+    CNC[Leadshine interpolator 1 ms]
     IO[PRG_IoMux / safety / spindle]
+    Latch[High-speed latch / Halt]
     Trace[1 kHz ring buffers]
-    OPC[OPC UA Server]
+    OPC[OPC UA / tag server]
     EtherCAT --> CNC
     Modbus --> IO
     DI --> IO
+    DI --> Latch
+    Latch --> CNC
     IO --> CNC
     CNC --> Trace
     CNC --> OPC
     IO --> OPC
   end
 
-  subgraph host [Same IPC, non-realtime]
+  subgraph host [Windows PC - not realtime]
+    IDE[LeadSys Studio]
     Pend[pendant-bridge]
     GW[hmi-gateway TypeScript]
     UI[React SPA in Chromium kiosk]
     WHB --> Pend
     Pend --> GW
-    OPC -->|OPC UA| GW
+    OPC -->|Ethernet LAN| GW
     GW -->|WebSocket ~20 Hz DRO<br/>REST files / commands| UI
     Trace -->|bulk dump after move| GW
+    IDE -->|program download| plc
   end
 
   A6 --- EtherCAT
@@ -158,13 +165,15 @@ flowchart TB
   DI --- IO
 ```
 
-Three processes, one IPC:
+Split of duties:
 
-1. **CODESYS runtime** — hard realtime. Owns EtherCAT, interpolator, safety.
-2. **`hmi-gateway`** — Node/Bun process. OPC UA client, WebSocket to browsers, G-code file drop, trace export, pendant ingest.
-3. **Chromium kiosk** — the React HMI. Can also be a tablet on the shop LAN.
+1. **MC508CS** — hard realtime. Owns EtherCAT to the A6s, RS485 to the H100, interpolator, safety, latch. Static IP on the PLC LAN.
+2. **Windows PC** — Cursor + LeadSys IDE + `hmi-gateway` + Chromium kiosk. Direct Ethernet to the brick. Not Wi‑Fi. Not on the EtherCAT segment.
+3. **HMI loss is not e-stop.** PLC hold/stop on heartbeat timeout. Physical e-stop still cuts mains.
 
-The pendant stays a small Linux userspace program (USB HID → gateway → OPC UA write of jog commands). CODESYS will not grow a WHB04B driver for free.
+The pendant stays a userspace program on the Windows PC (USB HID → gateway → tag write of jog commands). The brick will not grow a WHB04B driver for free.
+
+LinuxCNC stays on the mill PC until this stack can run air cuts. Do not install Store CODESYS SP22 expecting it to match LeadSys SP15.
 
 ---
 
@@ -174,8 +183,8 @@ This is the difference between a mill and a web app.
 
 | Signal | Rate | Where it lives | How the HMI sees it |
 |--------|------|----------------|---------------------|
-| Position command / CiA 402 PDO | 1 ms | SoftMotion + EtherCAT | Never in the browser |
-| Probe / laser latch | drive / PLC task | `PRG_ProbeMux` + G31 | Result position, not the edge |
+| Position command / CiA 402 PDO | 1 ms | Leadshine interpolator + EtherCAT | Never in the browser |
+| Probe / laser latch | drive / PLC task | `PRG_ProbeMux` + latch FB + Halt | Result position, not the edge |
 | E-stop / drive fault | PLC task | `PRG_Safety` | Status lamps |
 | DRO, spindle RPM, overrides | 20–50 Hz | OPC UA subscription → WebSocket | Live labels |
 | FERR / torque plot | 200–1000 Hz | PLC ring buffer | File/blob **after** the move (or a slow live downsample) |
@@ -186,26 +195,27 @@ Do **not** try to stream 1 kHz FERR through the browser as JSON. That is how the
 
 ---
 
-## LinuxCNC vs SoftMotion: the dialect split
+## LinuxCNC vs Leadshine interpolator: the dialect split
 
-SoftMotion speaks **DIN 66025**, not LinuxCNC **RS274NGC**. You cannot drop `probe_basic/subroutines/*.ngc` onto the PLC and press Cycle Start.
+The Jan 2025 command manual is **not** LinuxCNC RS274NGC and it is **not** a license for Store SoftMotion CNC. You cannot drop `probe_basic/subroutines/*.ngc` onto the brick and press Cycle Start. Pin-level source: [LEADSHINE_LIBRARIES.md](LEADSHINE_LIBRARIES.md).
 
-| LinuxCNC today | SoftMotion equivalent |
-|----------------|----------------------|
-| `G0`/`G1`/`G2`/`G3` | Same idea; confirm dialect in CNC editor |
-| `G38.2` / `G38.3` / `G38.5` | **`G31`** + `PROBE n` (“clear remaining distance”) |
-| `M6` dialog + `REMAP=M600` | Interpolator `wM` / `bAcknM` + ST handler `PRG_MFunctions` |
-| O-word `o<tool_touch_off> call` | ST function block **or** SoftMotion subprogram — ST is clearer for logic |
-| `#5181` `#3014` `linuxcnc.var` | Persistent GVL / recipe / file |
-| `G10 L20` / `G43` / `G92.1` | Work offsets + `SMC_ToolLengthCorr` / `SMC_ToolRadiusCorr` (verify license pack) |
-| `G64 P0.001` | `SMC_SmoothPath` / `SMC_SmoothMerge` |
-| `G93` inverse time (4th axis CAM) | Confirm SoftMotion inverse-time; may need post change to feed/min + rotary mapping |
-| HAL `motion.probe-input` mux | `PRG_ProbeMux` selecting probe 1/2/3 into G31 |
+| LinuxCNC today | What the Jan 2025 book actually documents |
+|----------------|-------------------------------------------|
+| `G0`/`G1` | Split defaults `DefaultVel` vs `DefaultVelFF` on `LS_4AxisGCode_File` (almost certainly rapid vs G01). **G01** is named. No full G-word catalog. |
+| XYZA in one block | File FB is **X,Y,Z,U** (or sibling **X,Y,Z,P**). No A word. Not the Line-FB 3+1 follower. |
+| `G38.2` / G31 skip | **Absent.** Halt/Stop only. Latch is hardware (`LS_HighSpeedLatch_*`, `LS_TouchProbe`, `LS_ZeroLatch_*`, drive EZ). |
+| `M6` / `REMAP=M600` | **`wM` / `AcknM` only on `LS_6AxisGCodeAxisUVW_File`.** The 4-axis file FB has no M handshake. |
+| `#5181` `#3014` `linuxcnc.var` | Persistent GVL / recipe / file. 6-axis FB also exposes `SMC_VarList` (DIN 66025-shaped). |
+| `G10` / `G43` / `G92.1` | `dOffsetX..W` on the 6-axis FB = **zero-point**, not G43 tool-length. G43 is not mentioned. |
+| `G64 P0.001` | FB params `LimitMaxAcc` / `LimitMaxAccJerk` (transition arcs). Not a G-word. |
+| `G93` inverse time | **Not mentioned.** Do not post G93 until proven. |
+| S-curve | `VelocityMode` 0 TRAPEZOID / 1 SIGMOID / 3 QUADRATIC + `Jerk` (required ≠ 0 if mode 3). `VelRatio` 0.01–2 feed override. |
+| HAL `motion.probe-input` mux | `PRG_ProbeMux` selecting which DI/latch ST will Halt on |
 | `halui` / `iocontrol` | OPC UA command structs (`Cmd.FeedHold`, `Cmd.Mdi`, …) |
 
-CAM consequence: **`post-processor/linuxcnc-djr.cps` does not come along.** A Fusion post targeting SoftMotion/DIN + your M-codes is a first-class program in this port.
+CAM consequence: **`post-processor/linuxcnc-djr.cps` does not come along.** A Fusion post that emits X/Y/Z/U (or P), M-codes the chosen FB can handshake, and **no** unproven G43/G31/G64/G93 is a first-class program in this port.
 
-Probing on SoftMotion is real (example CNC 16): interpolator runs G31, PLC sees the probe DI, issues `bQuick_Stop`, copies actual position back into the interpreter, then `bAcknProbe`. That is the replacement for LinuxCNC’s built-in G38.
+Probing is **ST + fast DI / high-speed latch + Halt/Stop**, not a G-code skip cycle. That replaces LinuxCNC G38 for this brick until a skip input shows up in installed F1 help.
 
 ---
 
@@ -221,15 +231,15 @@ CODESYS “programs” are POUs. Use **Structured Text** everywhere (closest to 
 |-----|-------|-----|
 | `PRG_Safety` | 1 ms bus task | E-stop chain (Slave 3 DI1), drive faults, VFD 64/92 → disable |
 | `PRG_Cia402` | 1 ms | CiA 402 state machine per axis, scale, 6065/6066 windows |
-| `PRG_Interpolator` | 1 ms | `SMC_Interpolator` → axis setpoints |
-| `PRG_Path` | slower task | `SMC_ReadNCFile2` + `SMC_NCInterpreter` + smoothers + lookahead queues |
+| `PRG_Interpolator` | 1 ms | Leadshine G-code FB **if** `PMC_IpoLib` is on the SKU (`LS_4AxisGCode_File` or 6-axis UVW for M handshake). Else ch.4 `LS_nAxisLine` for bring-up. **Not** `SMC_Interpolator`. |
+| `PRG_Path` | slower task | File load / look-ahead params (`LimitMaxAcc`, `LimitMaxAccJerk`, `VelRatio`). In-memory path uses `POINTER TO SMC_CNC_REF` where the FB asks for it. |
 | `PRG_Homing` | 1 ms | Z → X → Y → A sequence (A virtual-home like today) |
 | `PRG_Jog` | 1 ms | GUI jog + pendant + incremental; gated by homed/enable |
 | `PRG_IoMux` | 1 ms | Homes, limits (NC invert), software estop |
-| `PRG_ProbeMux` | 1 ms | T99 → touch DI; else toolsetter DI; laser only while measure-active |
+| `PRG_ProbeMux` | 1 ms | T99 → touch DI; else toolsetter DI; laser only while measure-active. Latch FB + Halt, not G31. |
 | `PRG_Spindle` | 10 ms | Modbus H100, M3/M4 map, ±50 RPM + 5 s at-speed |
 | `PRG_MFunctions` | 1 ms | M0/M1/M3/M4/M5/M8/M9/M30, **M600**, M62/M63 laser gate, MDI pauses |
-| `FB_ToolChange` | event | Retract → tool-load XY → wait HMI OK/Abort → setter → length → G43 |
+| `FB_ToolChange` | event | Retract → tool-load XY → wait HMI OK/Abort → setter latch + Halt → length write (ST offset, not G43) |
 | `FB_LaserMeasure` | event | Tip find, coarse locate, static-X peak hunt, beam cal |
 | `FB_WcsProbe_*` | event | Port of Probe Basic pocket/boss/corner/edge routines |
 | `PRG_Trace` | 1 ms | Ring buffers: 60F4 FERR, 6077 torque, 606C vel, actual pos |
@@ -255,7 +265,7 @@ Persistent data (today’s `linuxcnc.var` / `tool.tbl`):
 | `rest.ts` | G-code files, tool table, presets, traces, screenshots |
 | `trace.ts` | Pull PLC ring buffer → CSV/JSON for plots and one-click tune |
 | `pendant.ts` | Socket from `pendant-bridge` |
-| `gcode.ts` | Drop file into SoftMotion NC directory, tell PLC to load |
+| `gcode.ts` | Drop file onto the brick / tell PLC to load the Leadshine G-code FB |
 | `auth.ts` | Shop-LAN only at first; later operator vs admin roles |
 
 ### 3. React HMI (`apps/hmi`) — screens that replace Probe Basic
@@ -276,7 +286,7 @@ Persistent data (today’s `linuxcnc.var` / `tool.tbl`):
 
 Operator must-haves from this repo, not generic CNC chrome:
 
-- SET Z → `G92.1` + set WCS Z (same as `set_wco_z.ngc`)
+- SET Z → ST zero-point write (same operator result as `set_wco_z.ngc`; not G92.1 until proven)
 - Tool-load park ≠ setter park
 - Abort mid-M600 retracts Z then parks tool-load XY
 - Probe tool number in **three** places that must agree: tool table, persistent param, mux constant
@@ -286,7 +296,7 @@ Operator must-haves from this repo, not generic CNC chrome:
 
 | Program | Language | Role |
 |---------|----------|------|
-| Fusion post `codesys-smc-xyza.cps` | JavaScript (Fusion) | M600, XYZA, no G49 after multi-axis, inverse-time policy |
+| Fusion post `leadshine-xyzu.cps` | JavaScript (Fusion) | M600 policy, **U or P not A**, no unproven G43/G31/G64/G93 |
 | `pendant-bridge` | Python or Rust | WHB USB → gateway |
 | `probe-beep` | Python | Optional click on probe/laser edge (can stay) |
 | Auto-tune engine | TypeScript (port of `a6_auto_tune.py`) | Stimulus + FFT gate + notch + journaled revert |
@@ -300,7 +310,7 @@ Operator must-haves from this repo, not generic CNC chrome:
 
 | Today | New home |
 |-------|----------|
-| `ethercat_mill.ini` axes, limits, homing | SoftMotion axis config + `GVL` + `PRG_Homing` |
+| `ethercat_mill.ini` axes, limits, homing | Leadshine axis config + `GVL` + `PRG_Homing` |
 | `ethercat-conf.xml` | CODESYS EtherCAT device tree + PDO/SDO |
 | `ethercat_mill.hal` CiA 402 | `PRG_Cia402` |
 | Probe mux, laser M62/M63 | `PRG_ProbeMux` |
@@ -325,7 +335,7 @@ Operator must-haves from this repo, not generic CNC chrome:
 |-------|----------|
 | `laser_setter.py` UI | `/laser` view |
 | `laser_diameter.ngc` / `laser_static_edge.ngc` / `laser_length.ngc` | `FB_LaserMeasure` |
-| HAL mux around G38 | mux around G31; static-X peak hunt stays a timed ST loop (not G-code) |
+| HAL mux around G38 | mux around latch + Halt; static-X peak hunt stays a timed ST loop (not G-code) |
 
 ### Probe Basic WCS probing
 
@@ -357,19 +367,21 @@ ATC-shaped macros (`clamptool`, `extendatc`, carousel, …) stay **stubs** unles
 
 ## What gets easier, what gets harder
 
-**Easier on CODESYS**
+**Easier on the brick**
 
 - EtherCAT CoE SDO read/write for A6 tuning (no `lcec` SDO gymnastics)
-- One vendor for master + interpolator + OPC UA
-- Structured safety and M-function handling
-- Multi-client HMI (tablet + IPC) for free
+- One vendor for master + interpolator + IO (Leadshine), if the SKU has the FBs you need
+- Structured safety in ST
+- Multi-client HMI (tablet + Windows PC) for free
 
 **Harder / easy to underestimate**
 
-- SoftMotion is not LinuxCNC. Probe macros and the Fusion post are a rewrite.
-- G31 probe acknowledge dance is more manual than G38.
-- Inverse time `G93` + non-TCP 4th axis must be proven on air before any cut.
-- SoftMotion CNC + EtherCAT licenses are real money.
+- Leadshine G-code is **not** LinuxCNC. Probe macros and the Fusion post are a rewrite.
+- `LS_4AxisGCode_File` is X/Y/Z/**U**, not A. Rotary kinematics are undocumented.
+- No interpolator skip: probe is latch + Halt. That is more ST than G38.
+- G43 / G31 / G38 / G64 / G93 are **unsupported until proven** on the brick.
+- M600 handshake may need the **6-axis UVW** FB (`wM`/`AcknM`) or stay ST-owned.
+- **`PMC_IpoLib` may not ship with MC508CS.** G-code is filed as PMC600 dedicated.
 - You will maintain **two** machines until the port is trusted (this LinuxCNC config stays source of truth).
 
 **Do not port first:** conversational mill, image-to-gcode, ATC UI, inertia auto-tune (still WIP here).
@@ -378,13 +390,15 @@ ATC-shaped macros (`clamptool`, `extendatc`, carousel, …) stay **stubs** unles
 
 ## Hardware and licenses (order before writing UI)
 
-1. IPC that already runs this mill, or a spare, with a dedicated NIC for EtherCAT.
-2. CODESYS Development System (Windows IDE; talks to the Linux runtime).
-3. Licenses: **Control for Linux SL**, **SoftMotion CNC**, **EtherCAT Master**, OPC UA (basic is often included; raise the tag limit if the default is tiny).
+1. **MC508CS** (confirm silk-screen **CS**). Enough EtherCAT axes for 4× A6. RS485 for H100. Direct Ethernet to a Windows PC. [JLCMC listing](https://jlcmc.com/product/b/I10/BR1373/leadshine-plc-mc508cs-32-i-o-npn-ethercat-8-24vdc) is a shopping pointer, not a library catalog.
+2. **LeadSys Studio V3.1** on Windows (~1.85 GB). x64, admin, **no Chinese in the install path**. Do **not** install Store CODESYS SP22 expecting a match.
+3. Library Manager on an MC508CS (or nearest MC) project: **`LS_IpoLib` vs `PMC_IpoLib`**. F1 `LS_4AxisGCode_File`. See [LEADSHINE_LIBRARIES.md](LEADSHINE_LIBRARIES.md).
 4. A6 ESI files / scan the bus; confirm VID/PID `00400000` / `00000715` still match.
-5. Chromium kiosk on the IPC (`--kiosk http://127.0.0.1:5173` in dev, nginx-served `dist/` in production).
+5. Chromium kiosk on the Windows PC (`--kiosk http://127.0.0.1:5173` in dev, nginx-served `dist/` in production).
 
-Safety stays physical: master estop cuts mains. Software estop is extra.
+Safety stays physical: master estop cuts mains. Software estop is extra. HMI heartbeat loss = hold/stop, not e-stop.
+
+Store **Control for Linux SL + SoftMotion CNC** is a different stack. This mill’s candidate brick does not get that from the Jan 2025 command manual.
 
 ---
 
@@ -394,23 +408,26 @@ Same spirit as [GETTING_STARTED.md](GETTING_STARTED.md): one subsystem at a time
 
 ```mermaid
 flowchart TD
-  S0[0 Licenses + runtime on IPC] --> S1[1 EtherCAT slaves + one axis CiA 402 jog]
-  S1 --> S2[2 XYZA enable, scales, soft limits]
-  S2 --> S3[3 Homing Z-X-Y-A + estop chain]
-  S3 --> S4[4 SoftMotion G0/G1 file from CNC editor]
-  S4 --> S5[5 Gateway DRO-only React shell]
-  S5 --> S6[6 Spindle Modbus + at-speed + faults]
-  S6 --> S7[7 G31 probe mux + toolsetter length]
-  S7 --> S8[8 M600 dialog + Fusion post air cut]
-  S8 --> S9[9 Laser measure]
-  S9 --> S10[10 WCS probe library]
-  S10 --> S11[11 Trace + servo tuner + one-click]
-  S11 --> S12[12 Pendant bridge]
+  S0[0 LeadSys 3.1 + MC508CS in device catalog] --> S1[1 Library Manager: PMC_IpoLib vs LS_IpoLib]
+  S1 --> S2[2 EtherCAT slaves + one axis CiA 402 jog]
+  S2 --> S3[3 XYZA enable, scales, soft limits]
+  S3 --> S4[4 Homing Z-X-Y-A + estop chain]
+  S4 --> S5[5 Line FB move, then G-code file IF PMC_IpoLib exists]
+  S5 --> S6[6 Gateway DRO-only React shell]
+  S6 --> S7[7 Spindle Modbus + at-speed + faults]
+  S7 --> S8[8 Latch + Halt probe mux + toolsetter length]
+  S8 --> S9[9 M600 dialog + Fusion post air cut]
+  S9 --> S10[10 Laser measure]
+  S10 --> S11[11 WCS probe library]
+  S11 --> S12[12 Trace + servo tuner + one-click]
+  S12 --> S13[13 Pendant bridge]
 ```
 
-The React app starts at stage 5 as a **DRO and e-stop lamp**. If you build `/tune` before an axis jogs, you will debug the wrong layer.
+The React app starts at stage 6 as a **DRO and e-stop lamp**. If you build `/tune` before an axis jogs, you will debug the wrong layer.
 
-Suggested first HMI milestone (stage 5): Machine ON, estop, four DROs (actual mm/deg), homed bits, no jog until stage 3 is trusted from the CODESYS debugger.
+Suggested first HMI milestone (stage 6): Machine ON, estop, four DROs (actual mm/deg), homed bits, no jog until stage 4 is trusted from LeadSys.
+
+If stage 1 shows **no `PMC_IpoLib`**, stop treating this brick as a G-code mill until a SKU that ships it is on the bench. Line FBs can still jog and prove EtherCAT.
 
 ---
 
@@ -438,7 +455,7 @@ plugins/
   signal-log/
   pendant-whb/
 post-processor/
-  codesys-smc-xyza.cps
+  leadshine-xyzu.cps
 ```
 
 Enable a feature by adding its id to `machines/lemontart.yaml`, not by dropping a folder into a scanned directory. Details: [CODESYS_PLUGINS.md](CODESYS_PLUGINS.md).
@@ -451,18 +468,20 @@ The existing `probe_basic/` tree remains the behavior spec until each pack has a
 
 | Term | Meaning |
 |------|---------|
-| PLC / runtime | The CODESYS process that must not miss a 1 ms cycle |
+| PLC / runtime | The Leadshine/CODESYS process that must not miss a 1 ms cycle |
 | POU | A program, function, or function block in the PLC project |
 | GVL | Global Variable List — the shared “HAL pins” of CODESYS |
-| SoftMotion CNC | CODESYS interpolator + G-code interpreter |
+| SoftMotion CNC | **Rejected for this brick.** Store interpolator (`SMC_Interpolator`). Manual never authorizes it. |
+| Leadshine G-code FB | `LS_*GCode*` in **`PMC_IpoLib`** (PMC600 chapter). Axes X/Y/Z/U or P. |
+| `LS_IpoLib` | Ch. 4 line/circle/sequence. **Not G-code.** |
 | OPC UA | Network protocol for reading/writing those GVL tags |
 | Gateway | TypeScript process between OPC UA and the browser |
 | WebSocket | Persistent pipe so the DRO updates without refresh |
 | SPA | Single-page app: one React bundle, many routes |
 | Vite | Dev server with instant hot reload |
-| Kiosk | Full-screen Chromium on the mill PC |
+| Kiosk | Full-screen Chromium on the Windows PC |
 | SDO / PDO | EtherCAT: PDOs every cycle (position); SDOs occasionally (gains) |
-| M-function | G-code `M600` that pauses interpolation until ST acknowledges |
+| M-function | G-code `M` that pauses interpolation until ST acknowledges. **4-axis file FB has no `wM`/`AcknM`; 6-axis UVW FB does.** |
 | Feature pack | Optional vertical slice (PLC + gateway + HMI) enabled in the machine profile |
 
 ---
@@ -475,7 +494,9 @@ The existing `probe_basic/` tree remains the behavior spec until each pack has a
 | UI library | React + TS + Vite (hirability) | Next.js on the mill; Vue if you are not hiring; Svelte as first bet |
 | PLC language | Structured Text | Ladder, Python-on-PLC |
 | Browser ↔ PLC | OPC UA → gateway → WebSocket | Polling REST for DRO, OPC UA from the browser, MQTT as the only bus |
-| Probe cycles | ST FBs + G31 | Shipping LinuxCNC `.ngc` unchanged |
+| Probe cycles | ST FBs + latch + Halt | Shipping LinuxCNC `.ngc` unchanged; assuming G31 |
+| Motion stack | Leadshine MC508CS + `PMC_IpoLib` **if present** | Store SoftMotion CNC / `SMC_Interpolator` |
+| Fourth G-word | Prove U or P against rotary A | Treat `LS_4AxisGCode_File` as XYZA |
 | Auto-tune math | TypeScript on gateway | FFT inside the PLC |
 | Pendant | USB userspace bridge | Waiting for a CODESYS HID library |
 | Features | Declared packs + kernel sockets | Probe Basic “load every `user_tabs` folder” |
@@ -486,6 +507,6 @@ If you swap React for Vue or Svelte, or wrap the kiosk in Tauri later, the PLC b
 
 ## Next concrete step
 
-Do **not** scaffold the React app until stage 1 (one A6 jogging under CiA 402 in CODESYS) is true on the bench. The first document to write alongside the runtime is `GVL_Machine` — the tag list the HMI will bind to — so the web side can be mocked with fake OPC UA before the interpolator exists.
+Install **LeadSys Studio V3.1**, open an **MC508CS** project (or nearest MC SKU), and read Library Manager + F1 for `LS_4AxisGCode_File`. That is the only way to settle `PMC_IpoLib` on this brick. Facts already frozen from the Jan 2025 PDF: **[LEADSHINE_LIBRARIES.md](LEADSHINE_LIBRARIES.md)**.
 
 When the shell exists, add packs one at a time (`spindle-h100` first) against the sockets in [CODESYS_PLUGINS.md](CODESYS_PLUGINS.md). A curated catalog is a later product; do not start with an open plugin store.

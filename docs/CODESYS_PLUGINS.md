@@ -4,7 +4,7 @@ The LinuxCNC tree in this repo is a **monolith with folders**. Probe Basic loads
 
 The model: a **small kernel** that can jog, run G-code, and show a DRO, plus **feature packs** that opt into named sockets on that kernel. Enable a pack in one machine profile. Disable it, and its tab, tags, M-codes, and PLC calls disappear together.
 
-This sits on top of [CODESYS_ARCHITECTURE.md](CODESYS_ARCHITECTURE.md). Same hard rule: plugins never own the interpolator.
+This sits on top of [CODESYS_ARCHITECTURE.md](CODESYS_ARCHITECTURE.md). Same hard rule: plugins never own the interpolator. Interpolator pins and dialect: [LEADSHINE_LIBRARIES.md](LEADSHINE_LIBRARIES.md) (`PMC_IpoLib` G-code, latch + Halt, not Store `SMC_Interpolator`).
 
 ---
 
@@ -107,8 +107,8 @@ Each plugin exports one manifest. The kernel does not `import` laser internals. 
 | `nav` / `routes` | React shell + router | `/laser`, `/tune`, `/probe` |
 | `modals` | dialog host (OK / Abort, Esc policy) | M600 tool-change modal |
 | `droExtras` | XYZA DRO | optional extras; SET Z stays kernel |
-| `mFunctions` | dispatcher (`wM` / `bAcknM`) | `M600`, `M62`/`M63` |
-| `probeSources` | mux: exactly one source owns G31 | `touch`, `toolsetter`, `laser` |
+| `mFunctions` | dispatcher. Prefer `wM`/`AcknM` on `LS_6AxisGCodeAxisUVW_File` if that FB is on the SKU; else ST-owned (4-axis file FB has no M handshake) | `M600`, `M62`/`M63` |
+| `probeSources` | mux: exactly one source owns latch + Halt | `touch`, `toolsetter`, `laser` |
 | `traceChannels` | 1 kHz ring buffer slots | `ferr.x`, `torque.z`, `vfd.rpm` |
 | `coe` | SDO read/write mailbox | tuner gain objects |
 | `opcua` | server + `GVL_Kernel` | `GVL_Laser`, `GVL_Tune` |
@@ -137,7 +137,7 @@ export default definePlugin({
 });
 ```
 
-`dependsOn` is how laser is not allowed to poke `motion.probe-input` itself. It asks the mux for the `laser` slot; the mux decides whether G31 listens.
+`dependsOn` is how laser is not allowed to poke the probe DI itself. It asks the mux for the `laser` slot; the mux decides which latch ST will Halt on. There is no G31 skip on the Leadshine G-code FBs in the Jan 2025 manual.
 
 ---
 
@@ -172,7 +172,7 @@ Practical pattern (what industrial people actually do):
 
 1. **Ship kernel + all first-party libraries in the project.** Unused FBs sit idle behind `GVL_Features.*` bits. Enabling laser on a mill that already has the library is a config change + download, not a rewrite.
 2. **Adding a brand-new pack** (one that was never compiled in) requires a CODESYS rebuild and download. That is expected.
-3. **Never** put plugin business logic in the 1 ms interpolator task unless it is the mux/M-dispatcher itself. Feature FBs live in the slower path task or run as state machines that only *request* G31/jog from the kernel.
+3. **Never** put plugin business logic in the 1 ms interpolator task unless it is the mux/M-dispatcher itself. Feature FBs live in the slower path task or run as state machines that only *request* Halt/latch or jog from the kernel.
 
 So “independent features” means **independent source and independent enablement**, not hot-plug DLLs on a 1 ms bus.
 
@@ -183,7 +183,7 @@ So “independent features” means **independent source and independent enablem
 | Pack | Depends on | Owns | Today’s files (behavior spec) |
 |------|------------|------|-------------------------------|
 | `spindle-h100` | kernel spindle cmd/fb | Modbus map, 5 s at-speed, fault 64/92 | `custom.hal`, `h100.mb2hal` |
-| `toolchange-m600` | probe mux, dialogs, M-dispatcher | park XY, setter G31, length write | `m600.ngc`, `tool_touch_off.ngc`, dialog |
+| `toolchange-m600` | probe mux, dialogs, M-dispatcher | park XY, setter latch + Halt, length write (ST offset, not G43) | `m600.ngc`, `tool_touch_off.ngc`, dialog |
 | `laser-setter` | probe mux, M62/M63 | beam capture, static-X hunt | `laser_*.ngc`, `laser_setter.py` |
 | `wcs-probe` | probe mux, probe tool # | pocket/boss/corner library | `probe_*.ngc` |
 | `servo-tune` | trace, CoE mailbox | pending gains, one-click, LLM copy | `servo_tuner.py`, `a6_auto_tune.py` |
@@ -192,7 +192,7 @@ So “independent features” means **independent source and independent enablem
 
 Shared resources that **must** stay kernel sockets:
 
-- Probe / toolsetter / laser DIs → mux, not three features writing G31
+- Probe / toolsetter / laser DIs → mux, not three features writing Halt/latch
 - M-code numbers → dispatcher table
 - Drive SDOs → one mailbox so tuner and startup 6065 do not stomp each other
 - Operator Abort → one modal host with a documented Esc policy
@@ -279,7 +279,7 @@ Also: IEC cannot be USB-stick hot-plugged onto a 1 ms task. A marketplace UX tha
 
 **Start:** in-tree packs + `machines/lemontart.yaml`.  
 **Later, if this is a product:** a curated catalog UI that edits the same YAML, plus signed artifacts and a kernel API version.  
-**Not:** an open store, USB-drop HMI packs on a running interpolator, plugins that call `SMC_Interpolator` directly, filesystem auto-discovery, or a “misc” pack for leftover buttons.
+**Not:** an open store, USB-drop HMI packs on a running interpolator, plugins that call the interpolator FB directly (`LS_*GCode*` / line FBs — and not Store `SMC_Interpolator` either), filesystem auto-discovery, or a “misc” pack for leftover buttons.
 
 If a feature needs a new kernel socket (for example a second spindle), **extend the kernel on purpose** and bump a kernel API version. Packs depend on `kernel.probeMux@1`. That is how a future catalog stays safe.
 
@@ -293,7 +293,7 @@ Do not design twenty packs on day one. Grow the sockets as the first packs need 
 |-------|----------------------|---------------------------|
 | Jog + DRO HMI | (none yet) | — |
 | Spindle | spindle cmd/fb + fault → estop | `spindle-h100` |
-| G31 | probe mux + M-dispatcher | `toolchange-m600` |
+| Latch + Halt | probe mux + M-dispatcher | `toolchange-m600` |
 | Laser | mux slot `laser` + M62/M63 | `laser-setter` |
 | WCS | same mux, `touch` slot | `wcs-probe` |
 | Tuning | trace registry + CoE mailbox | `signal-log`, then `servo-tune` |
