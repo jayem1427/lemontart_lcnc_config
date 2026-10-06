@@ -37,6 +37,7 @@ If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page 
 | Copy tool-change onto another mill | **[INSTALL_TOOL_CHANGE.md](docs/INSTALL_TOOL_CHANGE.md)** |
 | Tweak Probe Basic UI / SET Z / abort dialog | **[PROBE_BASIC_UI.md](docs/PROBE_BASIC_UI.md)** |
 | Example tuning / M600 test G-code | **[TUNING_PROGRAMS.md](docs/TUNING_PROGRAMS.md)** |
+| Hand this config to an agent | **[agent/README.md](agent/README.md)** — skills plus docs in `release/lemontart-agent/` |
 | Log following error / tune servos | **[Servo auto-tuning](#servo-tuning--auto-tune)** · [docs index](docs/README.md) · [TUNING_PROGRAMS](docs/TUNING_PROGRAMS.md) · [SIGNAL_LOGGING](docs/SIGNAL_LOGGING.md) · [A6_TUNING](docs/A6_TUNING.md) · [SEMI_AUTO_TUNING](docs/SEMI_AUTO_TUNING.md) · [ONE_CLICK_TUNING](docs/ONE_CLICK_TUNING.md) · [GRAPHICAL_INERTIA_TUNE](docs/GRAPHICAL_INERTIA_TUNE.md) |
 
 Full list and learning paths: **[docs/README.md](docs/README.md)**.

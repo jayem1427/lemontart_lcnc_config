@@ -37,6 +37,7 @@ things together.
 | Copy tool-change to another mill | [INSTALL_TOOL_CHANGE.md](INSTALL_TOOL_CHANGE.md) |
 | Copy servo tuning tabs | [INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md) |
 | Different servo family (Leadshine EL8, …) | [SERVO_SWAP.md](SERVO_SWAP.md) |
+| Give an agent this config | `agent/README.md`, shipped folder `release/lemontart-agent/` |
 | Fusion post (M600, XYZA, G93) | [TOOLSETTER.md § CAM](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps) |
 
 ### Servo tuning
