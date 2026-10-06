@@ -34,6 +34,7 @@ Stock references:
 | Manual Tool Change dialog | Stock QtPyVCP; Esc cancels | **Custom dialog** with **ABORT**; Esc/close ignored — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Drive position deviation | Drive defaults | **SDO 6065/6066** **0.5 mm / 0.5° / 250 ms** (6065 → **2.0** during one-click / inertia moves) — [A6_TUNING](A6_TUNING.md) |
 | Laser tool setter | M62 P0 mux to `motion.probe-input` for G38 | [LASER_TOOL_SETTER](LASER_TOOL_SETTER.md) |
+| LinuxCNC S-curve TP (grandixximo `fork`) | Dummy Ruckig queries + unsafe fallbacks | **Drop-in** [patches/linuxcnc-jerk-lookahead](../patches/linuxcnc-jerk-lookahead/README.md) — closed-form `Vs`/`Vpeak`/`V(T)` |
 | Pocket probe traverse feed | `#3017` from Probe Basic | **Local fix** — several `probe_*.ngc` had bare `[3017]` (3017 mm/min literal) |
 | PROBE SPINDLE NOSE ZERO | Runs on setter input | **Aborts if T#3014 loaded** — HAL routes touch probe only when that tool is in spindle |
 

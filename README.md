@@ -73,6 +73,8 @@ The staged path (sim → EtherCAT → Probe Basic → CAM) is spelled out in
 | `xhc-whb04b-6.hal` | Pendant |
 | `probe_basic/` | UI, macros, tool table, custom tabs + tool-change dialog |
 | `post-processor/linuxcnc-djr.cps` | Fusion post (M600, XYZA, G93) |
+| `patches/linuxcnc-jerk-lookahead/` | Closed-form S-curve lookahead for the grandixximo LinuxCNC `fork` TP |
+| `tests/test_scurve_queries.py` | Kinematic identity tests for that patch |
 | `docs/` | Guides |
 | `docs/reference/` | Vendor manuals / worksheets (H100, Sigma II calculator) |
 
