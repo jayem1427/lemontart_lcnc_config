@@ -6,6 +6,8 @@ Based on the [kalico sota-motion](https://github.com/dderg/kalico/tree/sota-moti
 
 **Workflow docs:** [SEMI_AUTO_TUNING.md](SEMI_AUTO_TUNING.md) · [ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md) · [TUNING_PROGRAMS.md](TUNING_PROGRAMS.md) (example frozen G-code)
 
+This page is the **StepperOnline A6** dictionary. Another drive family (Leadshine EL8-EC and the rest) follows [SERVO_SWAP.md](SERVO_SWAP.md). Do not point those C00/C01 indexes at a different servo.
+
 ---
 
 ## Quick start

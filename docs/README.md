@@ -36,6 +36,7 @@ things together.
 | Why doesn't this match the manual? | [DEVIATIONS.md](DEVIATIONS.md) |
 | Copy tool-change to another mill | [INSTALL_TOOL_CHANGE.md](INSTALL_TOOL_CHANGE.md) |
 | Copy servo tuning tabs | [INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md) |
+| Different servo family (Leadshine EL8, …) | [SERVO_SWAP.md](SERVO_SWAP.md) |
 | Fusion post (M600, XYZA, G93) | [TOOLSETTER.md § CAM](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps) |
 
 ### Servo tuning
@@ -47,6 +48,7 @@ things together.
 | One-click per axis | [ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md) |
 | Inertia panel (WIP) | [GRAPHICAL_INERTIA_TUNE.md](GRAPHICAL_INERTIA_TUNE.md) |
 | SDO map / APPLY path | [A6_TUNING.md](A6_TUNING.md) |
+| Swap to another drive family | [SERVO_SWAP.md](SERVO_SWAP.md) |
 | Example tuning G-code | [TUNING_PROGRAMS.md](TUNING_PROGRAMS.md) |
 | Signal logging | [SIGNAL_LOGGING.md](SIGNAL_LOGGING.md) |
 
@@ -113,6 +115,7 @@ We do not claim these integrations are the only correct approach.
 | [PYTHON_PACKAGES.md](PYTHON_PACKAGES.md) | Optional Python deps for plots / FFT |
 | [SEMI_AUTO_TUNING.md](SEMI_AUTO_TUNING.md) | Clipboard → LLM tuning loop |
 | [SEMI_AUTO_TUNING_SCOPE.md](SEMI_AUTO_TUNING_SCOPE.md) | Semi-auto design notes |
+| [SERVO_SWAP.md](SERVO_SWAP.md) | A6 vs other drives (Leadshine EL8); what to replace |
 | [SERVO_TUNING.md](SERVO_TUNING.md) | Manual gain zone ladder |
 | [SERVO_TUNING_LLM.md](SERVO_TUNING_LLM.md) | LLM tuning playbook |
 | [SIGNAL_LOGGING.md](SIGNAL_LOGGING.md) | Logging tab, `signals.json` |
