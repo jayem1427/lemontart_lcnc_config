@@ -87,7 +87,7 @@ Standard 4-axis mill table rotary. **Not TCP** — Fusion post uses `optimizeMac
 RS274NGC_STARTUP_CODE = F10 S300 G21 G17 G40 G49 G54 G64 P0.001 G80 G90 G91.1 G94 G97 G98
 ```
 
-Metric (`G21`), absolute (`G90`), **`G94`** feed per minute default. Simultaneous 4-axis CAM blocks use **`G93`** inverse time from the post — not in startup.
+Metric (`G21`), absolute (`G90`), **`G94`** feed per minute default. Simultaneous 4-axis CAM blocks use **`G93`** inverse time from the post only while the 4th axis is enabled and interpolating — not in startup.
 
 ### `MAX_FEED_OVERRIDE = 2.5`
 
@@ -140,9 +140,15 @@ Here: `halui.tool.number` compared to constant **99** (`probe-tool-num`):
 - Equal → touch probe `lcec.0.1.di-5`
 - Not equal → toolsetter `lcec.0.1.di-2`
 
-Laser **M62 P0** muxes `laser-beam-broken` onto `motion.probe-input` for G38 measure macros; **M63 P0** restores contact-only routing — [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md).
+Laser **M62 P0** muxes **raw** `laser-beam-broken` onto `motion.probe-input` for
+G38 measure macros (tip-find, coarse locate, slot transit); diameter edges use
+a **static-X** RAW peak hunt with the mux off;
+**M63 P0** restores contact-only routing —
+[LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md).
 
 Uses `and2` + `or2`, not `mux2` (float-only). **`#3014` does not update HAL** — renumbering requires editing `setp probe-tool-num.value`.
+
+Audible feedback: `probe_beep.hal` watches `probe-in` and `laser-beam-broken`, playing `beep.mp3` via `scripts/probe_beep.py` (userspace; not realtime). Covers touch probe, contact toolsetter, laser G38, and jog/capture beam-block. Optional — comment out the HALFILE to disable.
 
 See [README.md](../README.md#contact-probe-vs-toolsetter-hal) and [TOOLSETTER.md](TOOLSETTER.md#touch-probe-tool-number-setup-and-renumbering).
 
@@ -164,7 +170,7 @@ Physical master estop cuts mains. Software NC estop on Slave 3 DI1 gates `iocont
 | Deviation | Notes |
 |-----------|--------|
 | M3/M4 ↔ VFD direction **swapped** | Comment `REVERT: fwd->sel0 rev->sel1` |
-| At-speed | `near.0` (50 RPM) + **`timedelay.0` 5 s** |
+| At-speed | `near.0` (50 RPM) + **`spindle-at-speed-delay` 5 s** |
 | Critical faults | Modbus fault reg `0x000A` codes 64 / 92 → `halui.estop.activate` |
 | `or2.1` reserved | Do not load another `or2` with `names=` — conflicts with probe `or2.0` |
 
@@ -289,9 +295,11 @@ If Probe Basic fails to render on your GPU, launch with
 
 - Default **`toolChangeMode: "M600"`**
 - **`preloadTool: false`**
-- **G93** on simultaneous `G1 XYZA`
+- **G93** only on simultaneous `G1 XYZA` while the 4th axis is enabled and moving; otherwise **G94**
+- **No `G49` after multi-axis** — non-TCP; would cancel `G43` tool length
 - Fourth axis **table on X**, non-TCP
 - Property groups require Fusion post engine **45702+**
+- M600 **same-tool skip** when spindle tool matches CAM `T` and `#5403 > 0`
 
 Full property table: [TOOLSETTER.md](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps).
 

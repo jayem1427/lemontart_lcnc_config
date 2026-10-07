@@ -5,12 +5,16 @@ DS-5V-M on Slave 2 DI5 (DB15 pin 11). Live LASER LED mirrors HAL signal
 laser-beam-broken (clear vs tool in beam). CAPTURE stores BEAM X/Y while
 the tool blocks the light. START OFFSET (+X, default 15 mm) is the clear
 approach point away from the toolsetter. MEASURE DIAMETER tip-finds Z at
-BEAM XY, then sweeps −X from START through the beam up to MAX TRAVEL.
+BEAM XY, then a coarse G38 near each flute tip and a static-X peak hunt:
+park X, wait for any RAW beam peak, step inward, first peak is the
+outermost tip. G38 is still used for tip-find, coarse locate, and the
+break/clear transit through the slot.
 
 Measure macros use M62 P0 to route the laser onto motion.probe-input for
 continuous G38 moves; M63 P0 restores the contact probe mux. M66 P3 on
-motion.digital-in-03 is still used for beam-at-START safety checks.
-(#<_hal[laser-beam-broken]> is frozen at program start; do not use it in loops.)
+motion.digital-in-03 is RAW; M66 P4 is FILT. The static hunt reads RAW
+with the mux off. Per-sample X is published on M68 E2/E3 for the RESULTS
+scan dots and logs/laser_hits/.
 
 Params live in #5501+ (never G30/toolsetter #5181-#5186).
 #5516 = measured beam width offset (master pin − last raw diameter).
@@ -26,24 +30,30 @@ import linuxcnc
 from qtpy import uic
 from qtpy.QtCore import Qt, QSize, QTimer
 from qtpy.QtGui import QImage, QPixmap, QColor, QPalette, QFont, QFontDatabase
-from qtpy.QtWidgets import QWidget, QMessageBox, QApplication
+from qtpy.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QApplication,
+    QWidget,
+)
 
 from qtpyvcp.utilities import logger
 
 LOG = logger.getLogger(__name__)
 MM_PER_INCH = 25.4
-IMAGE_DISPLAY_SCALE = 0.624  # 20% larger than prior 0.52 setting
+IMAGE_DISPLAY_SCALE = 0.92  # display scale inside the doubled image slot
 PB_FONT = "BebasKai"
 PB_FONT_PATH = "/usr/share/fonts/truetype/BebasKai.ttf"
 HAL_LASER_BROKEN = "laser-beam-broken"
-HAL_LASER_DIO = "motion.digital-in-03"  # live M66 source; also usable for capture gate
+HAL_LASER_DIO = "motion.digital-in-03"  # live M66 source
 LED_CLEAR = "#c01c28"      # beam clear (nothing in slot)
 LED_BROKEN = "#f5c211"     # tool breaking beam
 LED_UNKNOWN = "#4a4f51"
 # Persistent laser params in linuxcnc.var (must exist there or they are lost on exit)
 LASER_VAR_PARAMS = (
     5501, 5502, 5503, 5504, 5505, 5506, 5507, 5508, 5509,
-    5510, 5511, 5512, 5513, 5514, 5515, 5516, 5517, 5519,
+    5510, 5511, 5512, 5513, 5514, 5515, 5516, 5517, 5518, 5519,
 )
 
 # Chroma key for green-screen tool setter photos. Uses green-channel dominance
@@ -139,12 +149,26 @@ class UserTab(QWidget):
         palette = self.palette()
         palette.setColor(self.backgroundRole(), panel)
         self.setPalette(palette)
-        for group_name in ('grpMeasure', 'grpResults', 'grpCalibration', 'headerBar', 'footerBar'):
+        for group_name in ('grpMeasure', 'grpResults', 'grpCalibration', 'headerBar'):
             widget = getattr(self, group_name, None)
             if widget is not None:
                 widget.setAttribute(Qt.WA_StyledBackground, True)
 
         self._load_stylesheet(here)
+        # Force panel titles to 28pt — Probe Basic's app QSS otherwise keeps them at body size.
+        title_font = QFont(PB_FONT, 28)
+        for group_name in ('grpMeasure', 'grpResults', 'grpCalibration'):
+            group = getattr(self, group_name, None)
+            if group is not None:
+                group.setFont(title_font)
+        body = getattr(self, 'bodyLayout', None)
+        if body is not None:
+            # Controls stay compact on the left; image column takes leftover space.
+            body.setStretch(0, 0)
+            body.setStretch(1, 1)
+        btn_cal = getattr(self, 'btnCalibrate', None)
+        if btn_cal is not None and hasattr(btn_cal, 'setWordWrap'):
+            btn_cal.setWordWrap(True)
         self._tool_setter_pixmap = None
         self._load_tool_setter_image(here)
 
@@ -160,9 +184,12 @@ class UserTab(QWidget):
         self._wire_help()
         self._wire_start_position()
         self._wire_beam_width_edit()
+        self._init_hit_dots()
         self._init_units()
         self._last_raw_diam_mm = None
         self._beam_width_mm = 0.0
+        self._hit_events = []
+        self._hit_evt_seq = 0
         self._load_saved_laser_params()
 
         self._beam_timer = QTimer(self)
@@ -170,7 +197,7 @@ class UserTab(QWidget):
         self._beam_timer.timeout.connect(self._poll_beam_led)
         self._beam_timer.start()
         self._poll_beam_led()
-        self._set_status("Ready")
+        self._set_status("")
 
     def _var_file_path(self):
         """Config-dir linuxcnc.var (PARAMETER_FILE)."""
@@ -237,6 +264,7 @@ class UserTab(QWidget):
         x_mm = values.get(5501, 0.0)
         y_mm = values.get(5502, 0.0)
         rpm = values.get(5503, 0.0)
+        reverse_spindle = values.get(5518, 1.0)
         z_drop = values.get(5507, 2.0)
         max_travel = values.get(5508, 30.0)
         start_offset = values.get(5509, 15.0)
@@ -249,6 +277,9 @@ class UserTab(QWidget):
         le_rpm = getattr(self, "leProbeRpm", None)
         if le_rpm is not None and rpm >= 0:
             le_rpm.setText("{:.0f}".format(rpm))
+        chk_rev = getattr(self, "chkReverseSpindle", None)
+        if chk_rev is not None:
+            chk_rev.setChecked(reverse_spindle >= 0.5)
         for name, val in (
             ("leZDrop", z_drop),
             ("leMaxTravel", max_travel),
@@ -324,7 +355,7 @@ class UserTab(QWidget):
             LOG.warning("laser_setter: image %s missing", image_path)
             return
         lbl.setAutoFillBackground(False)
-        lbl.setAlignment(Qt.AlignCenter)
+        lbl.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         pixmap = QPixmap(image_path)
         if pixmap.isNull():
             LOG.warning("laser_setter: failed to load image %s", image_path)
@@ -533,28 +564,33 @@ class UserTab(QWidget):
             "2. LASER LED follows HAL signal laser-beam-broken "
             "(halcmd gets laser-beam-broken).\n"
             "3. Jog until the tool blocks the beam (LED = broken) → "
-            "CAPTURE BEAM.\n"
+            "Capture Current XY as Beam-Blocked.\n"
             "4. Set START OFFSET (+X from BEAM to clear START, default 15), "
             "MAX TRAVEL (−X from START through beam), Z DROP.\n"
-            "5. PROBE RPM: 0 = static; >0 = M3 reverse on diameter pass "
-            "(custom.hal swaps M3/M4 to the VFD).\n"
-            "6. MEASURE DIAMETER (M62 P0 enables laser on probe-input for G38):\n"
-            "   Z0 → G38 tip-find at BEAM XY → retract 5 mm → START (BEAM+offset) → "
-            "tip−ZDROP → G38 pre-touch −X → X+2 mm → M3 → break→clear "
-            "(stop at START−max travel) → M63 P0.\n"
+            "5. PROBE RPM: 0 = static (pins); >0 = M3 reverse on diameter hits "
+            "(custom.hal swaps M3/M4 to the VFD). Fluted tools: try ~1000–6000.\n"
+            "6. MEASURE DIAMETER (M62 P0 enables FILT laser on probe-input for G38):\n"
+            "   tip-find at BEAM → START → tip−ZDROP → coarse G38 pre-touch → M3 → "
+            "static-X hunt from +X (park, wait for a RAW peak, step 0.02 mm then "
+            "0.001 mm inward; first peak is the +X tip) → feed −X until clear + 1 mm → "
+            "coarse G38 from −X → static-X hunt toward the known +X tip → "
+            "raw = x_plus − x_minus + beam cal. +X/−X scan dots + logs/laser_hits CSV.\n"
             "7. Beam-width cal: enter MASTER PIN size → MEASURE DIAMETER on that pin → "
             "CALIBRATE BEAM. MEASURED BEAM WIDTH = master − raw; later diameters add "
-            "that offset. You can also type a value into MEASURED BEAM WIDTH by hand "
-            "for fine tuning (#5516).\n"
+            "that offset. Re-calibrate after this static-X hunt change.\n"
             "8. Optional: MEASURE LENGTH (uses #5504 BEAM Z if already taught).\n"
-            "While measuring, M62 P0 routes laser-beam-broken to motion.probe-input; "
-            "M63 P0 restores contact probe / toolsetter mux.",
+            "While measuring, M62 P0 routes the FILT envelope onto motion.probe-input "
+            "for G38; the static-X hunt reads RAW via M66 P3 with the mux off. "
+            "M63 P0 restores the contact probe / toolsetter mux.",
         )
 
     def _wire_start_position(self):
         btn = getattr(self, 'btnGetStartPos', None)
         if btn is None:
             return
+        # Two-line label in .ui; word-wrap keeps it readable if font metrics differ.
+        if hasattr(btn, "setWordWrap"):
+            btn.setWordWrap(True)
         btn.clicked.connect(self._capture_start_xy)
 
     def _init_units(self):
@@ -652,19 +688,31 @@ class UserTab(QWidget):
             self._set_status("ERROR: invalid BEAM X/Y or probe RPM")
             return False
         x_pos, y_pos, rpm = setup
+        reverse = self._reverse_spindle_flag()
         if abs(x_pos) < 1e-6 and abs(y_pos) < 1e-6:
-            self._set_status("ERROR: BEAM X/Y is 0,0 — press CAPTURE BEAM first")
+            self._set_status(
+                "ERROR: BEAM X/Y is 0,0 — Capture Current XY as Beam-Blocked first"
+            )
             return False
         if not self._mdi_set_numbered_params(
-            ((5501, x_pos), (5502, y_pos), (5503, rpm))
+            ((5501, x_pos), (5502, y_pos), (5503, rpm), (5518, reverse))
         ):
             return False
-        self._write_var_params({5501: x_pos, 5502: y_pos, 5503: rpm})
+        self._write_var_params(
+            {5501: x_pos, 5502: y_pos, 5503: rpm, 5518: reverse}
+        )
         LOG.info(
-            "laser_setter: setup synced X%.6f Y%.6f RPM%.0f (mm)",
-            x_pos, y_pos, rpm,
+            "laser_setter: setup synced X%.6f Y%.6f RPM%.0f reverse=%.0f (mm)",
+            x_pos, y_pos, rpm, reverse,
         )
         return True
+
+    def _reverse_spindle_flag(self):
+        """1.0 if REVERSE SPINDLE checked, else 0.0 (#5518)."""
+        chk = getattr(self, "chkReverseSpindle", None)
+        if chk is not None and chk.isChecked():
+            return 1.0
+        return 0.0
 
     def _sync_diam_params(self) -> bool:
         """Push Z DROP, MAX TRAVEL, START OFFSET into #5507-#5509."""
@@ -781,6 +829,143 @@ class UserTab(QWidget):
             return False
         return True
 
+    HIT_N = 9
+    HIT_DOT_PENDING = "background-color: #cc0000; border: 1px solid #2a2a2a; border-radius: 7px;"
+    HIT_DOT_OK = "background-color: #4e9a06; border: 1px solid #2a2a2a; border-radius: 7px;"
+    HIT_DOT_CLEAR = "background-color: #555753; border: 1px solid #2a2a2a; border-radius: 7px;"
+    HIT_DOT_FAIL = "background-color: #ef2929; border: 2px solid #f5c211; border-radius: 7px;"
+
+    def _init_hit_dots(self):
+        """Two rows of 9 dots in RESULTS — live static-X scan feedback."""
+        layout = getattr(self, "resultsLayout", None)
+        self._hit_dots = {"plus": [], "minus": []}
+        if layout is None:
+            return
+        for row, side, cap, obj in (
+            (2, "plus", "+X SCAN", "lblHitsPlusCap"),
+            (3, "minus", "-X SCAN", "lblHitsMinusCap"),
+        ):
+            lab = QLabel(cap)
+            lab.setObjectName(obj)
+            row_w = QWidget()
+            hbox = QHBoxLayout(row_w)
+            hbox.setContentsMargins(0, 0, 0, 0)
+            hbox.setSpacing(4)
+            for _i in range(self.HIT_N):
+                dot = QLabel()
+                dot.setFixedSize(14, 14)
+                hbox.addWidget(dot)
+                self._hit_dots[side].append(dot)
+            hbox.addStretch(1)
+            layout.addWidget(lab, row, 0)
+            layout.addWidget(row_w, row, 1, 1, 2)
+        self._reset_hit_dots()
+
+    def _reset_hit_dots(self):
+        self._hit_events = []
+        # analog-out-03 keeps the previous run's last packed event. Latch that
+        # seq so the next poll does not immediately re-paint the last -X dot.
+        packed = self._read_aout(3)
+        if packed is None:
+            self._hit_evt_seq = 0
+        else:
+            self._hit_evt_seq = int(round(float(packed))) // 10000
+        for side in ("plus", "minus"):
+            for dot in self._hit_dots.get(side, []):
+                dot.setStyleSheet(self.HIT_DOT_PENDING)
+                dot.setToolTip("waiting")
+
+    def _apply_hit_event(self, side, slot, x_mm, ok):
+        dots = self._hit_dots.get(side, [])
+        idx = int(slot) - 1
+        if 0 <= idx < len(dots):
+            if ok:
+                dots[idx].setStyleSheet(self.HIT_DOT_OK)
+                dots[idx].setToolTip("{:.4f} mm peak".format(x_mm))
+            else:
+                dots[idx].setStyleSheet(self.HIT_DOT_CLEAR)
+                dots[idx].setToolTip("{:.4f} mm clear".format(x_mm))
+        n = 1 + sum(1 for ev in self._hit_events if ev["side"] == side)
+        self._hit_events.append({
+            "side": side,
+            "hit": n,
+            "x_mm": float(x_mm),
+            "ok": 1 if ok else 0,
+        })
+
+    def _poll_hit_events(self):
+        """Decode M68 E3 packed hit events; E2 is tip X."""
+        packed = self._read_aout(3)
+        if packed is None:
+            return
+        evt = int(round(float(packed)))
+        seq = evt // 10000
+        if seq <= 0:
+            # Macro start (M68 E3 Q0). Clear the latched leftover seq.
+            self._hit_evt_seq = 0
+            return
+        if seq == self._hit_evt_seq:
+            return
+        rest = evt % 10000
+        side_n = rest // 100
+        slot = (rest % 100) // 10
+        ok = (rest % 10) == 1
+        x_mm = self._read_aout(2)
+        if x_mm is None:
+            x_mm = 0.0
+        side = "plus" if side_n == 1 else "minus" if side_n == 2 else None
+        if side is None or slot < 1:
+            return
+        self._hit_evt_seq = seq
+        self._apply_hit_event(side, slot, x_mm, ok)
+
+    def _flush_hit_events(self, rounds=6):
+        """Re-read analog-out after MDI idle — last -X M68 can lag status by a period."""
+        for _ in range(int(rounds)):
+            self._poll_hit_events()
+            QApplication.processEvents()
+            time.sleep(0.05)
+
+    def _hit_csv_dir(self):
+        here = os.path.dirname(os.path.abspath(__file__))
+        return os.path.abspath(os.path.join(here, "..", "..", "..", "logs", "laser_hits"))
+
+    def _write_hit_csv(self, success):
+        """Event log of each static-X sample (ok=1 peak, ok=0 clear)."""
+        if not self._hit_events:
+            return None
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        out_dir = self._hit_csv_dir()
+        try:
+            os.makedirs(out_dir, exist_ok=True)
+        except OSError as exc:
+            LOG.warning("laser_setter: cannot create %s: %s", out_dir, exc)
+            return None
+        path = os.path.join(out_dir, "{}_diameter.csv".format(stamp))
+        values = self._read_var_file()
+        raw = values.get(5512, self._last_raw_diam_mm or 0.0)
+        beam = values.get(5516, self._beam_width_mm)
+        tip_z = values.get(5510, 0.0)
+        rpm = values.get(5503, 0.0)
+        corr = raw + beam
+        try:
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(
+                    "# raw={:.6f} corr={:.6f} beam={:.6f} tip_z={:.6f} rpm={:.0f} success={:d}\n".format(
+                        raw, corr, beam, tip_z, rpm, 1 if success else 0
+                    )
+                )
+                handle.write("side,hit,x_mm,ok\n")
+                for ev in self._hit_events:
+                    handle.write(
+                        "{side},{hit},{x_mm:.6f},{ok}\n".format(**ev)
+                    )
+        except OSError as csv_exc:
+            LOG.warning("laser_setter: hit CSV failed: %s", csv_exc)
+            return None
+        LOG.info("laser_setter: wrote hit CSV %s (%d events)", path, len(self._hit_events))
+        return path
+
     def _read_aout(self, index):
         """Read motion analog out published by M68."""
         try:
@@ -792,7 +977,7 @@ class UserTab(QWidget):
         pin = "motion.analog-out-{:02d}".format(index)
         return _hal_get_float(pin)
 
-    def _wait_complete_pump(self, timeout_s=120.0):
+    def _wait_complete_pump(self, timeout_s=120.0, poll_hits=True):
         """Wait for MDI without freezing Qt — keeps LASER LED polling alive."""
         deadline = time.monotonic() + float(timeout_s)
         while True:
@@ -800,7 +985,9 @@ class UserTab(QWidget):
             if remaining <= 0:
                 raise TimeoutError("MDI wait timed out after {:.0f}s".format(timeout_s))
             # Short chunks so QTimer can refresh the beam LED mid-measure
-            rc = self._cmd.wait_complete(min(0.1, remaining))
+            rc = self._cmd.wait_complete(min(0.05, remaining))
+            if poll_hits:
+                self._poll_hit_events()
             QApplication.processEvents()
             if rc != -1:
                 return rc
@@ -821,21 +1008,40 @@ class UserTab(QWidget):
                 LOG.warning("laser_setter: not enabled, blocked: %s", mdi_cmd)
                 return
 
+            if btn_name == "btnMeasureDiameter":
+                self._reset_hit_dots()
+
             self._cmd.mode(linuxcnc.MODE_MDI)
-            self._wait_complete_pump(10.0)
+            self._wait_complete_pump(10.0, poll_hits=False)
             self._cmd.mdi(mdi_cmd)
             self._set_status("MEASURING…")
-            self._wait_complete_pump(120.0)
+            self._wait_complete_pump(180.0, poll_hits=True)
 
+            csv_path = None
             if btn_name == 'btnMeasureLength':
                 self._refresh_length_result()
             elif btn_name == 'btnMeasureDiameter':
+                self._flush_hit_events()
+                csv_path = self._write_hit_csv(self._measure_succeeded())
                 self._refresh_diameter_result()
             else:
                 self._set_status("DONE: " + mdi_cmd)
+            if csv_path:
+                cur = getattr(self, "lblStatus", None)
+                extra = "  |  HITS CSV: " + csv_path
+                if cur is not None and cur.text():
+                    self._set_status(cur.text() + extra)
+                else:
+                    self._set_status(extra)
             LOG.info("laser_setter: %s", mdi_cmd)
         except Exception as exc:
             LOG.error("laser_setter: MDI failed (%s): %s", mdi_cmd, exc)
+            if btn_name == "btnMeasureDiameter":
+                try:
+                    self._flush_hit_events()
+                    self._write_hit_csv(False)
+                except Exception:
+                    pass
             self._set_status("ERROR: " + str(exc))
 
     def _measure_succeeded(self) -> bool:
@@ -883,7 +1089,7 @@ class UserTab(QWidget):
             self.lblResDiam.setText("{:.4f}".format(self._mm_to_ui(diameter_mm)))
             if abs(self._beam_width_mm) > 1e-12:
                 self._set_status(
-                    "DIAMETER {:.4f} (raw {:.4f} + beam width {:.4f})".format(
+                    "DIAMETER {:.4f} (max 9+9; raw {:.4f} + beam width {:.4f})".format(
                         self._mm_to_ui(diameter_mm),
                         self._mm_to_ui(self._last_raw_diam_mm or 0.0),
                         self._mm_to_ui(self._beam_width_mm),
@@ -891,7 +1097,7 @@ class UserTab(QWidget):
                 )
             else:
                 self._set_status(
-                    "DIAMETER {:.4f} (raw — CALIBRATE BEAM to apply master-pin offset)".format(
+                    "DIAMETER {:.4f} (max 9+9 raw — CALIBRATE BEAM for master-pin offset)".format(
                         self._mm_to_ui(diameter_mm)
                     )
                 )
@@ -929,14 +1135,17 @@ class UserTab(QWidget):
                 rpm = 0.0
             if rpm < 0:
                 rpm = 0.0
+            reverse = self._reverse_spindle_flag()
 
             self._set_beam_xy_widgets(x_mm, y_mm)
 
             if not self._mdi_set_numbered_params(
-                ((5501, x_mm), (5502, y_mm), (5503, rpm))
+                ((5501, x_mm), (5502, y_mm), (5503, rpm), (5518, reverse))
             ):
                 return
-            if not self._write_var_params({5501: x_mm, 5502: y_mm, 5503: rpm}):
+            if not self._write_var_params(
+                {5501: x_mm, 5502: y_mm, 5503: rpm, 5518: reverse}
+            ):
                 self._set_status(
                     "BEAM XY in interpreter but var file write failed — "
                     "will be lost on restart"

@@ -3,7 +3,7 @@
 (Laser tool length — G38 Z seek onto beam via motion.probe-input.)
 (M62 P0 ONLY around G38 — never during G0/G1.)
 (M63 P0 restores contact mux.)
-(Prereqs: BEAM X/Y + RPM #5501-#5503; BEAM Z #5504)
+(Prereqs: BEAM X/Y + RPM #5501-#5503; BEAM Z #5504; reverse #5518)
 (Tip-find at captured BEAM XY. START OFFSET #5509 is unused here.)
 (Results: #5510 tip Z, #5511 length=beam_z-trip_z, #5515=1 on success, M68 E0/E1)
 
@@ -22,6 +22,7 @@ o<laser_length> sub
     #<beam_z> = #5504
     #<approach> = #5505
     #<max_travel> = #5506
+    #<spindle_reverse> = #5518
     #<fast_fr> = #3004
     #<slow_fr> = #3005
     #<tip_coarse_fr> = 1200
@@ -66,7 +67,11 @@ o<laser_length> sub
     G0 G53 X#<tip_x> Y#<tip_y>
 
     o<len_spin> if [#<probe_rpm> GT 0]
-      M3 S#<probe_rpm>
+      o<len_dir> if [#<spindle_reverse> GE 0.5]
+        M3 S#<probe_rpm>
+      o<len_dir> else
+        M4 S#<probe_rpm>
+      o<len_dir> endif
       G4 P1.0
     o<len_spin> endif
 

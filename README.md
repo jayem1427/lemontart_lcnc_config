@@ -32,6 +32,7 @@ If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page 
 |------------|-----------|
 | Bring the machine up from zero | **[GETTING_STARTED.md](docs/GETTING_STARTED.md)** |
 | Understand “why doesn’t this behave like stock?” | **[DEVIATIONS.md](docs/DEVIATIONS.md)** |
+| Port this mill to a CODESYS PLC + browser HMI | **[CODESYS_ARCHITECTURE.md](docs/CODESYS_ARCHITECTURE.md)** · plugins: **[CODESYS_PLUGINS.md](docs/CODESYS_PLUGINS.md)** · Leadshine FBs: **[LEADSHINE_LIBRARIES.md](docs/LEADSHINE_LIBRARIES.md)** |
 | Change tools and probe length (contact setter) | **[TOOLSETTER.md](docs/TOOLSETTER.md)** |
 | Measure diameter with the laser | **[LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md)** |
 | Copy tool-change onto another mill | **[INSTALL_TOOL_CHANGE.md](docs/INSTALL_TOOL_CHANGE.md)** |
@@ -40,7 +41,7 @@ If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page 
 | Hand this config to an agent | **[agent/README.md](agent/README.md)** — skills plus docs in `release/lemontart-agent/` |
 | Log following error / tune servos | **[Servo auto-tuning](#servo-tuning--auto-tune)** · [docs index](docs/README.md) · [TUNING_PROGRAMS](docs/TUNING_PROGRAMS.md) · [SIGNAL_LOGGING](docs/SIGNAL_LOGGING.md) · [A6_TUNING](docs/A6_TUNING.md) · [SEMI_AUTO_TUNING](docs/SEMI_AUTO_TUNING.md) · [ONE_CLICK_TUNING](docs/ONE_CLICK_TUNING.md) · [GRAPHICAL_INERTIA_TUNE](docs/GRAPHICAL_INERTIA_TUNE.md) |
 
-Full list and learning paths: **[docs/README.md](docs/README.md)**.
+Full list and learning paths: **[docs/README.md](docs/README.md)**. A proposed Leadshine CODESYS brick + React HMI architecture (not implemented yet) is in **[docs/CODESYS_ARCHITECTURE.md](docs/CODESYS_ARCHITECTURE.md)**; interpolator FB facts from the Jan 2025 command manual are in **[docs/LEADSHINE_LIBRARIES.md](docs/LEADSHINE_LIBRARIES.md)**.
 
 ---
 
@@ -68,6 +69,7 @@ The staged path (sim → EtherCAT → Probe Basic → CAM) is spelled out in
 | `ethercat_mill.ini` | Main INI |
 | `ethercat_loadusr.hal` | Loads `lcec_conf` once (TWOPASS-safe) |
 | `ethercat_mill.hal` | Joints, CiA 402, limits, probe mux, laser pin |
+| `probe_beep.hal` | Audible beep on probe/toolsetter trip or laser beam-block (`beep.mp3`) |
 | `ethercat-conf.xml` | EtherCAT slaves + drive SDOs |
 | `custom.hal` | VFD Modbus, at-speed delay, faults |
 | `h100.mb2hal` | VFD register map |
@@ -112,7 +114,8 @@ toolsetter). Details: [TOOLSETTER.md](docs/TOOLSETTER.md).
 ## Laser tool setter overview
 
 The Kexin DS-5V-M is a U-slot beam-break sensor. The Laser Setter tab measures
-diameter by finding the tip in Z, then sweeping across the beam in X. Measure
+diameter by finding the tip in Z, then a coarse G38 plus a **static-X** peak
+hunt (park X, wait for any flute, step inward). Measure
 macros use **M62 P0** only around each **G38** (never during G0/G1); **M63 P0**
 restores the contact probe mux. Capture BEAM XY with the tool blocking the light,
 set START OFFSET / MAX TRAVEL / Z DROP, then MEASURE DIAMETER. Optional

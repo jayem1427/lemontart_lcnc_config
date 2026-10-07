@@ -18,6 +18,7 @@ Semi-automatic tool length measurement for a **manual collet spindle**, based on
 - `probe_basic_postgui.hal` — `qtpyvcp_manualtoolchange` wired for M6 OK dialog (tool number + remark)
 - `ethercat_mill.hal` — removed `tool-change` → `tool-changed` auto-loop; operator must confirm via dialog
 - `ethercat_mill.hal` — touch probe (DI5) vs contact toolsetter (DI2) gated onto `motion.probe-input` by `halui.tool.number` (T99 → probe only; any other tool → toolsetter only). See **Touch probe vs toolsetter routing** in [README.md](../README.md).
+- `probe_beep.hal` — optional audible click on `probe-in` or `laser-beam-broken` rising edge (`scripts/probe_beep.py` + `beep.mp3`). Needs `mpg123` (or `ffplay`). Disable by commenting out `HALFILE = probe_beep.hal` in the INI.
 - `custom.hal` — VFD fault OR uses `or2.1`; `or2.0` is probe routing in `ethercat_mill.hal` (`loadrt or2 count=2` — do not add a second `or2` load with `names=`)
 
 Probe Basic touch-probe tool number: `#3014` in `linuxcnc.var` (must match the tool table slot and HAL). See **[Touch probe tool number](#touch-probe-tool-number-setup-and-renumbering)** below.
@@ -87,12 +88,12 @@ Update README cross-references if you document a non-99 default elsewhere.
 ### `tool_touch_off.ngc` — M600 / automatic (`#2000=1`)
 
 - `brake_after_M600=1`, `disable_pre_pos=0` — collet wrench at tool-load, then probe
-- Flow: `G49` → `G53 Z0` → stop spindle → **tool-load XY** → **M6 OK dialog** → taught setter XY → probe → `G10 L1` → `T G43` → `G53 Z0`
+- Flow: `G94` (posted CAM may start in `G93`) → `G49` → `G53 Z0` → stop spindle → **tool-load XY** → **M6 OK dialog** → taught setter XY → probe → `G10 L1` → `T G43` → `G53 Z0`
 - Setter position uses `#5181`–`#5183` (teach via **SET TOOL TOUCH OFF POS**). Tool-load XY is separate (`#<tool_load_*>`)
 - Tool-change positioning uses **30000 / 10000 mm/min** traverse overrides (`#<traverse_xy_fr>` / `#<traverse_z_fr>`), not Probe Basic `#3006` alone
 - `M50 P1` runs **before** M6 so feed override is enabled when the OK dialog appears
 - No post-probe `M00`/`M01` — CAM resumes cutting immediately after the probe cycle
-- M600 always runs the full change+probe sequence (no same-tool skip that could false-positive and pause with `M00`)
+- **Same tool already in spindle:** compare `#<_current_tool>` (fallback `#5400`) to CAM `T` captured as `#2002` in `m600.ngc`. Match **and** tool-table length `#5403 > 0` → `G43 H<tool>` and return (no park, no OK dialog, no setter probe). Match but length unset → full measure. Mismatch → full change+probe. Manual **TOUCH OFF CURRENT TOOL** always measures. This path never issues `G49`, so active WCS / length stay intact.
 
 ### Tool-load position (collet change)
 
@@ -180,7 +181,7 @@ If options still look like the old stock list, Fusion is still using a cached co
 | **Preload tool** | **Off** (`preloadTool: false`) | Avoids a bare `T` for the next tool after tool change |
 | **Fourth axis mounted along** | **Along X** (`fourthAxisAround: "x"`) | **Multi-Axis Setup** — enables A output and kinematics |
 | **4th axis is a table** | **On** (`fourthAxisIsTable: true`) | Table rotary on X (Lemontart `trivkins coordinates=XYZA`) |
-| **G93 inverse time** | **On** (`useInverseTimeFeed: true`) | Simultaneous `G1 X Y Z A` uses inverse-time `F` |
+| **G93 inverse time** | **On** (`useInverseTimeFeed: true`) | Inverse-time `F` only while 4th axis is enabled and moving; otherwise `G94` |
 | Spindle after tool change | Post emits `M3`/`M4` after tool change M-code | M600 stops spindle; CAM must restart it (post does this) |
 
 In Fusion’s post dialog, open **Tool Change** and **Multi-Axis Setup**. If you use a Fusion **Machine Definition** on the setup, its kinematics override the post’s hardcoded A axis (set **Fourth axis mounted along** to **None** only if you intentionally want 3-axis output).
@@ -221,9 +222,11 @@ The post outputs standard LinuxCNC blocks for coordinated **X Y Z A** moves:
 G93 G1 X... Y... Z... A... F...
 ```
 
-- **Indexing** (tilt A, then 3-axis cut): `G0`/`G1` with A on plane changes — no special token.
-- **Simultaneous** (swarf / multi-axis): `onLinear5D` uses **`getMultiaxisFeed`** to compute an inverse-time **`F`** from the combined linear + rotary move length, then posts **`G93 G1`** (not the invalid `linear5D` word).
-- **Plain 3-axis** cuts still use **`G94`** and a normal feed-per-minute `F`.
+- **Indexing** (tilt A, then 3-axis cut): `G0`/`G1` with A on plane changes — stays **`G94`**.
+- **Simultaneous** (swarf / multi-axis): `onLinear5D` uses **`getMultiaxisFeed`** only while the 4th axis is **enabled** (`fourthAxisAround` not None, machine has a rotary) **and active** (this block interpolates A). Then it posts **`G93 G1`** with inverse-time **`F`**. XYZ-only segments in a 4-axis op, 3-axis ops, and 3-axis-only posting stay **`G94`**.
+- **Program header** is **`G90 G94 G17 G91.1`** (units per minute). Do not start CAM in `G93` — M600 `G1`/`G38` feeds are mm/min. A simultaneous section restores **`G94`** at `onSectionEnd`.
+- **Do not post `G49` after multi-axis.** This machine is non-TCP; `G49` cancels `G43` tool length and makes work Z look like the WCS is gone. Keep `G43` active across section boundaries.
+- **Plain 3-axis** cuts always use **`G94`** and a normal feed-per-minute `F`. A forced `A` word (parked angle) does not switch to inverse time.
 
 Machine definition in the post: **table A along X** (`fourthAxisAround: "x"`, `fourthAxisIsTable: true`), **`optimizeMachineAngles2(1)`** (map tip, non-TCP) to match **`trivkins coordinates=XYZA`** in `ethercat_mill.ini`. Do not enable TCP in Fusion for this config unless you add TCP kinematics in LinuxCNC.
 
@@ -232,6 +235,7 @@ In Fusion, use **4-axis simultaneous** / multi-axis strategies with this post se
 ### Operator notes
 
 - At G30, click **OK** on the Manual Tool Change dialog to confirm the collet change; the program continues automatically — no extra Cycle Start or feed-unhold step
+- If the CAM `T` is already the spindle tool **and** that tool has a measured length (`#5403 > 0`), M600 does not prompt or probe — it applies `G43 H` and the job continues. Reload LinuxCNC after changing `tool_touch_off.ngc`. Existing posted files do not need a re-post for the skip (`G94` is inside the macro). Copy the updated post into Fusion when you next post so multi-axis sections no longer emit `G49`.
 
 ## ATC compatibility
 

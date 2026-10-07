@@ -63,7 +63,7 @@ This machine uses **linuxcnc-ethercat** (`lcec`) with **CiA 402** drives:
 
 - Project: [linuxcnc-ethercat](https://github.com/linuxcnc-ethercat/linuxcnc-ethercat)
 - Our slave layout: [`ethercat-conf.xml`](../ethercat-conf.xml) (4× generic A6-class slaves, VID `00400000` PID `00000715`)
-- HAL load order: [`ethercat_loadusr.hal`](../ethercat_loadusr.hal) (`#NOTWOPASS`) then [`ethercat_mill.hal`](../ethercat_mill.hal)
+- HAL load order: [`ethercat_loadusr.hal`](../ethercat_loadusr.hal) (`#NOTWOPASS`) then [`ethercat_mill.hal`](../ethercat_mill.hal), then [`probe_beep.hal`](../probe_beep.hal) (optional audible probe trip)
 
 **First-time EtherCAT checklist**
 
