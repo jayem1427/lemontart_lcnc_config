@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# Write the dedicated Ethernet MAC into /etc/ethercat.conf.
+#
+# Automatic selection matches find-ethercat-nic: one physical Ethernet
+# port that does not own the default route. Anything else requires
+# --iface or --mac, and the file is not changed.
+#
+#   sudo scripts/ethercat/set-ethercat-nic
+#   sudo scripts/ethercat/set-ethercat-nic --iface enp2s0 --restart
+#
+# MASTER0_DEVICE is set to the MAC. An empty DEVICE_MODULES becomes
+# "generic". When the generic driver is in use, UPDOWN_INTERFACES is set
+# to the port name so the link is up before the master starts. A native
+# driver module already listed in the file is left as it is.
+#
+# Copy this directory to /usr/local/sbin on an install image.
+
+set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+# shellcheck source=nic-common.sh
+source "${here}/nic-common.sh"
+
+CONF=/etc/ethercat.conf
+IFACE_REQ=
+MAC_REQ=
+ALLOW_DEFAULT=0
+DRY_RUN=0
+DO_RESTART=0
+
+usage() {
+    cat <<'EOF'
+Usage: set-ethercat-nic [--iface NAME | --mac MAC] [--allow-default-route]
+                        [--conf PATH] [--dry-run] [--restart]
+
+Update MASTER0_DEVICE in /etc/ethercat.conf from the dedicated Ethernet
+port. Exits 2 without writing when more than one port qualifies.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --iface)
+            IFACE_REQ=${2:?--iface needs a name}
+            shift 2
+            ;;
+        --mac)
+            MAC_REQ=${2:?--mac needs an address}
+            shift 2
+            ;;
+        --allow-default-route)
+            ALLOW_DEFAULT=1
+            shift
+            ;;
+        --conf)
+            CONF=${2:?--conf needs a path}
+            shift 2
+            ;;
+        --dry-run)
+            DRY_RUN=1
+            shift
+            ;;
+        --restart)
+            DO_RESTART=1
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            usage >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [[ -n $IFACE_REQ && -n $MAC_REQ ]]; then
+    printf 'Pass only one of --iface and --mac\n' >&2
+    exit 1
+fi
+
+load_nics
+print_nic_table
+printf '\n'
+if ! choose_from_table "$IFACE_REQ" "$MAC_REQ" "$ALLOW_DEFAULT"; then
+    exit 2
+fi
+printf 'Selected %s (%s): %s\n' "$CHOSEN_IFACE" "$CHOSEN_MAC" "$CHOSEN_REASON"
+
+if [[ ! -f $CONF ]]; then
+    printf 'No %s. Install ethercat-master first.\n' "$CONF" >&2
+    exit 1
+fi
+
+work=$(mktemp)
+cleanup() { rm -f "$work"; }
+trap cleanup EXIT
+cp "$CONF" "$work"
+apply_master_device "$work" "$CHOSEN_IFACE" "$CHOSEN_MAC"
+
+printf 'MASTER0_DEVICE="%s"\n' "$(get_conf_var "$work" MASTER0_DEVICE)"
+printf 'DEVICE_MODULES="%s"\n' "$(get_conf_var "$work" DEVICE_MODULES || true)"
+printf 'UPDOWN_INTERFACES="%s"\n' "$(get_conf_var "$work" UPDOWN_INTERFACES || true)"
+
+if [[ $DRY_RUN == 1 ]]; then
+    printf 'Dry run: %s was not modified.\n' "$CONF"
+    exit 0
+fi
+
+if [[ ! -w $CONF ]]; then
+    printf 'Cannot write %s. Re-run with sudo.\n' "$CONF" >&2
+    exit 1
+fi
+
+stamp=$(date +%Y%m%d%H%M%S)
+cp -a "$CONF" "${CONF}.bak.${stamp}"
+cat "$work" >"$CONF"
+printf 'Updated %s (backup %s.bak.%s)\n' "$CONF" "$CONF" "$stamp"
+
+if [[ $DO_RESTART != 1 ]]; then
+    printf 'Start the master with: sudo systemctl enable --now ethercat && ethercat slaves\n'
+    printf 'Or re-run with --restart.\n'
+    exit 0
+fi
+
+ip link set dev "$CHOSEN_IFACE" up
+systemctl enable ethercat
+systemctl restart ethercat
+ethercat slaves

@@ -47,7 +47,7 @@ Full list and learning paths: **[docs/README.md](docs/README.md)**.
 ## Quick start
 
 1. Install [LinuxCNC](https://linuxcnc.org/downloads/) with EtherCAT / LCEC.
-2. Point `/etc/ethercat.conf` at your dedicated NIC.
+2. Point `/etc/ethercat.conf` at your dedicated NIC (`sudo scripts/ethercat/set-ethercat-nic`).
 3. Get **one axis** moving with a minimal config before you lean on this repo.
 4. Clone this tree and edit:
    - `ethercat-conf.xml` — your slave chain
