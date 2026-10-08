@@ -68,7 +68,7 @@ This machine uses **linuxcnc-ethercat** (`lcec`) with **CiA 402** drives:
 **First-time EtherCAT checklist**
 
 1. Install IgH EtherCAT master + `lcec` per project README.
-2. Set master MAC in `/etc/ethercat.conf` (from `ip link` on the dedicated NIC).
+2. Set the master MAC in `/etc/ethercat.conf`. `sudo scripts/ethercat/find-ethercat-nic` lists ports; `sudo scripts/ethercat/set-ethercat-nic --restart` writes the MAC when exactly one physical Ethernet port is not the default route. Pass `--iface` when more than one port qualifies. Plug the shop network in first so that port is the default route, then run the setter. On an install image, copy `scripts/ethercat/` to `/usr/local/sbin`.
 3. `ethercat slaves` — confirm 4 slaves, correct order.
 4. Start with **one axis** enabled in HAL; verify `halcmd show pin lcec.0.0.pos-fb` moves when you turn the motor by hand.
 5. Tune drives in StepperOnline software **before** aggressive homing.

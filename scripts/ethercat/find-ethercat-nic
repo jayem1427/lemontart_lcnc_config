@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# List physical Ethernet ports and name the one that should be MASTER0_DEVICE.
+#
+# The choice is automatic only when a single physical Ethernet port is not
+# the default route. Wi-Fi and the shop-network port are left alone. If
+# several dedicated ports exist, this prints the table and exits 2.
+#
+#   sudo scripts/ethercat/find-ethercat-nic
+#
+# Copy this directory to /usr/local/sbin on an install image. The scripts
+# need iproute2 and nothing else.
+
+set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+# shellcheck source=nic-common.sh
+source "${here}/nic-common.sh"
+
+usage() {
+    cat <<'EOF'
+Usage: find-ethercat-nic
+
+Print every interface and, when the choice is unique, the MAC to put in
+/etc/ethercat.conf. Exit 2 when a person needs to pass --iface to
+set-ethercat-nic.
+EOF
+}
+
+if [[ ${1:-} == -h || ${1:-} == --help ]]; then
+    usage
+    exit 0
+fi
+if [[ $# -ne 0 ]]; then
+    usage >&2
+    exit 1
+fi
+
+load_nics
+print_nic_table
+printf '\n'
+if choose_from_table "" "" 0; then
+    printf 'Use %s (%s): %s\n' "$CHOSEN_IFACE" "$CHOSEN_MAC" "$CHOSEN_REASON"
+    exit 0
+fi
+exit 2
