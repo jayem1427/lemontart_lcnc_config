@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=EtherCAT Mill (tpnext / jerk)
+Comment=Experimental LinuxCNC tpnext-ma + Probe Basic
+Exec=/home/jon/linuxcnc/configs/ethercat_mill/launch-tpnext.sh
+Icon=/usr/share/icons/hicolor/scalable/apps/linuxcnc-logo.svg
+Terminal=false
+Categories=Engineering;Science;
