@@ -73,28 +73,28 @@ net spindle-vfd-overtemperature near.2.out => or2.1.in1
 net spindle-vfd-critical-fault or2.1.out => halui.estop.activate
 
 # 7. Drive telemetry for logging / tuning (CiA 6077 torque, 606C velocity, 60F4 ferror)
-# conv_s32_float and mult2 are already loaded with count= in ethercat_mill.hal;
+# conv_sint_real and mult2 are already loaded with count= in ethercat_mill.hal;
 # extend with additional count= loads (cannot mix count= and names= on same module).
 # Plot tune-drive-ferr.* as DRIVE on the Logging tab — do NOT feed into joint.f-error.
-loadrt conv_s32_float count=4
-loadrt conv_s32_float count=4
-loadrt conv_s32_float count=4
+loadrt conv_sint_real count=4
+loadrt conv_sint_real count=4
+loadrt conv_sint_real count=4
 loadrt mult2 count=4
 loadrt div2 count=4
 loadrt scale names=tune-torque.0,tune-torque.1,tune-torque.2,tune-torque.3,tune-velocity.0,tune-velocity.1,tune-velocity.2,tune-velocity.3,tune-drive-ferr.0,tune-drive-ferr.1,tune-drive-ferr.2,tune-drive-ferr.3
 
-addf conv-s32-float.4 servo-thread
-addf conv-s32-float.5 servo-thread
-addf conv-s32-float.6 servo-thread
-addf conv-s32-float.7 servo-thread
-addf conv-s32-float.8 servo-thread
-addf conv-s32-float.9 servo-thread
-addf conv-s32-float.10 servo-thread
-addf conv-s32-float.11 servo-thread
-addf conv-s32-float.12 servo-thread
-addf conv-s32-float.13 servo-thread
-addf conv-s32-float.14 servo-thread
-addf conv-s32-float.15 servo-thread
+addf conv-sint-real.4 servo-thread
+addf conv-sint-real.5 servo-thread
+addf conv-sint-real.6 servo-thread
+addf conv-sint-real.7 servo-thread
+addf conv-sint-real.8 servo-thread
+addf conv-sint-real.9 servo-thread
+addf conv-sint-real.10 servo-thread
+addf conv-sint-real.11 servo-thread
+addf conv-sint-real.12 servo-thread
+addf conv-sint-real.13 servo-thread
+addf conv-sint-real.14 servo-thread
+addf conv-sint-real.15 servo-thread
 addf mult2.12 servo-thread
 addf mult2.13 servo-thread
 addf mult2.14 servo-thread
@@ -155,47 +155,47 @@ setp tune-drive-ferr.1.offset 0.0
 setp tune-drive-ferr.2.offset 0.0
 setp tune-drive-ferr.3.offset 0.0
 
-net x-torque-s32 lcec.0.0.torque-fb => conv-s32-float.4.in
-net x-torque-float conv-s32-float.4.out => mult2.12.in0
+net x-torque-s32 lcec.0.0.torque-fb => conv-sint-real.4.in
+net x-torque-float conv-sint-real.4.out => mult2.12.in0
 net x-torque-pct mult2.12.out => tune-torque.0.in
 
-net y-torque-s32 lcec.0.1.torque-fb => conv-s32-float.5.in
-net y-torque-float conv-s32-float.5.out => mult2.13.in0
+net y-torque-s32 lcec.0.1.torque-fb => conv-sint-real.5.in
+net y-torque-float conv-sint-real.5.out => mult2.13.in0
 net y-torque-pct mult2.13.out => tune-torque.1.in
 
-net z-torque-s32 lcec.0.2.torque-fb => conv-s32-float.6.in
-net z-torque-float conv-s32-float.6.out => mult2.14.in0
+net z-torque-s32 lcec.0.2.torque-fb => conv-sint-real.6.in
+net z-torque-float conv-sint-real.6.out => mult2.14.in0
 net z-torque-pct mult2.14.out => tune-torque.2.in
 
-net a-torque-s32 lcec.0.3.torque-fb => conv-s32-float.7.in
-net a-torque-float conv-s32-float.7.out => mult2.15.in0
+net a-torque-s32 lcec.0.3.torque-fb => conv-sint-real.7.in
+net a-torque-float conv-sint-real.7.out => mult2.15.in0
 net a-torque-pct mult2.15.out => tune-torque.3.in
 
-net x-vel-s32 lcec.0.0.vel-fb => conv-s32-float.8.in
-net x-vel-float conv-s32-float.8.out => tune-velocity.0.in
+net x-vel-s32 lcec.0.0.vel-fb => conv-sint-real.8.in
+net x-vel-float conv-sint-real.8.out => tune-velocity.0.in
 
-net y-vel-s32 lcec.0.1.vel-fb => conv-s32-float.9.in
-net y-vel-float conv-s32-float.9.out => tune-velocity.1.in
+net y-vel-s32 lcec.0.1.vel-fb => conv-sint-real.9.in
+net y-vel-float conv-sint-real.9.out => tune-velocity.1.in
 
-net z-vel-s32 lcec.0.2.vel-fb => conv-s32-float.10.in
-net z-vel-float conv-s32-float.10.out => tune-velocity.2.in
+net z-vel-s32 lcec.0.2.vel-fb => conv-sint-real.10.in
+net z-vel-float conv-sint-real.10.out => tune-velocity.2.in
 
-net a-vel-s32 lcec.0.3.vel-fb => conv-s32-float.11.in
-net a-vel-float conv-s32-float.11.out => tune-velocity.3.in
+net a-vel-s32 lcec.0.3.vel-fb => conv-sint-real.11.in
+net a-vel-float conv-sint-real.11.out => tune-velocity.3.in
 
-net x-ferr-s32 lcec.0.0.ferr-fb => conv-s32-float.12.in
-net x-ferr-float conv-s32-float.12.out => div2.4.in0
+net x-ferr-s32 lcec.0.0.ferr-fb => conv-sint-real.12.in
+net x-ferr-float conv-sint-real.12.out => div2.4.in0
 net x-drive-ferr div2.4.out => tune-drive-ferr.0.in
 
-net y-ferr-s32 lcec.0.1.ferr-fb => conv-s32-float.13.in
-net y-ferr-float conv-s32-float.13.out => div2.5.in0
+net y-ferr-s32 lcec.0.1.ferr-fb => conv-sint-real.13.in
+net y-ferr-float conv-sint-real.13.out => div2.5.in0
 net y-drive-ferr div2.5.out => tune-drive-ferr.1.in
 
-net z-ferr-s32 lcec.0.2.ferr-fb => conv-s32-float.14.in
-net z-ferr-float conv-s32-float.14.out => div2.6.in0
+net z-ferr-s32 lcec.0.2.ferr-fb => conv-sint-real.14.in
+net z-ferr-float conv-sint-real.14.out => div2.6.in0
 net z-drive-ferr div2.6.out => tune-drive-ferr.2.in
 
-net a-ferr-s32 lcec.0.3.ferr-fb => conv-s32-float.15.in
-net a-ferr-float conv-s32-float.15.out => div2.7.in0
+net a-ferr-s32 lcec.0.3.ferr-fb => conv-sint-real.15.in
+net a-ferr-float conv-sint-real.15.out => div2.7.in0
 net a-drive-ferr div2.7.out => tune-drive-ferr.3.in
 
