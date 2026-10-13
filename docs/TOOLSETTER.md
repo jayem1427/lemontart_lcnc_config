@@ -118,9 +118,9 @@ To relocate the collet-change spot:
 | Action | Result |
 |--------|--------|
 | **OK** on dialog | Retract Z → move to setter → probe → resume program |
-| **ABORT** on dialog | `program.abort()` → `abort_tool_change.ngc` parks at tool-load XY (if still enabled) |
+| **ABORT** on dialog | `program.abort()` → `abort_tool_change.ngc` **G49** + park at tool-load XY (if still enabled). `G49` stays here because the cutter may not match `H`. |
 | Window close / Esc | **Ignored** — must use ABORT or OK |
-| Global **Abort** button | `on_abort.ngc` — spindle/coolant off only; **no park move** (machine may be disabled) |
+| Global **Stop / Abort** button | `on_abort.ngc` — spindle/coolant off, **no park**; **keeps `G43`** via `restore_tool_length.ngc` when a measured tool is loaded. Does **not** rewrite G54. Revert: [DEVIATIONS.md — Keep G43 on Stop](DEVIATIONS.md#keep-g43-on-stop) |
 
 Custom dialog: [`probe_basic/toolchange_dialog.py`](../probe_basic/toolchange_dialog.py) via [`custom_config.yml`](../probe_basic/custom_config.yml). Details: [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md#manual-tool-change-dialog-abort-cycle).
 
@@ -236,6 +236,7 @@ In Fusion, use **4-axis simultaneous** / multi-axis strategies with this post se
 
 - At G30, click **OK** on the Manual Tool Change dialog to confirm the collet change; the program continues automatically — no extra Cycle Start or feed-unhold step
 - If the CAM `T` is already the spindle tool **and** that tool has a measured length (`#5403 > 0`), M600 does not prompt or probe — it applies `G43 H` and the job continues. Reload LinuxCNC after changing `tool_touch_off.ngc`. Existing posted files do not need a re-post for the skip (`G94` is inside the macro). Copy the updated post into Fusion when you next post so multi-axis sections no longer emit `G49`.
+- **Stop / Abort** keeps `G43` for the loaded measured tool (work Z stays tip-relative). Cancel a tool change with the dialog **ABORT** button, not the global Stop, if the cutter may no longer match `H`. Revert: [DEVIATIONS.md — Keep G43 on Stop](DEVIATIONS.md#keep-g43-on-stop).
 
 ## ATC compatibility
 

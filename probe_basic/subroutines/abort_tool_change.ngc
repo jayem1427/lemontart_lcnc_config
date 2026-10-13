@@ -1,13 +1,18 @@
 o<abort_tool_change> sub
 ; Clean cancel after program.abort during M600 / toolsetter / job.
 ; Retract Z, then park at tool-load XY (same as tool_touch_off load position).
+; No M73 — Stop now restores G43 in on_abort; M73 would save that and
+; restore G43 on endsub, undoing the G49 this routine needs.
 
-M73
 M5
 M9
 M50 P1
 G90
 G40
+; G49 stays here on purpose. Dialog abort is mid-M600: the cutter in the
+; collet may not match H anymore. Global Stop does not use this file —
+; it keeps G43 via on_abort -> restore_tool_length. Revert of Stop/G43
+; policy: docs/DEVIATIONS.md "Keep G43 on Stop".
 G49
 
 G53 G0 Z0

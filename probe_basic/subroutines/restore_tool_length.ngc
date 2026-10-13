@@ -1,0 +1,18 @@
+o<restore_tool_length> sub
+; Re-apply G43 for the loaded tool after Stop / Abort.
+; on_abort used to issue G49, which made work Z jump by the tool length
+; even though G54 was unchanged.
+; Skip if no tool or length never measured — G49 remains the interp default.
+; Cannot be called from RS274NGC_STARTUP_CODE — O-words are illegal there
+; ("Bad character 'o' used on startup").
+; Revert: stop calling this from on_abort.ngc; put G49 back after G40.
+; See docs/DEVIATIONS.md "Keep G43 on Stop".
+
+o<10> if [#5400 GT 0]
+  o<20> if [#5403 GT 0]
+    G43 H#5400
+  o<20> endif
+o<10> endif
+
+o<restore_tool_length> endsub
+M2

@@ -11,7 +11,11 @@ M63 P0 (Restore contact probe mux — laser M62 must not block homing/jog)
 M50 P1
 G90 (Absolute Positioning)
 G40 (Cancel Cutter Radius Compensation)
-G49
+; Do not G49 — that cancelled tool length and made G54 Z look like it moved.
+; Restore G43 when a measured tool is still loaded. Mid-M600 dialog abort
+; still issues G49 in abort_tool_change.ngc. Revert: replace the next line
+; with G49. See docs/DEVIATIONS.md "Keep G43 on Stop".
+o<restore_tool_length> call
 
 o<on_abort> endsub
 M2 (end program)

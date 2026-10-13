@@ -25,6 +25,7 @@ things together.
 |------|-----|
 | Load cutter + probe length | [TOOLSETTER.md](TOOLSETTER.md) |
 | Cancel mid M600 | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
+| Stop / Abort keeps G43 | [DEVIATIONS.md — Keep G43](DEVIATIONS.md#keep-g43-on-stop) |
 | Set WCO Z after shim touch-off | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Measure tool diameter (laser) | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
 | Z repeatability tests | [metrology README](../probe_basic/subroutines/metrology/README.md) |

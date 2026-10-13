@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=EtherCAT Mill (Lemontart)
+Comment=LinuxCNC + Probe Basic
+# Absolute path so Path= is not required (works from Desktop shortcut or menu).
+Exec=/home/jon/linuxcnc/configs/ethercat_mill/launch.sh
+Icon=/usr/share/icons/hicolor/scalable/apps/linuxcnc-logo.svg
+Terminal=false
+Categories=Engineering;Science;

@@ -98,8 +98,8 @@ dialogs:
 |---|----------|--------------|
 | Resume | OK / change button | **ONCE TOOL IS LOADED - PRESS TO RESUME** |
 | Cancel mid-change | Often Esc / window close | **ABORT** button only — Esc and close are **ignored** |
-| After ABORT | Interpreter stuck or ambiguous | `program.abort()` → MDI `o<abort_tool_change> call` → G53 Z0 → tool-load XY (270, 100) |
-| After estop during dialog | — | Park skipped (machine disabled); `on_abort.ngc` handles spindle/coolant only |
+| After ABORT | Interpreter stuck or ambiguous | `program.abort()` → MDI `o<abort_tool_change> call` → **G49** → G53 Z0 → tool-load XY (270, 100) |
+| After estop during dialog | — | Park skipped (machine disabled); `on_abort.ngc` handles spindle/coolant and **restores G43** if a measured tool is loaded |
 
 HAL contract is unchanged: same `qtpyvcp_manualtoolchange` pins (`change`, `changed`, `number`). Postgui wiring stays stock.
 

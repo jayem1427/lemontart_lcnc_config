@@ -36,6 +36,7 @@ Stock references:
 | Laser tool setter | M62 P0 mux to `motion.probe-input` for G38 | [LASER_TOOL_SETTER](LASER_TOOL_SETTER.md) |
 | Pocket probe traverse feed | `#3017` from Probe Basic | **Local fix** — several `probe_*.ngc` had bare `[3017]` (3017 mm/min literal) |
 | PROBE SPINDLE NOSE ZERO | Runs on setter input | **Aborts if T#3014 loaded** — HAL routes touch probe only when that tool is in spindle |
+| Abort / M30 tool length | Stock `G49` in startup + `on_abort` | **No `G49` in startup**; Stop **keeps `G43`** via `on_abort` — [Keep G43 on Stop](#keep-g43-on-stop) |
 
 ---
 
@@ -84,10 +85,17 @@ Standard 4-axis mill table rotary. **Not TCP** — Fusion post uses `optimizeMac
 ### Startup G-code
 
 ```ini
-RS274NGC_STARTUP_CODE = F10 S300 G21 G17 G40 G49 G54 G64 P0.001 G80 G90 G91.1 G94 G97 G98
+# ethercat_mill.ini [RS274NGC]
+RS274NGC_STARTUP_CODE = F10 S300 G21 G17 G40 G54 G64 P0.001 G80 G90 G91.1 G94 G97 G98
 ```
 
 Metric (`G21`), absolute (`G90`), **`G94`** feed per minute default. Simultaneous 4-axis CAM blocks use **`G93`** inverse time from the post only while the 4th axis is enabled and interpolating — not in startup.
+
+**No `G49` here.** Stock Probe Basic / `pb_required_ini_settings.ini` still has `G40 G49 G54`. This mill leaves a cutter in the collet between jobs; `G49` on Stop cancelled tool length and made work Z jump by `#5403` so G54 looked like it moved.
+
+**No O-words in `RS274NGC_STARTUP_CODE`.** Putting `o<restore_tool_length> call` there fails with `Bad character 'o' used on startup`. Restore runs only from `on_abort.ngc` (that command *can* call a sub). Interpreter default is still `G49` at LinuxCNC launch and after `M30` until something issues `G43` (M600, MDI, or Stop restore).
+
+See [Keep G43 on Stop](#keep-g43-on-stop) for risks and how to revert.
 
 ### `MAX_FEED_OVERRIDE = 2.5`
 
@@ -218,12 +226,53 @@ Flow: retract Z → tool-load XY → **M6 dialog** → retract Z → setter XY �
 
 ### `ON_ABORT_COMMAND` vs dialog abort
 
-| Trigger | Subroutine | Motion |
-|---------|------------|--------|
-| Program **Abort** / estop while enabled | `on_abort.ngc` | **No G0/G1** — machine may be disabled |
-| **ABORT** on Manual Tool Change dialog | `abort_tool_change.ngc` (via `toolchange_dialog.py`) | Z retract G53 Z0 → park tool-load XY |
+| Trigger | Subroutine | Motion | Tool length |
+|---------|------------|--------|-------------|
+| Program **Stop / Abort** / estop while enabled | `on_abort.ngc` | **No G0/G1** — machine may be disabled | **Keep `G43`** via `restore_tool_length.ngc` if `#5400 > 0` and `#5403 > 0` |
+| **ABORT** on Manual Tool Change dialog | `abort_tool_change.ngc` (via `toolchange_dialog.py`) | Z retract G53 Z0 → park tool-load XY | **`G49`** — cutter in the collet may not match `H` |
 
 Global abort must not move axes when LinuxCNC is disabled; dialog abort runs while still enabled after `program.abort()`.
+
+### Keep G43 on Stop
+
+Manual collet mill: the operator leaves a tool loaded and expects the same G54 **tip** Z after Stop.
+
+**What changed (vs stock Probe Basic)**
+
+| File | Stock | This machine |
+|------|-------|--------------|
+| `ethercat_mill.ini` `RS274NGC_STARTUP_CODE` | `G40 G49 G54 …` | `G40 G54 …` — **no `G49`**, **no O-word** (illegal in startup) |
+| `on_abort.ngc` | `G49` | `o<restore_tool_length> call` |
+| `abort_tool_change.ngc` | `G49` | **`G49` kept** — mid-M600 only |
+| `restore_tool_length.ngc` | — | `G43 H#5400` when `#5400 > 0` and `#5403 > 0` |
+
+`G54` select in startup never zeroed the stored offset (`#5223`). The DRO jump was `G49` dropping `H`. M600 full measure still issues its own `G49` before probing, then `G43` after `G10 L1`.
+
+`ON_ABORT_COMMAND = o<on_abort> call` is allowed to call subs. `RS274NGC_STARTUP_CODE` is not — an `o<…>` there is `Bad character 'o' used on startup`. After **M30** or a fresh LinuxCNC start the interp default is still `G49` until M600 / MDI `G43` / a later Stop restore.
+
+**How to revert**
+
+1. `ethercat_mill.ini`: put `G49` back after `G40` in `RS274NGC_STARTUP_CODE`.
+2. `probe_basic/subroutines/on_abort.ngc`: replace `o<restore_tool_length> call` with `G49`.
+3. Leave `abort_tool_change.ngc` `G49` as-is.
+4. `restore_tool_length.ngc` can stay unused or be deleted.
+5. Reload LinuxCNC.
+
+Stock one-liner to restore in the INI:
+
+```ini
+RS274NGC_STARTUP_CODE = F10 S300 G21 G17 G40 G49 G54 G64 P0.001 G80 G90 G91.1 G94 G97 G98
+```
+
+**Risks of keeping G43**
+
+- **Stop mid-M600 after the collet swap, before the setter probe.** `#5400` may already be the new `T` while `#5403` is the *previous* length for that slot, or the old `H` may still be active. Jogging work `Z0` can crash. Use the Manual Tool Change **ABORT** button for a cancelled change — that path still `G49`s and parks at tool-load XY. `abort_tool_change.ngc` does **not** use `M73`, so that `G49` is not undone when the sub returns.
+- **Physical tool ≠ LinuxCNC tool number.** Swapping a cutter in the collet without M600 / M61 / M6 leaves `G43 H` for the old tool. Stop will restore that wrong `H`.
+- **Empty spindle with a leftover tool number.** If `#5400` / `#5403` are stale and non-zero, Stop reapplies `G43` as if that tool were still in. Unload with `T0` / spindle-empty flow when the collet is actually empty.
+- **E-stop then jog before looking at active G-codes.** `G43` is not a move, so restore still runs while disabled. After re-enable, work Z is tip-relative again — confirm **G43 H…** in active codes before jogging to Z0.
+- **Length table wrong (`#5403`).** Restore trusts the tool table. A bad length is applied just like during a cut.
+
+These are the reasons stock configs `G49` on abort. This machine prefers the matching-tool case over that generic reset.
 
 ### `TOOL_TABLE_COLUMNS = TDZR`
 
