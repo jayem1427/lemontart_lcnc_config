@@ -107,6 +107,9 @@ addf cia402.1.write-all servo-thread
 addf cia402.2.write-all servo-thread
 addf cia402.3.write-all servo-thread
 addf lcec.write-all servo-thread
+# tpnext/lcec 2.10: activate master in RT init context before threads start
+# (avoids inline-activation + bang-bang PLL DC trim fallback).
+initf lcec.activate servo-thread
 
 # =========================================================
 # 4. HARDWARE PIN ROUTING & STATE MACHINES
