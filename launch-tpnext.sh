@@ -24,6 +24,9 @@ fi
 export LD_LIBRARY_PATH="${DEPS}/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 cd "$HERE"
+# rip-environment references optional vars (e.g. GLADE_ICON_THEME_PATH); allow unset
+set +u
 # shellcheck disable=SC1091
 source "$RIP/scripts/rip-environment"
+set -u
 exec env QT_QUICK_BACKEND=software linuxcnc "$HERE/ethercat_mill.ini"
