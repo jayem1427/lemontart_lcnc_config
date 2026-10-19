@@ -193,44 +193,39 @@ net tool-number iocontrol.0.tool-prep-number
 # =========================================================
 # 6. PHYSICAL LIMIT & HOME SWITCH WIRING
 # =========================================================
-#
-# --- BREAKOUT OFF (temporary): fake home + limits inactive for ALL joints ---
-# and2.0 has both inputs 0 -> out is FALSE.
-# REVERT (real switches): comment lims-home-all-off; uncomment X/Y + Z/A sections below.
-#
-net lims-home-all-off and2.0.out => joint.0.home-sw-in joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in joint.1.home-sw-in joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in joint.2.home-sw-in joint.2.neg-lim-sw-in joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
+# Physical map QC 2026-10 (active-low NC -> not.* -> joint.* TRUE when tripped):
+#   X home  lcec.0.0.di-2 | X limit lcec.0.0.di-5
+#   Y limit lcec.0.1.di-1 | Y home shares Z-home short bus (see below)
+#   Z home  lcec.0.1.di-4 (also 0.0.di-3/4 + 0.1.di-3 — shorted together)
+#   Z- lim  lcec.0.0.di-1 | Z+ lim none | A home/limits still gagged
+# Y+Z home shorted is OK: home one axis at a time (HOME_SEQUENCE Z->X->Y).
+# not.9 is laser mux; Z limit uses not.10.
 
-# --- X/Y LIMIT/HOME WIRING (Slave 0 CN1, active-low NC switches) ---
-# Drive 0 CN1: DI1=X limit, DI2=Y limit, DI4=X home, DI5=Y home.
-# net x-home-raw   lcec.0.0.di-4 => not.1.in
-# net x-home       not.1.out => joint.0.home-sw-in
-# Suppress X limit chain while homing: backoff only clears home; limit can stay tripped.
-# net j0-homing    joint.0.homing => not.5.in
-# net j0-lim-on    not.5.out => and2.1.in1
-# net x-limit-raw  lcec.0.0.di-1 => not.2.in
-# net x-limit-inv  not.2.out => and2.1.in0
-# net x-limit      and2.1.out => joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in
-# net y-home-raw   lcec.0.0.di-5 => not.3.in
-# net y-home       not.3.out => joint.1.home-sw-in
-# Suppress Y limit chain while homing (same pattern as X: home at negative end shares limit).
-# net j1-homing    joint.1.homing => not.8.in
-# net j1-lim-on    not.8.out => and2.5.in1
-# net y-limit-raw  lcec.0.0.di-2 => not.4.in
-# net y-limit-inv  not.4.out => and2.5.in0
-# net y-limit      and2.5.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in
+# --- X home + limit ---
+net x-home-raw   lcec.0.0.di-2 => not.1.in
+net x-home       not.1.out => joint.0.home-sw-in
+net j0-homing    joint.0.homing => not.5.in
+net j0-lim-on    not.5.out => and2.1.in1
+net x-limit-raw  lcec.0.0.di-5 => not.2.in
+net x-limit-inv  not.2.out => and2.1.in0
+net x-limit      and2.1.out => joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in
 
-# --- Z home on Slave 1 DI4 (+Z); -Z limit on Slave 2 DI2; no +Z limit ---
-# net z-home-raw   lcec.0.1.di-4 => not.7.in
-# net z-home       not.7.out => joint.2.home-sw-in
-# Z - limit on Slave 2 DI2 (DB15 pin 9) — disabled; pin free if needed later.
-# When re-enabling, use not.9 (not.8 is Y homing limit gate).
-# net z-limit-raw  lcec.0.2.di-2 => not.9.in
-# net z-limit      not.9.out => joint.2.neg-lim-sw-in
+# --- Y limit; Y home on shared Y/Z home bus ---
+net y-limit-raw  lcec.0.1.di-1 => not.4.in
+net j1-homing    joint.1.homing => not.8.in
+net j1-lim-on    not.8.out => and2.5.in1
+net y-limit-inv  not.4.out => and2.5.in0
+net y-limit      and2.5.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in
 
-# --- A still on breakout (no homing yet) ---
-# A axis home on slave 3 DI3:
-# net a-home-sw    lcec.0.3.di-3 => joint.3.home-sw-in
-# net za-lims-gagged and2.0.out => joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
+# --- Z home (+Y home on same electrical net) + Z- limit ---
+net yz-home-raw  lcec.0.1.di-4 => not.7.in
+net yz-home      not.7.out => joint.1.home-sw-in joint.2.home-sw-in
+net z-limit-raw  lcec.0.0.di-1 => not.10.in
+net z-limit      not.10.out => joint.2.neg-lim-sw-in
+
+# --- A still gagged; no +Z limit ---
+# and2.0 inputs held 0 -> out FALSE
+net a-lims-gagged and2.0.out => joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
 
 # --- TOUCH PROBE + TOOLSETTER + LASER (active-high at trip -> motion.probe-input) ---
 # Physical map (QC 2026-10): touch probe = Slave1 DI2; toolsetter = Slave1 DI5.
