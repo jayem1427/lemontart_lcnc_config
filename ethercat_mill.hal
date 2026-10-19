@@ -233,9 +233,11 @@ net lims-home-all-off and2.0.out => joint.0.home-sw-in joint.0.neg-lim-sw-in joi
 # net za-lims-gagged and2.0.out => joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
 
 # --- TOUCH PROBE + TOOLSETTER + LASER (active-high at trip -> motion.probe-input) ---
-# Touch probe: Slave 1 DI5, NC (NPN). Idle closed = di inactive; trip open = di TRUE. Direct.
-# Toolsetter: Slave 1 DI2 (DB15 pin 9), NC (NPN). Direct, no inversion.
-# Route contact sensors by spindle tool: T99 -> DI5; any other tool -> toolsetter DI2.
+# Physical map (QC 2026-10): touch probe = Slave1 DI2; toolsetter = Slave1 DI5.
+# Older silk/docs had these swapped — HAL follows the wires; do not re-pin CN1.
+# NC (NPN): idle closed = di inactive; trip open = di TRUE. Direct, no inversion.
+# Route by spindle tool: T99 -> touch probe; any other tool -> toolsetter.
+# probe_beep.hal listens to probe-in downstream of this mux, so beep follows HAL.
 # Laser DS-5V-M on Slave 2 DI5: raw laser-beam-broken → LED/M66; debounced → G38.
 # Laser G38: M62 P0 enables motion.digital-out-00 -> routes laser to probe-input;
 # M63 P0 restores contact mux only. Contact path is disabled while laser mode is on.
@@ -245,11 +247,11 @@ net spindle-tool halui.tool.number => conv-uint-real.0.in
 net spindle-tool-float conv-uint-real.0.out => comp.0.in0
 net probe-tool-num-val probe-tool-num.out => comp.0.in1
 net probe-tool-loaded comp.0.equal => and2.3.in0
-net touch-probe-in   lcec.0.1.di-5 => and2.3.in1
+net touch-probe-in   lcec.0.1.di-2 => and2.3.in1
 net touch-probe-active and2.3.out => or2.0.in0
 net probe-tool-loaded comp.0.equal => not.6.in
 net cutter-loaded not.6.out => and2.4.in0
-net toolsetter-in    lcec.0.1.di-2 => and2.4.in1
+net toolsetter-in    lcec.0.1.di-5 => and2.4.in1
 net toolsetter-active and2.4.out => or2.0.in1
 net contact-probe-mux or2.0.out => and2.8.in0
 net laser-probe-en    motion.digital-out-00 => not.9.in and2.7.in1
