@@ -17,7 +17,7 @@ Semi-automatic tool length measurement for a **manual collet spindle**, based on
 
 - `probe_basic_postgui.hal` — `qtpyvcp_manualtoolchange` wired for M6 OK dialog (tool number + remark)
 - `ethercat_mill.hal` — removed `tool-change` → `tool-changed` auto-loop; operator must confirm via dialog
-- `ethercat_mill.hal` — touch probe (DI5) vs contact toolsetter (DI2) gated onto `motion.probe-input` by `halui.tool.number` (T99 → probe only; any other tool → toolsetter only). See **Touch probe vs toolsetter routing** in [README.md](../README.md).
+- `ethercat_mill.hal` — touch probe (DI2) vs contact toolsetter (DI5) gated onto `motion.probe-input` by `halui.tool.number` (T99 → probe only; any other tool → toolsetter only). Physical pins QC 2026-10. See **Touch probe vs toolsetter routing** in [README.md](../README.md).
 - `probe_beep.hal` — optional audible click on `probe-in` or `laser-beam-broken` rising edge (`scripts/probe_beep.py` + `beep.mp3`). Needs `mpg123` (or `ffplay`). Disable by commenting out `HALFILE = probe_beep.hal` in the INI.
 - `custom.hal` — VFD fault OR uses `or2.1`; `or2.0` is probe routing in `ethercat_mill.hal` (`loadrt or2 count=2` — do not add a second `or2` load with `names=`)
 
@@ -33,7 +33,7 @@ This config uses **one tool table slot** for the touch probe (default **T99**). 
 |---|--------|-------------|-------------------|
 | 1 | **`probe_basic/tool.tbl`** | Tool table row: `T<n>`, pocket, **diameter** `D`, optional length `Z` | `T99  P5  D+2.000000 ; touch probe` |
 | 2 | **`linuxcnc.var`** → **`#3014`** | Probe Basic “probe tool number” (also set from the Probe screen) | `3014  99.000000` |
-| 3 | **`ethercat_mill.hal`** | `setp probe-tool-num.value <n>` — gates DI5 vs DI2 by `halui.tool.number` | `setp probe-tool-num.value 99` |
+| 3 | **`ethercat_mill.hal`** | `setp probe-tool-num.value <n>` — gates probe DI2 vs toolsetter DI5 by `halui.tool.number` | `setp probe-tool-num.value 99` |
 
 If any one of these differs from the others, symptoms include: Probe Basic aborts (“probe tool not in spindle”), LOAD SPINDLE runs M600 on the touch probe, or HAL listens to the toolsetter while T99 is loaded (and vice versa).
 
