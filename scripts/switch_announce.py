@@ -9,9 +9,11 @@ within SHORT_WINDOW_S, announces them together as a short/cluster.
 """
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 
 import hal
@@ -29,13 +31,49 @@ POLL_S = 0.02
 SHORT_WINDOW_S = 0.15  # edges closer than this = one spoken group
 COOLDOWN_S = 0.35  # ignore re-chatter after speaking a name
 
+# Local neural TTS (Piper). Not a celebrity clone — British "alan" voice.
+PIPER_BIN = os.path.expanduser("~/src/piper/piper")
+PIPER_MODEL = os.path.expanduser(
+    "~/src/piper/voices/en_GB-alan-medium/en_GB-alan-medium.onnx"
+)
+
 
 def speak(text: str) -> None:
-    cmd = None
+    """Prefer Piper neural British; fall back to espeak."""
+    if os.path.isfile(PIPER_BIN) and os.path.isfile(PIPER_MODEL):
+        # Synthesize then play; keep it async so we don't miss HAL edges.
+        def _run() -> None:
+            try:
+                wav = subprocess.run(
+                    [PIPER_BIN, "--model", PIPER_MODEL, "--output_file", "-"],
+                    input=text.encode(),
+                    capture_output=True,
+                    check=False,
+                )
+                if wav.returncode != 0 or not wav.stdout:
+                    raise RuntimeError(wav.stderr[-200:] if wav.stderr else "piper failed")
+                player = ["paplay"] if shutil.which("paplay") else ["aplay", "-q"]
+                subprocess.run(
+                    player,
+                    input=wav.stdout,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+            except Exception as exc:  # noqa: BLE001
+                print(f"piper speak failed ({exc}); espeak fallback", flush=True)
+                _espeak(text)
+
+        threading.Thread(target=_run, daemon=True).start()
+        return
+    _espeak(text)
+
+
+def _espeak(text: str) -> None:
     if shutil.which("espeak-ng"):
-        cmd = ["espeak-ng", "-s", "160", "-a", "200", text]
+        cmd = ["espeak-ng", "-v", "en-gb", "-s", "160", "-a", "200", text]
     elif shutil.which("espeak"):
-        cmd = ["espeak", "-s", "160", "-a", "200", text]
+        cmd = ["espeak", "-v", "en-gb", "-s", "160", "-a", "200", text]
     else:
         print(f"TTS unavailable: {text}", flush=True)
         return
