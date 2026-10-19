@@ -278,10 +278,10 @@ probe inputs are NC (NPN) and wired direct (no inversion). Source of truth:
 |-------|---------|----|----------|------------|
 | 0 | `lcec.0.0.di-2` | DI2 | 9 | X home |
 | 0 | `lcec.0.0.di-5` | DI5 | 11 | X limit chain (±) |
-| 0 | `lcec.0.0.di-1` | DI1 | 10 | Z− limit |
+| 0 | `lcec.0.0.di-1` | DI1 | 10 | Y limit chain (±) — hijacked former Z− DI |
 | 0/1 | `di-3`/`di-4` short bus | — | — | Tied together (see Z/Y home) |
 | 1 | `lcec.0.1.di-4` | DI4 | 7 | Z home + Y home (shared short bus; home one axis at a time) |
-| 1 | `lcec.0.1.di-1` | DI1 | 10 | Y limit chain (±) |
+| — | — | — | — | Z− limit gagged (no free DI after Y lim hijack) |
 | 1 | `lcec.0.1.di-2` | DI2 | 9 | Touch probe (gated when T99) |
 | 1 | `lcec.0.1.di-5` | DI5 | 11 | Contact toolsetter (gated when not T99) |
 | 2 | `lcec.0.2.di-5` | DI5 | 11 | Laser DS-5V-M (`laser-beam-broken`) |

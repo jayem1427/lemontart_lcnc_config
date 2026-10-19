@@ -22,7 +22,7 @@ WATCH = [
     ("X limit", "x-limit"),
     ("Y limit", "y-limit"),
     ("Y and Z home", "yz-home"),
-    ("Z limit", "z-limit"),
+    # Z- limit DI hijacked for Y limit — joint.2 neg lim is gagged
 ]
 
 POLL_S = 0.02

@@ -195,11 +195,12 @@ net tool-number iocontrol.0.tool-prep-number
 # =========================================================
 # Physical map QC 2026-10 (active-low NC -> not.* -> joint.* TRUE when tripped):
 #   X home  lcec.0.0.di-2 | X limit lcec.0.0.di-5
-#   Y limit lcec.0.1.di-1 | Y home shares Z-home short bus (see below)
+#   Y limit lcec.0.0.di-1 (hijacked former Z- limit DI — Y lim on 0.1.di-1 was dead/shorted)
+#   Y home shares Z-home short bus (see below)
 #   Z home  lcec.0.1.di-4 (also 0.0.di-3/4 + 0.1.di-3 — shorted together)
-#   Z- lim  lcec.0.0.di-1 | Z+ lim none | A home/limits still gagged
+#   Z- lim  gagged (no free DI) | Z+ lim none | A home/limits gagged
 # Y+Z home shorted is OK: home one axis at a time (HOME_SEQUENCE Z->X->Y).
-# not.9 is laser mux; Z limit uses not.10.
+# not.9 is laser mux; not.10 unused while Z- is gagged.
 
 # --- X home + limit ---
 net x-home-raw   lcec.0.0.di-2 => not.1.in
@@ -210,22 +211,20 @@ net x-limit-raw  lcec.0.0.di-5 => not.2.in
 net x-limit-inv  not.2.out => and2.1.in0
 net x-limit      and2.1.out => joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in
 
-# --- Y limit; Y home on shared Y/Z home bus ---
-net y-limit-raw  lcec.0.1.di-1 => not.4.in
+# --- Y limit (on former Z- DI); Y home on shared Y/Z home bus ---
+net y-limit-raw  lcec.0.0.di-1 => not.4.in
 net j1-homing    joint.1.homing => not.8.in
 net j1-lim-on    not.8.out => and2.5.in1
 net y-limit-inv  not.4.out => and2.5.in0
 net y-limit      and2.5.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in
 
-# --- Z home (+Y home on same electrical net) + Z- limit ---
+# --- Z home (+Y home on same electrical net); Z- limit gagged ---
 net yz-home-raw  lcec.0.1.di-4 => not.7.in
 net yz-home      not.7.out => joint.1.home-sw-in joint.2.home-sw-in
-net z-limit-raw  lcec.0.0.di-1 => not.10.in
-net z-limit      not.10.out => joint.2.neg-lim-sw-in
 
-# --- A still gagged; no +Z limit ---
+# --- A + Z- still gagged; no +Z limit ---
 # and2.0 inputs held 0 -> out FALSE
-net a-lims-gagged and2.0.out => joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
+net a-lims-gagged and2.0.out => joint.2.neg-lim-sw-in joint.2.pos-lim-sw-in joint.3.home-sw-in joint.3.neg-lim-sw-in joint.3.pos-lim-sw-in
 
 # --- TOUCH PROBE + TOOLSETTER + LASER (active-high at trip -> motion.probe-input) ---
 # Physical map (QC 2026-10): touch probe = Slave1 DI2; toolsetter = Slave1 DI5.

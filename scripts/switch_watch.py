@@ -20,9 +20,8 @@ ROWS = [
 RAW = [
     ("X home DI", "lcec.0.0.di-2"),
     ("X lim DI", "lcec.0.0.di-5"),
-    ("Y lim DI", "lcec.0.1.di-1"),
+    ("Y lim DI (was Z-)", "lcec.0.0.di-1"),
     ("Y/Z home DI", "lcec.0.1.di-4"),
-    ("Z- lim DI", "lcec.0.0.di-1"),
 ]
 
 
