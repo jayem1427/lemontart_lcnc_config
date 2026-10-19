@@ -75,8 +75,9 @@ After switching git branches, delete leftover tab folders that lack a matching
 |------|------|
 | `ethercat_mill.ini` | Main INI |
 | `ethercat_loadusr.hal` | `lcec_conf` once (TWOPASS-safe) |
-| `ethercat_mill.hal` | Joints, CiA 402, limits, probe mux |
+| `ethercat_mill.hal` | Joints, CiA 402, limits/home debounce, shared Y/Z home, probe mux |
 | `ethercat-conf.xml` | EtherCAT slaves + fault-window SDOs |
+| `xhc-whb04b-6.hal` | Pendant MPG (axis + joint jog) |
 | `custom.hal` | VFD Modbus, at-speed delay, faults |
 | `probe_basic/` | UI, macros, tool table, custom tabs |
 | `post-processor/linuxcnc-djr.cps` | Fusion post |

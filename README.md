@@ -257,7 +257,10 @@ git checkout <branch>
 - M600 collet pause is at a fixed **tool-load** XY (default G53 **270, 100**),
   not the taught setter. Setter teach still uses `#5181–#5183`.
 - Custom Manual Tool Change dialog with **ABORT** (Esc/close ignored).
-- REF ALL order: Z → X → Y → A.
+- REF ALL order: Z → X → Y → A. X/Y/Z search on real switches; A is virtual
+  (zero search). `NO_FORCE_HOMING=1` still allows jog before home.
+- Y and Z share one home bus; HAL ignores a closed bus at REF start. Pendant
+  MPG drives joint **and** axis jog pins (joint mode after XYZ home, A unhomed).
 - Software E-stop: Slave 3 DI1 (DB15 pin 10).
 - Drive position-deviation windows (SDO 6065/6066): **0.5 mm / 0.5° / 250 ms**
   at startup (one-click / inertia tuning temporarily raises 6065 to **2.0** during

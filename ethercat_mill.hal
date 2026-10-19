@@ -18,8 +18,12 @@ loadrt ilowpass count=4
 loadrt limit1 count=4
 loadrt div2 count=4
 loadrt not count=11
-loadrt and2 count=9
-loadrt or2 count=4
+loadrt and2 count=12
+# Separate groups: X home 5 ms (bounce on backoff). Limits / YZ 8 ms.
+loadrt debounce cfg=1,3
+loadrt oneshot count=2
+loadrt flipflop count=2
+loadrt or2 count=5
 loadrt near count=3
 loadrt comp count=1
 loadrt constant names=probe-tool-num
@@ -70,6 +74,21 @@ addf not.7 servo-thread
 addf not.8 servo-thread
 addf not.9 servo-thread
 addf not.10 servo-thread
+addf debounce.0 servo-thread
+addf debounce.1 servo-thread
+addf oneshot.0 servo-thread
+addf oneshot.1 servo-thread
+addf and2.9 servo-thread
+addf and2.10 servo-thread
+addf and2.11 servo-thread
+addf or2.2 servo-thread
+addf or2.4 servo-thread
+addf flipflop.0 servo-thread
+addf flipflop.1 servo-thread
+setp debounce.0.delay 5
+setp debounce.1.delay 8
+setp oneshot.0.width 0.05
+setp oneshot.1.width 0.05
 setp and2.0.in0 0
 setp and2.0.in1 0
 
@@ -200,27 +219,48 @@ net tool-number iocontrol.0.tool-prep-number
 #   Z home  lcec.0.1.di-4 (also 0.0.di-3/4 + 0.1.di-3 — shorted together)
 #   Z- lim  gagged (no free DI) | Z+ lim none | A home/limits gagged
 # Y+Z home shorted is OK: home one axis at a time (HOME_SEQUENCE Z->X->Y).
-# not.9 is laser mux; not.10 unused while Z- is gagged.
+# If the shared bus is already closed at REF, ignore it until it has been
+# seen open, then latch the next close. Stops Y latching in place and Z
+# backing off down. not.9 is laser mux; not.3/10 used by that ignore logic.
 
 # --- X home + limit ---
 net x-home-raw   lcec.0.0.di-2 => not.1.in
-net x-home       not.1.out => joint.0.home-sw-in
+net x-home-fast  not.1.out => debounce.0.0.in
+net x-home       debounce.0.0.out => joint.0.home-sw-in
 net j0-homing    joint.0.homing => not.5.in
 net j0-lim-on    not.5.out => and2.1.in1
 net x-limit-raw  lcec.0.0.di-5 => not.2.in
 net x-limit-inv  not.2.out => and2.1.in0
-net x-limit      and2.1.out => joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in
+net x-limit-fast and2.1.out => debounce.1.0.in
+net x-limit      debounce.1.0.out => joint.0.neg-lim-sw-in joint.0.pos-lim-sw-in
 
 # --- Y limit (on former Z- DI); Y home on shared Y/Z home bus ---
 net y-limit-raw  lcec.0.0.di-1 => not.4.in
-net j1-homing    joint.1.homing => not.8.in
-net j1-lim-on    not.8.out => and2.5.in1
+net j1-homing    joint.1.homing => not.8.in oneshot.1.in
+net j1-lim-on    not.8.out => and2.5.in1 or2.4.in1
 net y-limit-inv  not.4.out => and2.5.in0
-net y-limit      and2.5.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in
+net y-limit-fast and2.5.out => debounce.1.1.in
+net y-limit      debounce.1.1.out => joint.1.neg-lim-sw-in joint.1.pos-lim-sw-in
 
 # --- Z home (+Y home on same electrical net); Z- limit gagged ---
 net yz-home-raw  lcec.0.1.di-4 => not.7.in
-net yz-home      not.7.out => joint.1.home-sw-in joint.2.home-sw-in
+net yz-home-fast not.7.out => debounce.1.2.in
+net yz-home      debounce.1.2.out => not.3.in and2.6.in1 and2.9.in1 and2.10.in1 and2.11.in1
+net yz-home-open not.3.out => or2.2.in0 or2.4.in0
+
+# Ignore shared bus at the instant homing starts if it is already closed.
+net j2-homing    joint.2.homing => oneshot.0.in not.10.in
+net z-not-homing not.10.out => or2.2.in1
+net z-ignore-set oneshot.0.out => and2.9.in0
+net y-ignore-set oneshot.1.out => and2.10.in0
+net z-ignore-arm and2.9.out => flipflop.0.set
+net y-ignore-arm and2.10.out => flipflop.1.set
+net z-ignore-clr or2.2.out => flipflop.0.reset
+net y-ignore-clr or2.4.out => flipflop.1.reset
+net z-home-ok    flipflop.0.out-not => and2.11.in0
+net y-home-ok    flipflop.1.out-not => and2.6.in0
+net z-home-sw    and2.11.out => joint.2.home-sw-in
+net y-home-sw    and2.6.out => joint.1.home-sw-in
 
 # --- A + Z- still gagged; no +Z limit ---
 # and2.0 inputs held 0 -> out FALSE

@@ -23,9 +23,10 @@ Stock references:
 | Geometry | Often XYZ | **XYZA** `trivkins`, table rotary on X |
 | Spindle feedback | Encoder or sim `scale_to_rpm` | **VFD Modbus** freq → `spindle.0.speed-in` |
 | At-speed | `near` or drive ready bit | **`near` + 5 s `timedelay`** after RPM match |
-| Homing required | Default (forced) | **`NO_FORCE_HOMING = 1`** (bench — revert for production) |
+| Homing required | Default (forced) | **`NO_FORCE_HOMING = 1`** (jog without home; X/Y/Z still search) |
 | A axis homing | Real switch sequence | **Disabled** — `HOME_SEQUENCE = 3` (after Z/X/Y), zero search vel |
-| Z− limit | Usually wired | **Commented out** in HAL (pin free) |
+| Shared Y/Z home | `HOME_IS_SHARED=1` | **`HOME_IS_SHARED=0`** + HAL ignore-until-open (shared aborts Z) |
+| Z− limit | Usually wired | **Gagged** (`and2.0`); Y limit uses former Z− DI |
 | Feed override max | 100–200% | **250%** (`MAX_FEED_OVERRIDE = 2.5`) |
 | Fusion post | Stock `linuxcnc.cps`, `M6`, preload `T` | **`post-processor/linuxcnc-djr.cps`**, M600 default, no preload |
 | `PROGRAM_PREFIX` | Relative to config | **Absolute path** in committed INI — change on clone |
@@ -56,8 +57,25 @@ Stock LinuxCNC blocks motion until all joints with `HOME_SEQUENCE > 0` are homed
 ### REF ALL sequence
 
 `HOME_SEQUENCE`: Z=`0`, X=`1`, Y=`2`, A=`3` — sequential (wait for prior joint).
-X/Y search toward the negative end (~33 mm/min); Z search toward **+Z** home
-(~33 mm/min). Host `FERROR` stays wide (1270 / 254) for bench homing.
+Y search −Y (~33 mm/s); Z search **+Z only** (~33 mm/s); X search slower (−12 mm/s)
+with `HOME_OFFSET=-5` and `HOME_LATCH_DIST=25` so backoff can leave a long home
+flag. Host `FERROR` stays wide (1270 / 254) for bench homing.
+
+XYZ home with A still unhomed leaves motion in **joint** mode (not teleop). Home A
+(instant, no move) or use the pendant joint-jog nets.
+
+### Shared Y/Z home bus (ignore until open)
+
+Y home and Z home are electrically shorted (`lcec.0.1.di-4`). If that bus is
+already closed at REF, LinuxCNC would otherwise backoff the wrong way (Z search
+down) or latch Y in place.
+
+`HOME_IS_SHARED=1` aborted Z (`Cannot home while shared home switch is closed`)
+and still let Y latch — **do not use it here**.
+
+Instead, `oneshot` + `flipflop` hide the shared input for that joint until the
+bus has been seen open (or homing ends), then the next close latches. Debounce
+is 5 ms on X home, 8 ms on X/Y limits and the Y/Z home bus.
 
 ### `[TRAJ] AXES = 4`
 
@@ -129,6 +147,7 @@ Unlike a simple stepgen config:
 - X **and Y** limit chains suppressed during homing (`joint.N.homing` → `and2.1` / `and2.5`)
 - Y also has `HOME_IGNORE_LIMITS = YES` (home at negative end shares the limit DI chain)
 - NC switches inverted with `not.*`
+- Shared Y/Z home: debounce then ignore-until-open (`oneshot`/`flipflop`) into `joint.1/2.home-sw-in`
 
 ### Bench limit gagging (`and2.0`)
 
@@ -137,7 +156,7 @@ Unlike a simple stepgen config:
 net za-lims-gagged and2.0.out => joint.2.pos-lim-sw-in joint.3.home-sw-in ...
 ```
 
-Z positive limit and all A limit/home inputs see **FALSE** (inactive). Full-machine gagging net `lims-home-all-off` exists but is **commented** — only Z/A are gagged in the current branch.
+Z **negative** limit, Z positive limit, and all A limit/home inputs see **FALSE** (inactive). Y limit is live on the former Z− DI (`lcec.0.0.di-1`). Full-machine gagging net `lims-home-all-off` exists but is **commented**.
 
 ### Probe input mux (non-stock)
 
@@ -180,16 +199,19 @@ Physical master estop cuts mains. Software NC estop on Slave 3 DI1 gates `iocont
 | M3/M4 ↔ VFD direction **swapped** | Comment `REVERT: fwd->sel0 rev->sel1` |
 | At-speed | `near.0` (50 RPM) + **`spindle-at-speed-delay` 5 s** |
 | Critical faults | Modbus fault reg `0x000A` codes 64 / 92 → `halui.estop.activate` |
-| `or2.1` reserved | Do not load another `or2` with `names=` — conflicts with probe `or2.0` |
+| `or2` instances | `or2.0`/`or2.3` probe mux; `or2.1` VFD faults; `or2.2`/`or2.4` shared-home ignore. Do not `loadrt or2 names=` |
 
-### Pendant homed-gate override
+### Pendant MPG (joint + teleop)
 
 ```hal
 # xhc-whb04b-6.hal
 net machine.is-on ... whb.halui.joint.z.is-homed ...
+net pdnt.axis.x.jog-enable ... axis.x.jog-enable joint.0.jog-enable
 ```
 
-WHB normally requires per-axis homed for MPG jog. Tied to **machine on** so bench mode without Z homing still allows Z jog.
+WHB `is-homed` inputs are tied to **machine on** so the wheel is not gated on real homing (`NO_FORCE_HOMING`).
+
+The wheel also writes **joint** jog pins, not only `axis.*`. After XYZ home with A unhomed, LinuxCNC stays in joint mode and ignores world/axis jog. GUI spindle / MDI leaves Manual — tap **Manual** before expecting the wheel; Lead is spindle override (`-s`), not jog.
 
 ---
 

@@ -79,13 +79,15 @@ Drive docs (vendor):
 
 ### Stage 3 — Homing, limits, bench mode
 
-Homing and limit wiring live in [`ethercat_mill.hal`](../ethercat_mill.hal), not the INI. See [README.md](../README.md#current-machine-notes-this-bench) for bench notes.
+Homing and limit wiring live in [`ethercat_mill.hal`](../ethercat_mill.hal), not the INI. See [README.md](../README.md#current-machine-notes) for bench notes. Optional QC voice: `python3 scripts/switch_announce.py` (espeak-ng).
 
-**Bench / breakout shortcuts** (revert before production — details in [DEVIATIONS.md](DEVIATIONS.md#bench--breakout-shortcuts)):
+**Homing / bench shortcuts** (details in [DEVIATIONS.md](DEVIATIONS.md)):
 
-- `NO_FORCE_HOMING = 1` in `ethercat_mill.ini` — can run without homing
-- REF ALL order is Z → X → Y → A (`HOME_SEQUENCE` 0/1/2/3). A uses zero search/latch — marks homed at current position (no switch)
-- Z/A limits and A home **gagged** via `and2.0` in HAL while X/Y use real switches
+- `NO_FORCE_HOMING = 1` — jog and MDI work before Home All; production should still home
+- REF ALL order is Z → X → Y → A (`HOME_SEQUENCE` 0/1/2/3). X/Y/Z **search** on real switches. A uses zero search/latch (marks homed at current position; no switch)
+- Y and Z share one home bus. HAL **ignores a closed bus at REF start** until it has been seen open, then latches the next close. Do **not** set `HOME_IS_SHARED=1` here — it aborts Z
+- Debounce: X home 5 ms; X/Y limits + Y/Z home 8 ms
+- Z− limit and A limits/home **gagged** via `and2.0` (Y limit uses the former Z− DI)
 
 ### Stage 4 — Spindle (H100 VFD + Modbus)
 
@@ -99,9 +101,9 @@ Modbus HAL: [mb2hal documentation](https://linuxcnc.org/docs/html/man/man1/mb2ha
 ### Stage 5 — Pendant (XHC WHB04B-6)
 
 - [`xhc-whb04b-6.hal`](../xhc-whb04b-6.hal) — MPG jog with `ilowpass` smoothing, feed override to 250%
-- Component: [xhc-whb04b-6](https://github.com/welter/welder/tree/master/xhc-whb04b-6) (check your package source)
-
-With bench homing disabled, pendant “axis homed” gates are tied to `halui.machine.is-on` so Z jogging is not blocked.
+- Wheel drives **both** `axis.*` (teleop) and `joint.*` (joint mode). After XYZ home with A still unhomed, motion stays in joint and ignores axis-only jog
+- WHB `is-homed` inputs are tied to `halui.machine.is-on` so the wheel is not gated on real homing
+- After GUI / MDI spindle start, tap **Manual**. Feed rotary must not sit on Off or Lead (`-s` uses Lead for spindle override)
 
 ### Stage 6 — Probe Basic migration
 

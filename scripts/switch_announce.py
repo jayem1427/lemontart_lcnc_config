@@ -9,6 +9,7 @@ within SHORT_WINDOW_S, announces them together as a short/cluster.
 """
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -28,7 +29,8 @@ WATCH = [
 
 POLL_S = 0.02
 SHORT_WINDOW_S = 0.15  # edges closer than this = one spoken group
-COOLDOWN_S = 0.35  # ignore re-chatter after speaking a name
+HOLD_S = 0.08  # ignore EMI blips; real NC trips stay closed longer
+COOLDOWN_S = 1.5  # don't re-speak the same name while still bouncing
 
 def speak(text: str) -> None:
     """espeak-ng — instant. Kokoro/Piper were too laggy next to LinuxCNC."""
@@ -47,8 +49,8 @@ def _espeak(text: str) -> None:
 
 
 def main() -> int:
-    # Attach as a tiny HAL component so we share the running session.
-    h = hal.component("switch-announce")
+    # Unique name so relaunch works if a prior instance left a HAL component.
+    h = hal.component(f"switch-announce-{os.getpid()}")
     h.ready()
 
     missing = []
@@ -70,6 +72,8 @@ def main() -> int:
 
     pending: list[tuple[float, str]] = []  # (t, name)
     last_spoken: dict[str, float] = {}
+    rose_at: dict[str, float] = {}  # pin -> time it went TRUE
+    held: set[str] = set()  # already queued this pulse
 
     def flush_pending(now: float) -> None:
         nonlocal pending
@@ -104,12 +108,18 @@ def main() -> int:
             prev = state[pin]
             state[pin] = val
             if val and not prev:
-                if now - last_spoken.get(name, 0) < COOLDOWN_S:
-                    continue
-                pending.append((now, name))
+                rose_at[pin] = now
+                held.discard(pin)
             elif (not val) and prev:
-                # optional clear — keep quiet unless alone and idle pending
-                pass
+                t0 = rose_at.pop(pin, None)
+                if t0 is not None and pin not in held:
+                    print(f"glitch {name} {(now - t0) * 1000:.0f} ms", flush=True)
+                held.discard(pin)
+            if val and pin in rose_at and pin not in held:
+                if now - rose_at[pin] >= HOLD_S:
+                    held.add(pin)
+                    if now - last_spoken.get(name, 0) >= COOLDOWN_S:
+                        pending.append((now, name))
         if pending and (now - pending[0][0]) >= SHORT_WINDOW_S:
             flush_pending(now)
         time.sleep(POLL_S)
