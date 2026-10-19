@@ -31,8 +31,9 @@ class SwitchWatch(tk.Tk):
         super().__init__()
         self.title("Home / Limit watch")
         self.configure(bg="#1e1e1e")
-        self.h = hal.component("switch-watch")
-        # component only needed to attach; we read existing pins via hal.get_value
+        # Unique name so relaunch works if a prior instance left a HAL component.
+        import os
+        self.h = hal.component(f"switch-watch-{os.getpid()}")
         self.h.ready()
 
         hdr = ("Axis", "HOME", "NEG LIM", "POS LIM")
