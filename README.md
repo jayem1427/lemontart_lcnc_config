@@ -281,8 +281,8 @@ probe inputs are NC (NPN) and wired direct (no inversion). Source of truth:
 | 0 (X/Y IO) | `lcec.0.0.di-5` | DI5 | 11 | Y home |
 | 0 (X/Y IO) | `lcec.0.0.di-2` | DI2 | 9 | Y limit chain (±) |
 | 1 (Z/probe IO) | `lcec.0.1.di-4` | DI4 | 7 | Z home (+Z) |
-| 1 (Z/probe IO) | `lcec.0.1.di-2` | DI2 | 9 | Contact toolsetter (gated when not T99) |
-| 1 (Z/probe IO) | `lcec.0.1.di-5` | DI5 | 11 | Touch probe (gated when T99) |
+| 1 (Z/probe IO) | `lcec.0.1.di-2` | DI2 | 9 | Touch probe (gated when T99) — physical map QC 2026-10 |
+| 1 (Z/probe IO) | `lcec.0.1.di-5` | DI5 | 11 | Contact toolsetter (gated when not T99) — physical map QC 2026-10 |
 | 2 (Z/laser IO) | `lcec.0.2.di-5` | DI5 | 11 | Laser DS-5V-M (`laser-beam-broken`) |
 | 2 (Z/laser IO) | `lcec.0.2.di-2` | DI2 | 9 | Free (Z− limit commented out in HAL) |
 | 3 (A/estop IO) | `lcec.0.3.di-1` | DI1 | 10 | Software E-stop NC |

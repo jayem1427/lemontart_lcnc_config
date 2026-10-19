@@ -17,7 +17,7 @@ Stock references:
 |------|----------------|--------------|
 | Tool change from CAM | `T M6` with optional `TOOL_CHANGE_AT_G30` | **`T M600`** remapped; built-in M6 motion disabled |
 | M6 behavior | May move to G30 / retract | **Dialog only** — no auto `tool-changed` loop |
-| Touch probe HAL | Single `motion.probe-input` wire | **Tool-gated mux** (T99 → DI5, else → toolsetter DI2) |
+| Touch probe HAL | Single `motion.probe-input` wire | **Tool-gated mux** (T99 → probe DI2, else → toolsetter DI5; pins swapped vs older silk, HAL matches wires) |
 | Probe Basic probe pin | `qtpyvcp.probe-in` ↔ `motion.probe-input` | **Direct HAL only** — PB probe widget disconnected |
 | ATC | Carousel tab + `TPDZR` columns | **`POCKETS=1`**, tab hidden, **`TDZR`** columns |
 | Geometry | Often XYZ | **XYZA** `trivkins`, table rotary on X |
