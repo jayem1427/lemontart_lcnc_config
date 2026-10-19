@@ -9,7 +9,6 @@ within SHORT_WINDOW_S, announces them together as a short/cluster.
 """
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import sys
@@ -31,88 +30,9 @@ POLL_S = 0.02
 SHORT_WINDOW_S = 0.15  # edges closer than this = one spoken group
 COOLDOWN_S = 0.35  # ignore re-chatter after speaking a name
 
-# Neural TTS like the self-hosted Jarvis stack: Kokoro first, then Piper, then espeak.
-KOKORO_MODEL = os.path.expanduser("~/src/kokoro/kokoro-v1.0.onnx")
-KOKORO_VOICES = os.path.expanduser("~/src/kokoro/voices-v1.0.bin")
-KOKORO_VOICE = os.environ.get("SWITCH_ANNOUNCE_VOICE", "bm_george")  # British male
-PIPER_BIN = os.path.expanduser("~/src/piper/piper")
-PIPER_MODEL = os.path.expanduser(
-    "~/src/piper/voices/en_GB-alan-medium/en_GB-alan-medium.onnx"
-)
-
-_kokoro = None
-
-
-def _get_kokoro():
-    global _kokoro
-    if _kokoro is not None:
-        return _kokoro
-    if not (os.path.isfile(KOKORO_MODEL) and os.path.isfile(KOKORO_VOICES)):
-        return None
-    try:
-        from kokoro_onnx import Kokoro
-
-        _kokoro = Kokoro(KOKORO_MODEL, KOKORO_VOICES)
-        print(f"TTS: Kokoro neural ({KOKORO_VOICE})", flush=True)
-        return _kokoro
-    except Exception as exc:  # noqa: BLE001
-        print(f"Kokoro load failed: {exc}", flush=True)
-        return None
-
-
-def _play_wav(path: str) -> None:
-    player = ["paplay", path] if shutil.which("paplay") else ["aplay", "-q", path]
-    subprocess.run(player, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-
-
 def speak(text: str) -> None:
-    """Kokoro (Jarvis-style neural) → Piper → espeak."""
-
-    def _run() -> None:
-        k = _get_kokoro()
-        if k is not None:
-            try:
-                import soundfile as sf
-                import tempfile
-
-                samples, sr = k.create(text, voice=KOKORO_VOICE, speed=1.05)
-                fd, path = tempfile.mkstemp(suffix=".wav")
-                os.close(fd)
-                try:
-                    sf.write(path, samples, sr)
-                    _play_wav(path)
-                finally:
-                    try:
-                        os.unlink(path)
-                    except OSError:
-                        pass
-                return
-            except Exception as exc:  # noqa: BLE001
-                print(f"kokoro speak failed ({exc}); piper fallback", flush=True)
-        if os.path.isfile(PIPER_BIN) and os.path.isfile(PIPER_MODEL):
-            try:
-                wav = subprocess.run(
-                    [PIPER_BIN, "--model", PIPER_MODEL, "--output_file", "-"],
-                    input=text.encode(),
-                    capture_output=True,
-                    check=False,
-                )
-                if wav.returncode != 0 or not wav.stdout:
-                    raise RuntimeError("piper failed")
-                player = ["paplay"] if shutil.which("paplay") else ["aplay", "-q"]
-                subprocess.run(
-                    player,
-                    input=wav.stdout,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    check=False,
-                )
-                return
-            except Exception as exc:  # noqa: BLE001
-                print(f"piper speak failed ({exc}); espeak fallback", flush=True)
-        _espeak(text)
-
-    threading.Thread(target=_run, daemon=True).start()
+    """espeak-ng — instant. Kokoro/Piper were too laggy next to LinuxCNC."""
+    threading.Thread(target=_espeak, args=(text,), daemon=True).start()
 
 
 def _espeak(text: str) -> None:
