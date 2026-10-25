@@ -96,6 +96,10 @@ H100 manual: [`reference/h100 manual.pdf`](reference/h100%20manual.pdf) — regi
 
 Modbus HAL: [mb2hal documentation](https://linuxcnc.org/docs/html/man/man1/mb2hal.1.html)
 
+PWM coolant (same RS-485 dongle, slave 2): [COOLANT.md](COOLANT.md). Register
+addresses in `h100.mb2hal` TRANSACTION_04–06 are placeholders until the box is
+on the bench.
+
 ### Stage 5 — Pendant (XHC WHB04B-6)
 
 - [`xhc-whb04b-6.hal`](../xhc-whb04b-6.hal) — MPG jog with `ilowpass` smoothing, feed override to 250%
@@ -141,7 +145,8 @@ ethercat_mill.ini
 │   ├── ethercat_loadusr.hal   → lcec_conf + ethercat-conf.xml (once)
 │   ├── ethercat_mill.hal      → joints, limits, probe mux, estop
 │   ├── xhc-whb04b-6.hal       → pendant
-│   └── custom.hal             → VFD Modbus, at-speed, faults
+│   ├── custom.hal             → VFD Modbus, at-speed, faults
+│   └── coolant.hal            → PWM coolant analog → mb2hal
 ├── POSTGUI probe_basic/probe_basic_postgui.hal
 ├── probe_basic/custom_config.yml
 ├── probe_basic/subroutines/   → probing, M600, tool change

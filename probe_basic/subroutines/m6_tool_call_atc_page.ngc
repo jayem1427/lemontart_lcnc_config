@@ -19,6 +19,7 @@ o110 if [#<tool_number_entry_atc_page> EQ #<probe_tool_number>]
 o110 endif
 
 o<program_coolant> call
+M102 (PWM coolant recipe for loaded tool; nozzle aimer above is stock PB)
 
 o<m6_tool_call_atc_page> endsub
 

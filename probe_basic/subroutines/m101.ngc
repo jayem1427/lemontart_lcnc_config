@@ -1,0 +1,21 @@
+(PWM coolant setpoints. P=Hz, Q=duty percent, R=pressure psi.)
+(Writes M68 E4/E5/E6. Laser owns E0-E3; do not reuse those channels.)
+(Does not enable spray — that is stock M7/M8. M9 gates duty/pressure to 0 in HAL.)
+
+o<m101> sub
+
+o100 if [EXISTS[#<p>]]
+    M68 E4 Q#<p>
+o100 endif
+
+o110 if [EXISTS[#<q>]]
+    M68 E5 Q#<q>
+o110 endif
+
+o120 if [EXISTS[#<r>]]
+    M68 E6 Q#<r>
+o120 endif
+
+o<m101> endsub
+
+M2

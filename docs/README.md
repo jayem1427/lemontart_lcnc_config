@@ -27,6 +27,7 @@ things together.
 | Cancel mid M600 | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Set WCO Z after shim touch-off | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Measure tool diameter (laser) | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
+| PWM coolant (Modbus freq/duty/psi) | [COOLANT.md](COOLANT.md) |
 | Z repeatability tests | [metrology README](../probe_basic/subroutines/metrology/README.md) |
 
 ### Integrator (fork / adapt)
@@ -37,6 +38,7 @@ things together.
 | Copy tool-change to another mill | [INSTALL_TOOL_CHANGE.md](INSTALL_TOOL_CHANGE.md) |
 | Copy servo tuning tabs | [INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md) |
 | Fusion post (M600, XYZA, G93) | [TOOLSETTER.md § CAM](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps) |
+| PWM coolant (M101/M102, Modbus) | [COOLANT.md](COOLANT.md) |
 
 ### Servo tuning
 
@@ -77,6 +79,7 @@ After switching git branches, delete leftover tab folders that lack a matching
 | `ethercat_mill.hal` | Joints, CiA 402, limits, probe mux |
 | `ethercat-conf.xml` | EtherCAT slaves + fault-window SDOs |
 | `custom.hal` | VFD Modbus, at-speed delay, faults |
+| `coolant.hal` | PWM coolant analog → mb2hal |
 | `probe_basic/` | UI, macros, tool table, custom tabs |
 | `post-processor/linuxcnc-djr.cps` | Fusion post |
 | `docs/reference/` | Vendor PDFs / worksheets (H100, Sigma II calculator) |
@@ -102,6 +105,7 @@ We do not claim these integrations are the only correct approach.
 | Doc | Covers |
 |-----|--------|
 | [A6_TUNING.md](A6_TUNING.md) | A6 SDO map, Servo Tuning tab, 6065/6066 windows |
+| [COOLANT.md](COOLANT.md) | PWM coolant M101/M102, Modbus, per-tool table |
 | [DEVIATIONS.md](DEVIATIONS.md) | Differences vs stock LinuxCNC / Probe Basic |
 | [GETTING_STARTED.md](GETTING_STARTED.md) | Zero-to-hero bring-up path |
 | [GRAPHICAL_INERTIA_TUNE.md](GRAPHICAL_INERTIA_TUNE.md) | Inertia identification panel (WIP) |

@@ -1,0 +1,42 @@
+# PWM coolant: M68 analog setpoints → mb2hal (same RS-485 dongle as the H100).
+# E0-E3 are the laser mailbox — do not net those pins here.
+#
+#   M101 P<Hz> Q<duty%> R<psi>  → motion.analog-out-04/05/06
+#   M8 / M7                     → enable (flood OR mist)
+#   M9                          → duty and pressure forced to 0
+#
+# Scale factors are register units / engineering units. 1.0 = write Hz, %, psi
+# as-is. Change [COOLANT]FREQ_SCALE etc. when the device wants 0.1 Hz or 0-1000.
+
+loadrt mux2 names=coolant-duty-gate,coolant-psi-gate
+# coolant-*-scale instances are created with the tune-torque scale loadrt in custom.hal
+# (cannot mix a second loadrt scale names= on some LinuxCNC builds).
+
+addf or2.2 servo-thread
+addf coolant-duty-gate servo-thread
+addf coolant-psi-gate servo-thread
+addf coolant-freq-scale servo-thread
+addf coolant-duty-scale servo-thread
+addf coolant-psi-scale servo-thread
+
+setp coolant-freq-scale.gain [COOLANT]FREQ_SCALE
+setp coolant-duty-scale.gain [COOLANT]DUTY_SCALE
+setp coolant-psi-scale.gain [COOLANT]PRESSURE_SCALE
+setp coolant-duty-gate.in0 0
+setp coolant-psi-gate.in0 0
+
+# Enable = flood or mist so either Probe Basic button / M7 / M8 starts spray.
+net coolant-flood iocontrol.0.coolant-flood => or2.2.in0
+net coolant-mist  iocontrol.0.coolant-mist  => or2.2.in1
+net coolant-enable or2.2.out => coolant-duty-gate.sel coolant-psi-gate.sel
+
+net coolant-freq-cmd motion.analog-out-04 => coolant-freq-scale.in
+net coolant-freq-modbus coolant-freq-scale.out => mb2hal.coolant_freq.00.float
+
+net coolant-duty-cmd motion.analog-out-05 => coolant-duty-gate.in1
+net coolant-duty-gated coolant-duty-gate.out => coolant-duty-scale.in
+net coolant-duty-modbus coolant-duty-scale.out => mb2hal.coolant_duty.00.float
+
+net coolant-psi-cmd motion.analog-out-06 => coolant-psi-gate.in1
+net coolant-psi-gated coolant-psi-gate.out => coolant-psi-scale.in
+net coolant-psi-modbus coolant-psi-scale.out => mb2hal.coolant_psi.00.float

@@ -1,6 +1,10 @@
 [MB2HAL_INIT]
 VERSION = 1.1
-TOTAL_TRANSACTIONS = 4
+# TX 00-03: H100 VFD (slave 1). TX 04-06: PWM coolant (slave 2, same RS-485 dongle).
+# Until the coolant box is on the bus, either leave these txs (failed slave 2 is noisy
+# but should not stop the VFD) or comment TX 04-06, set TOTAL_TRANSACTIONS = 4, and
+# comment HALFILE = coolant.hal in ethercat_mill.ini.
+TOTAL_TRANSACTIONS = 7
 HAL_MODULE_NAME = mb2hal
 INIT_DEBUG = 1
 
@@ -41,4 +45,32 @@ MB_TX_CODE = fnct_04_read_input_registers
 FIRST_ELEMENT = 10
 NELEMENTS = 1
 HAL_TX_NAME = vfd_fault
+MAX_UPDATE_RATE = 2.0
+
+# PWM coolant — PLACEHOLDER holding registers. Replace FIRST_ELEMENT from the
+# controller manual (Hz / duty / psi units). Daisy-chain on the VFD RS-485
+# pair with a unique slave ID (default 2). Keep update rate low so VFD 10 Hz
+# freq writes stay healthy.
+[TRANSACTION_04]
+MB_SLAVE_ID = 2
+MB_TX_CODE = fnct_06_write_single_register
+FIRST_ELEMENT = 100
+NELEMENTS = 1
+HAL_TX_NAME = coolant_freq
+MAX_UPDATE_RATE = 2.0
+
+[TRANSACTION_05]
+MB_SLAVE_ID = 2
+MB_TX_CODE = fnct_06_write_single_register
+FIRST_ELEMENT = 101
+NELEMENTS = 1
+HAL_TX_NAME = coolant_duty
+MAX_UPDATE_RATE = 2.0
+
+[TRANSACTION_06]
+MB_SLAVE_ID = 2
+MB_TX_CODE = fnct_06_write_single_register
+FIRST_ELEMENT = 102
+NELEMENTS = 1
+HAL_TX_NAME = coolant_psi
 MAX_UPDATE_RATE = 2.0
