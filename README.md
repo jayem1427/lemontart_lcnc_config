@@ -35,7 +35,7 @@ If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page 
 | Understand “why doesn’t this behave like stock?” | **[DEVIATIONS.md](docs/DEVIATIONS.md)** |
 | Change tools and probe length (contact setter) | **[TOOLSETTER.md](docs/TOOLSETTER.md)** |
 | Measure diameter with the laser | **[LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md)** |
-| PWM coolant (Modbus) | **[COOLANT.md](docs/COOLANT.md)** |
+| PWM coolant (Modbus) | **[COOLANT.md](docs/COOLANT.md)** · first-time mb2hal: **[MB2HAL.md](docs/MB2HAL.md)** |
 | Copy tool-change onto another mill | **[INSTALL_TOOL_CHANGE.md](docs/INSTALL_TOOL_CHANGE.md)** |
 | Tweak Probe Basic UI / SET Z / abort dialog | **[PROBE_BASIC_UI.md](docs/PROBE_BASIC_UI.md)** |
 | Example tuning / M600 test G-code | **[TUNING_PROGRAMS.md](docs/TUNING_PROGRAMS.md)** |

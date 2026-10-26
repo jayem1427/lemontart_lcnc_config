@@ -95,6 +95,8 @@ Homing and limit wiring live in [`ethercat_mill.hal`](../ethercat_mill.hal), not
 H100 manual: [`reference/h100 manual.pdf`](reference/h100%20manual.pdf) — register `0x0201` (freq set), `0x000A` (current fault).
 
 Modbus HAL: [mb2hal documentation](https://linuxcnc.org/docs/html/man/man1/mb2hal.1.html)
+· this mill’s walkthrough: **[MB2HAL.md](MB2HAL.md)** (VFD as the worked
+example, then PWM coolant as a second slave).
 
 PWM coolant (same RS-485 dongle, slave 2): [COOLANT.md](COOLANT.md). Register
 addresses in `h100.mb2hal` TRANSACTION_04–06 are placeholders until the box is

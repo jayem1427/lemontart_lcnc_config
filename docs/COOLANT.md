@@ -3,6 +3,11 @@
 Machine-side PWM coolant: **frequency, duty cycle, optional pressure**. Fusion still
 emits stock **M7 / M8 / M9**. The mill owns the analog setpoints.
 
+**Never configured mb2hal?** Start with **[MB2HAL.md](MB2HAL.md)** — what the
+driver is, how a `.mb2hal` file maps to HAL pins, how to read a register map,
+and a fill-in worksheet. This page is the mill-specific coolant map (M-codes,
+analog channels, recipes, wiring).
+
 This is **not** Probe Basic’s programmable nozzle aimer (`program_coolant.ngc`,
 `#3000`–`#3003`, `M68 E0` angle). Leave that off (`#3000 = 0`). It would collide
 with the laser mailbox on E0.
@@ -120,7 +125,8 @@ is analog (4–20 mA) rather than Modbus, or you want a separate master.
 
 `h100.mb2hal` **TRANSACTION_04–06** write holding registers **100 / 101 / 102** on
 **slave 2** as stand-ins. Replace `FIRST_ELEMENT` and `MB_SLAVE_ID` from the
-coolant manual. Scale in `[COOLANT]` if the device wants 0.1 Hz or 0–1000 duty:
+coolant manual (hex `0x0064` → decimal `100` — [MB2HAL.md](MB2HAL.md) “Translate a datasheet”).
+Scale in `[COOLANT]` if the device wants 0.1 Hz or 0–1000 duty:
 
 ```ini
 [COOLANT]
