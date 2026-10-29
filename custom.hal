@@ -81,7 +81,7 @@ loadrt conv_s32_float count=4
 loadrt conv_s32_float count=4
 loadrt mult2 count=4
 loadrt div2 count=4
-loadrt scale names=tune-torque.0,tune-torque.1,tune-torque.2,tune-torque.3,tune-velocity.0,tune-velocity.1,tune-velocity.2,tune-velocity.3,tune-drive-ferr.0,tune-drive-ferr.1,tune-drive-ferr.2,tune-drive-ferr.3,coolant-freq-scale,coolant-duty-scale,coolant-psi-scale
+loadrt scale names=tune-torque.0,tune-torque.1,tune-torque.2,tune-torque.3,tune-velocity.0,tune-velocity.1,tune-velocity.2,tune-velocity.3,tune-drive-ferr.0,tune-drive-ferr.1,tune-drive-ferr.2,tune-drive-ferr.3
 
 addf conv-s32-float.4 servo-thread
 addf conv-s32-float.5 servo-thread

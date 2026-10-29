@@ -1,42 +1,65 @@
-# PWM coolant (Modbus)
+# PWM coolant (Microject)
 
-Machine-side PWM coolant: **frequency, duty cycle, optional pressure**. Fusion still
-emits stock **M7 / M8 / M9**. The mill owns the analog setpoints.
+Dan Mills **Microject** injector driver: an automotive fuel injector pulsed as
+an MQL valve. Fusion still emits stock **M7 / M8 / M9**. The mill owns enable
+and (later) the pulse recipe.
 
-**Never configured mb2hal?** Start with **[MB2HAL.md](MB2HAL.md)** — what the
-driver is, how a `.mb2hal` file maps to HAL pins, how to read a register map,
-and a fill-in worksheet. This page is the mill-specific coolant map (M-codes,
-analog channels, recipes, wiring).
+**Never configured mb2hal?** **[MB2HAL.md](MB2HAL.md)** is the driver tutorial.
+This page is the mill-specific map.
 
 This is **not** Probe Basic’s programmable nozzle aimer (`program_coolant.ngc`,
-`#3000`–`#3003`, `M68 E0` angle). Leave that off (`#3000 = 0`). It would collide
-with the laser mailbox on E0.
+`#3000`–`#3003`, `M68 E0` angle). Leave that off (`#3000 = 0`).
+
+---
+
+## What is live today vs still pending
+
+| Piece | Status |
+|-------|--------|
+| Serial | **Known:** 19200 **8E1**, slave **8** (DIP switches can change this) |
+| Enable | **Known:** coil **#1**. `M8`/`M7` → coil ON, `M9` → coil OFF |
+| Firmware default pulse | **Known:** 1 ms on, 100 ms period (10 Hz, 1 % duty) until you write holding registers |
+| Watchdog | **Known:** coil drops **5 s** after the last valid Modbus message |
+| Holding registers (on-time, period, pressure) | **Not in the first dump** — do not guess. M101/M102 still set analog pins for later |
+| Share the H100 dongle | **No, not at defaults.** H100 is 38400 8N1. Second USB–RS-485 adapter (`/dev/ttyUSB1`) |
+
+Bring-up with the PCB in hand: power **24 V**, Modbus on USB1, `M8`. You should
+get a 1 % dribble without writing any holding registers.
+
+Bench, LinuxCNC not required (Dan’s command, 8E1 added):
+
+```bash
+mbpoll /dev/ttyUSB1 -v -m rtu -a 8 -b 19200 -P even -t 0 -r 1 1
+```
+
+`modbuslens` is useful for diagnostics `mbpoll` does not do.
 
 ---
 
 ## Pipeline
 
 ```
-Fusion flood/mist          mill table (coolant_tools.ini)
-  M8 / M7 / M9               T3 → 20000 Hz, 35 %, 0 psi
+Fusion M8 / M7 / M9          mill table (coolant_tools.ini)  [setpoints, later]
         │                            │
-        │                            │ M600 / M102
-        │                            ▼
-        │                     M68 E4/E5/E6  (setpoints)
-        ▼                            │
- iocontrol coolant-flood/mist        │
-        │                            │
-        └──────── enable gate ───────┤
-                                     ▼
-                    coolant.hal scale + mux
-                                     ▼
-              mb2hal.coolant_{freq,duty,psi}.00.float
-                                     ▼
-              RS-485  /dev/ttyUSB0  slave 2  (same dongle as H100)
+        ▼                            ▼
+ iocontrol coolant-flood/mist     M101 / M102 → analog E4/E5/E6
+        │                            (not on the wire yet)
+        ▼
+ coolant.hal  or2 (flood OR mist)
+        │
+        ▼
+ microject.coolant_run.00.bit     fnct_05 coil 1
+        │
+        ▼
+ microject.mb2hal   /dev/ttyUSB1   19200 8E1   slave 8
+        │
+        ▼
+ Microject PCB  →  fuel injector
 ```
 
-G-code never contains Modbus. `M68` pokes HAL floats; `mb2hal` writes registers,
-same pattern as the H100 VFD (`S`/`M3` → `custom.hal` → register 513).
+The H100 VFD stays on `/dev/ttyUSB0` via `h100.mb2hal`. Two `loadusr mb2hal`
+processes, two UARTs, two masters on **two buses** — that is allowed. Two
+masters on **one** UART is not.
 
 ---
 
@@ -44,125 +67,61 @@ same pattern as the H100 VFD (`S`/`M3` → `custom.hal` → register 513).
 
 | Code | Role |
 |------|------|
-| **M101 P Q R** | Set freq (Hz), duty (%), pressure (psi). Any word may be omitted. |
-| **M102** | Load the recipe for the current tool (`#5400`) from `probe_basic/coolant_tools.ini` |
-| **M8 / M7** | Enable (flood and/or mist). HAL ORs them. |
-| **M9** | Disable. HAL forces **duty and pressure to 0**; frequency stays latched. |
-
-Examples:
+| **M8 / M7** | Coil 1 ON (firmware default 1 ms / 100 ms pulse) |
+| **M9** | Coil 1 OFF. `on_abort.ngc` already issues M9 |
+| **M101 P Q R** | Set analog E4/E5/E6 (Hz, duty %, psi). **Not sent to the board** until holding-register addresses exist |
+| **M102** | Load `probe_basic/coolant_tools.ini` for the current tool into those analog pins |
 
 ```
-M101 P20000 Q35 R80
-M8
+M8          (spray at firmware default)
 ...
 M9
 ```
 
-MDI override mid-program is `M101` with only the words you want to change.
-
-`on_abort.ngc` already issues `M9`.
+Once on-time/period registers are known, `M101 P10 Q1` will mean 10 Hz / 1 %.
+Do **not** use 20 kHz recipes — this is an injector pulse, not a servo PWM.
 
 ---
 
-## Analog channels
+## Analog channels (setpoints, parked until registers land)
 
-`num_aio=7`. Laser and coolant must not share pins.
+`num_aio=7`. Laser owns E0–E3.
 
 | E | Pin | Owner |
 |---|-----|--------|
-| 0 | `motion.analog-out-00` | Laser result (length / diameter) |
-| 1 | `motion.analog-out-01` | Laser success flag |
-| 2 | `motion.analog-out-02` | Laser per-hit X |
-| 3 | `motion.analog-out-03` | Laser packed hit event |
-| **4** | `motion.analog-out-04` | **Coolant frequency (Hz)** |
-| **5** | `motion.analog-out-05` | **Coolant duty (%)** |
-| **6** | `motion.analog-out-06` | **Coolant pressure (psi)** |
+| 0–3 | `motion.analog-out-00` … `03` | Laser mailbox |
+| 4 | `motion.analog-out-04` | Injector pulse rate (Hz) — not on the wire yet |
+| 5 | `motion.analog-out-05` | Duty (%) — not on the wire yet |
+| 6 | `motion.analog-out-06` | Pressure (psi) — board may not have this |
 
 ---
 
 ## Per-tool table
 
-Edit [`probe_basic/coolant_tools.ini`](../probe_basic/coolant_tools.ini). Do not hijack
-tool-table I/J (lathe leftover fields; Probe Basic columns are `TDZR`).
-
-```ini
-[DEFAULT]
-FREQ = 20000
-DUTY = 30
-PRESSURE = 0
-
-[T3]
-DUTY = 35
-```
-
-Unspecified keys inherit `[DEFAULT]`. Tool 0 (empty spindle) always writes zeros.
-T99 is listed dry so the probe never sprays.
-
-M102 runs at the end of **M600**, Probe Basic load-spindle / M6 helpers, and
-carousel `toolchange.ngc`. The Fusion post emits **M102** immediately before M7/M8
-(`applyToolCoolant`, on by default).
+[`probe_basic/coolant_tools.ini`](../probe_basic/coolant_tools.ini) defaults match
+firmware (10 Hz, 1 %). M102 still runs after M600 so the analog pins track the
+tool; they just do not reach Modbus yet.
 
 ---
 
-## Wiring (RS-485)
-
-One USB–RS-485 dongle. Daisy-chain **A/A, B/B, GND/GND** — not a star, not a ring.
+## Wiring
 
 ```
-USB dongle ──── H100 VFD (slave 1) ──── coolant box (slave 2)
- /dev/ttyUSB0      38400 8N1               38400 8N1
+PC
+ ├─ USB–RS-485  /dev/ttyUSB0   38400 8N1   H100 VFD slave 1
+ └─ USB–RS-485  /dev/ttyUSB1   19200 8E1   Microject slave 8
 ```
 
-Terminate 120 Ω at the far end of the whole cable. Unique slave IDs. Match baud
-with the VFD (`h100.mb2hal`).
+Microject A/B/GND to the **second** dongle only. 24 V to the PCB. Injector
+plug to the board (GM0521994 is a 12 V automotive coil — the PCB drives it;
+do not put 24 V across the injector yourself).
 
-A second dongle is only needed if baud/parity cannot match, the pressure device
-is analog (4–20 mA) rather than Modbus, or you want a separate master.
+udev: two adapters will swap `ttyUSB0`/`ttyUSB1` across reboots unless you
+bind by serial. If the VFD suddenly “is” the injector, ports flipped.
 
----
-
-## Registers (placeholders)
-
-`h100.mb2hal` **TRANSACTION_04–06** write holding registers **100 / 101 / 102** on
-**slave 2** as stand-ins. Replace `FIRST_ELEMENT` and `MB_SLAVE_ID` from the
-coolant manual (hex `0x0064` → decimal `100` — [MB2HAL.md](MB2HAL.md) “Translate a datasheet”).
-Scale in `[COOLANT]` if the device wants 0.1 Hz or 0–1000 duty:
-
-```ini
-[COOLANT]
-FREQ_SCALE = 1.0
-DUTY_SCALE = 1.0
-PRESSURE_SCALE = 1.0
-```
-
-Function code is `06` (single register), matching the H100 writes. Slow update
-(2 Hz) so VFD 10 Hz freq-set is not starved.
-
-**No coolant box on the bus yet?** Failed slave-2 transactions are noisy and add
-a little bus latency. To disable: comment TRANSACTION_04–06, set
-`TOTAL_TRANSACTIONS = 4`, comment `HALFILE = coolant.hal`.
-
----
-
-## Bring-up
-
-1. Land RS-485 on slave 2 (or disable txs as above).
-2. Set real register addresses in `h100.mb2hal`.
-3. Restart LinuxCNC.
-4. MDI: `M101 P20000 Q10` then `M8`. Confirm with
-   `halcmd show pin mb2hal.coolant_duty` and `halcmd show pin motion.analog-out-05`.
-5. `M9` — gated duty/pressure pins should go to 0; analog-out-05 can stay at 10
-   (the mux zeros the Modbus write).
-6. `T3 M102` (tool already in spindle) — analog-out-04/05 should match
-   `coolant_tools.ini` `[T3]`.
-7. Edit recipes; no HAL rebuild needed (M102 re-reads the file).
-
-Pressure: if the box has no pressure register, leave TRANSACTION_06 pointed at a
-harmless register or stop netting `coolant-psi-modbus` until an EPR exists.
-Closed-loop air EPRs (SMC ITV class) are the usual analog pressure part for
-atomizing air; liquid through-tool pressure is usually a pump VFD, not an air
-ITV. See the earlier design notes in the agent thread / this file’s “Hardware”
-intent: command PSI, device holds PSI.
+**Optional later:** set Microject DIP switches to 38400 8N1 and daisy-chain on
+the H100 pair as a second slave. Then one dongle, one `mb2hal` file, two
+`MB_SLAVE_ID`s. Not the default.
 
 ---
 
@@ -170,16 +129,12 @@ intent: command PSI, device holds PSI.
 
 | Path | Role |
 |------|------|
-| `ethercat_mill.ini` `[COOLANT]`, `REMAP=M101/M102`, `[PYTHON]` | Setpoints + remap |
-| `ethercat_mill.hal` `num_aio=7` | Analog channels E0–E6 |
-| `coolant.hal` | Enable mux, scale, nets to mb2hal |
-| `h100.mb2hal` TX 04–06 | Coolant register writes |
-| `probe_basic/subroutines/m101.ngc` | M101 → M68 E4/E5/E6 |
-| `probe_basic/python/coolant_remap.py` | M102 |
-| `probe_basic/python/coolant_profiles.py` | INI parser |
-| `probe_basic/coolant_tools.ini` | Per-tool recipes |
-| `post-processor/linuxcnc-djr.cps` | Optional M102 before M7/M8 |
-| `config/logging/signals.json` | Coolant channels in the CSV |
+| `microject.mb2hal` | 19200 8E1, slave 8, coil 1 write |
+| `coolant.hal` | `loadusr` microject + flood/mist → coil |
+| `h100.mb2hal` | VFD only (unchanged serial) |
+| `ethercat_mill.ini` `[COOLANT]` | Documented serial / slave 8 |
+| `m101.ngc` / `coolant_remap.py` | Analog setpoints for later register writes |
+| `probe_basic/coolant_tools.ini` | Per-tool Hz/duty (10 Hz / 1 % default) |
 
-Do not remap M7/M8/M9 — Probe Basic buttons, the pendant, and abort all assume
-stock coolant bits.
+Do not remap M7/M8/M9. Do not add placeholder `fnct_06` writes — timeouts can
+starve coil 1 and the 5 s watchdog will shut the injector off.

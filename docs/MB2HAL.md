@@ -1,20 +1,15 @@
-# mb2hal for analog devices (VFD + PWM coolant)
+# mb2hal for analog devices (VFD + Microject)
 
 A first-pass guide to LinuxCNC’s **Modbus-to-HAL** driver, using this mill’s two
-devices as the examples:
+devices:
 
-| Device | Role | How LinuxCNC talks to it |
-|--------|------|--------------------------|
-| H100 VFD | Spindle RPM / run / fault | `S` / `M3` → HAL pins → mb2hal |
-| PWM coolant | Frequency, duty, optional pressure | `M101` / `M68` → analog-out pins → mb2hal |
+| Device | Role | Link |
+|--------|------|------|
+| H100 VFD | Spindle RPM / run / fault | `/dev/ttyUSB0` 38400 **8N1** slave **1** (`h100.mb2hal`) |
+| Microject | Injector enable (coil 1) | `/dev/ttyUSB1` 19200 **8E1** slave **8** (`microject.mb2hal`) |
 
-If you only need day-to-day coolant recipes (which M-code, which analog channel,
-per-tool INI), use **[COOLANT.md](COOLANT.md)**. This page is the “I have never
-configured mb2hal” version.
-
-Upstream reference: [mb2hal(1)](https://linuxcnc.org/docs/html/man/man1/mb2hal.1.html).
-Trust that man page for pin names and legal `MB_TX_CODE` values; this tree shows
-how one machine wires them.
+Day-to-day M-codes and wiring: **[COOLANT.md](COOLANT.md)**. Upstream:
+[mb2hal](https://linuxcnc.org/docs/html/drivers/mb2hal.html).
 
 ---
 
@@ -23,34 +18,31 @@ how one machine wires them.
 G-code has **no Modbus**. There is no “M-code that writes register 100.”
 
 ```
-something the operator/CAM understands
+M8 / S-word / M68
         │
         ▼
-LinuxCNC pin  (float or bit)
+LinuxCNC pin  (bit or float)
         │
         ▼
-optional HAL scale / mux / gate
+optional HAL scale / mux
         │
         ▼
-mb2hal.<name>.00.float     ← you net to this
+<component>.<tx>.00.bit  or  .float     ← you net to this
         │
         ▼
-mb2hal userspace process   ← reads h100.mb2hal
+mb2hal userspace process   ← reads a .mb2hal file
         │
         ▼
-RS-485  (USB dongle, /dev/ttyUSB0)
+RS-485 USB dongle
         │
         ▼
-device register  (16-bit integer)
+device coil or 16-bit register
 ```
 
-`mb2hal` is a **userspace** HAL component (`loadusr`), not a realtime module.
-It periodically copies HAL floats onto the wire as Modbus RTU frames, and copies
-replies back into HAL pins. That is the entire conversion.
+`mb2hal` is **userspace** (`loadusr`), not realtime. It copies HAL pins onto
+the wire on a timer (`MAX_UPDATE_RATE`).
 
-Two worked paths on this mill:
-
-**Spindle (already working)**
+**Spindle (this mill, working)**
 
 ```
 S12000 M3
@@ -60,410 +52,244 @@ S12000 M3
   → function 06, slave 1, register 513
 ```
 
-**Coolant (same idea, different slave)**
+**Microject (this mill, coil only so far)**
 
 ```
-M101 P20000 Q35
-  → M68 E4 / E5
-  → motion.analog-out-04 / 05
-  → scale + M9 gate in coolant.hal
-  → mb2hal.coolant_freq.00.float
-  → mb2hal.coolant_duty.00.float
-  → function 06, slave 2, registers 100 / 101   (placeholders — see §5)
+M8
+  → iocontrol.0.coolant-flood
+  → or2 with mist
+  → microject.coolant_run.00.bit
+  → function 05, slave 8, coil 1 (PDU address 0)
 ```
 
-If you can follow the VFD path in [`custom.hal`](../custom.hal) +
-[`h100.mb2hal`](../h100.mb2hal), you can add or retarget the coolant transactions.
+Firmware then pulses the injector at **1 ms on / 100 ms period** until you
+write holding registers (addresses still unknown — do not invent them).
 
 ---
 
-## 2. What you need from the device manual
+## 2. What you need from the device
 
-Before editing files, write these down from the **coolant controller** (or VFD)
-manual. If a line is blank, mb2hal cannot be finished.
+| Question | H100 VFD | Microject (Dan Mills, testers chat) |
+|----------|----------|-------------------------------------|
+| Electrical | 2-wire RS-485 | 2-wire RS-485 + **24 V** supply |
+| Baud / bits / parity / stop | 38400 8**N**1 | **19200 8E1** unless DIP switches say otherwise |
+| Slave ID | 1 | **8** |
+| Enable | holding register 512 (control word) | **coil #1** (`fnct_05`) |
+| Pulse recipe | n/a | defaults 1 ms / 100 ms; override via **holding registers** (numbers TBD) |
+| Watchdog | VFD-specific | coil OFF **5 s** after last **valid** message |
+| Bench tool | — | `mbpoll`, `modbuslens` |
 
-| Question | VFD on this mill | Coolant (fill in) |
-|----------|------------------|-------------------|
-| Electrical | 2-wire RS-485 | almost always the same |
-| Baud, data bits, parity, stop | 38400 8N1 | **must match the VFD** if they share the dongle |
-| Modbus slave ID | 1 | 2 (or whatever is not 1) |
-| Write function | 06 (single holding register) | usually 06 or 16 |
-| Frequency register | `0x0201` = **513 decimal** | |
-| Duty / PWM register | — | |
-| Pressure register (optional) | — | |
-| Units in that register | 0.1 Hz (12000 RPM → 2000 in the register for a 2-pole-ish scale) | Hz? 0.1 Hz? 0–1000 = 0–100 %? |
-| Is duty=0 a real stop? | stop is a *different* register (512) | if not, you need an enable coil too |
+Hex vs decimal: mb2hal `FIRST_ELEMENT` is **decimal**. VFD freq `0x0201` =
+**513**. That is why `h100.mb2hal` says 513, not 201.
 
-Hex vs decimal is the usual foot-gun. mb2hal `FIRST_ELEMENT` is **decimal**.
-This mill’s VFD freq command is manual address `0x0201`:
-
-```
-0x0201 = 2×256 + 1 = 513
-```
-
-That is why [`h100.mb2hal`](../h100.mb2hal) says `FIRST_ELEMENT = 513`, not `201`.
-
-Some manuals instead list “holding register 40101” (the old PLC numbering).
-Drop the 4 and subtract 1: `40101` → protocol address **100**. When in doubt,
-try the number the vendor shows in hex, converted to decimal, and watch the
-device (or a USB Modbus sniffer) rather than assuming.
+Coil numbering: Dan’s `mbpoll … -t0 -r1 1` is **1-based coil 1**. libmodbus /
+mb2hal protocol address is **0**. [`microject.mb2hal`](../microject.mb2hal)
+uses `FIRST_ELEMENT = 0`. If the injector never fires, try `1`.
 
 ---
 
-## 3. One dongle, many slaves
+## 3. Why this mill uses two dongles
 
-RS-485 is a **bus**. The PC is the only master. Several slaves share A/B/GND.
+RS-485 is a bus: **one master**, many slaves, **same baud/parity**.
+
+Microject defaults (**19200 even**) do **not** match the H100 (**38400 none**).
+They cannot share `/dev/ttyUSB0` unless you change the injector DIP switches.
 
 ```
-PC USB
-  └── existing RS-485 dongle   /dev/ttyUSB0
-        ├── H100 VFD      slave 1     38400 8N1
-        └── coolant PWM   slave 2     38400 8N1
+PC
+ ├─ dongle A  /dev/ttyUSB0   38400 8N1   H100 slave 1
+ └─ dongle B  /dev/ttyUSB1   19200 8E1   Microject slave 8
 ```
 
-Physically daisy-chain A→A, B→B, GND→GND. Not a star, not a ring. 120 Ω
-termination at the **far end** of the cable (and on the dongle only if it is
-the other end). Swap A/B on **one** device if it never answers.
+That is two buses, two `loadusr mb2hal` processes, two `HAL_MODULE_NAME`s
+(`mb2hal` and `microject`). Legal.
 
-**Do not** start a second `mb2hal` on the same `/dev/ttyUSB0`. Two masters on
-one UART will lose. This config loads mb2hal **once** from `custom.hal`:
+**Do not** run two mb2hal instances on the **same** tty.
 
-```hal
-loadusr -W mb2hal config=h100.mb2hal
-```
+If you later set the injector to 38400 8N1, daisy-chain A/A B/B GND/GND on the
+VFD dongle and move the Microject transactions into `h100.mb2hal` with
+`MB_SLAVE_ID = 8`. Until then, keep them apart.
 
-Extra devices are extra `[TRANSACTION_xx]` blocks in **that same file**, with a
-different `MB_SLAVE_ID`. Serial settings (`SERIAL_PORT`, baud, …) are set on
-`TRANSACTION_00` and inherited.
-
-A second USB adapter is only needed when baud/parity cannot match, the extra
-device is analog (4–20 mA) rather than Modbus, or you deliberately want two
-masters (then it is two buses).
+Physical RS-485: daisy-chain, not a star, not a ring. 120 Ω at the far end.
+Swap A/B on one device if it never answers.
 
 ---
 
-## 4. Anatomy of `h100.mb2hal`
+## 4. Anatomy of a `.mb2hal` file
 
-The file is **not** HAL and **not** the LinuxCNC INI. mb2hal reads it itself.
-INI substitutions like `[COOLANT]SLAVE_ID` do **not** work here — type the
-numbers.
+Not HAL, not the LinuxCNC INI. mb2hal reads it itself — **no** `[COOLANT]KEY`
+substitution. Type the numbers.
 
 ### Header
 
 ```ini
 [MB2HAL_INIT]
-VERSION = 1.1
-TOTAL_TRANSACTIONS = 7
-HAL_MODULE_NAME = mb2hal
+VERSION = 1.1          ; required for fnct_05 coil writes
+TOTAL_TRANSACTIONS = 1
+HAL_MODULE_NAME = microject
 INIT_DEBUG = 1
 ```
 
-`TOTAL_TRANSACTIONS` must equal the number of `[TRANSACTION_xx]` sections
-(`00` through `06` → 7). If you comment out coolant txs, drop this count too
-or mb2hal will look for missing sections and fail.
+`TOTAL_TRANSACTIONS` must equal the number of `[TRANSACTION_xx]` sections.
+`VERSION = 1.1` is required for `fnct_05_write_single_coil`.
 
-`INIT_DEBUG = 1` prints setup to the LinuxCNC console. `3` is very noisy; use
-it only while chasing a slave that will not talk.
+Load a custom component name with matching `-Wn`:
 
-### One write transaction (VFD frequency)
+```hal
+loadusr -Wn microject mb2hal config=microject.mb2hal
+```
+
+Pins are then `microject.<HAL_TX_NAME>.00.bit` (coil) or `.float` (register).
+
+### One coil write (Microject enable)
 
 ```ini
 [TRANSACTION_00]
 LINK_TYPE = serial
-SERIAL_PORT = /dev/ttyUSB0
-SERIAL_BAUD = 38400
+SERIAL_PORT = /dev/ttyUSB1
+SERIAL_BAUD = 19200
 SERIAL_BITS = 8
-SERIAL_PARITY = none
+SERIAL_PARITY = even
 SERIAL_STOP = 1
-SERIAL_DELAY_MS = 25
-MB_SLAVE_ID = 1
+SERIAL_DELAY_MS = 20
+MB_SLAVE_ID = 8
+MB_TX_CODE = fnct_05_write_single_coil
+FIRST_ELEMENT = 0
+NELEMENTS = 1
+HAL_TX_NAME = coolant_run
+MAX_UPDATE_RATE = 2.0
+```
+
+| Key | Meaning here |
+|-----|----------------|
+| `SERIAL_PARITY = even` | Dan’s 8-E-1 |
+| `fnct_05_write_single_coil` | HAL pin is **`.bit`**, not `.float` |
+| `MAX_UPDATE_RATE = 2.0` | Rewrite coil every 0.5 s so the **5 s watchdog** stays fed |
+
+### One register write (VFD frequency, for comparison)
+
+```ini
 MB_TX_CODE = fnct_06_write_single_register
 FIRST_ELEMENT = 513
-NELEMENTS = 1
 HAL_TX_NAME = freq_set
-MAX_UPDATE_RATE = 10.0
 ```
 
-| Key | Meaning |
-|-----|---------|
-| `MB_TX_CODE` | Modbus function. `fnct_06_write_single_register` = “put this 16-bit value in one holding register.” |
-| `FIRST_ELEMENT` | Register address, **decimal**. |
-| `NELEMENTS` | How many consecutive registers. `06` is always 1. |
-| `HAL_TX_NAME` | Becomes the HAL pin name. |
-| `MAX_UPDATE_RATE` | How often to send, in Hz. `10` = at most every 0.1 s. |
-| `SERIAL_DELAY_MS` | Pause after this (and between) transactions so slaves can think. |
+Pin: `mb2hal.freq_set.00.float`. HAL float is truncated to uint16 on the wire.
 
-That transaction creates:
-
-```
-mb2hal.freq_set.00.float
-```
-
-Pattern: `mb2hal.<HAL_TX_NAME>.<element>.float`. Element `00` is the first
-(and here only) register. You **net a HAL float onto that pin**; mb2hal
-truncates it to a 16-bit integer and writes it.
-
-### One read transaction (VFD fault)
-
-```ini
-[TRANSACTION_03]
-MB_SLAVE_ID = 1
-MB_TX_CODE = fnct_04_read_input_registers
-FIRST_ELEMENT = 10
-NELEMENTS = 1
-HAL_TX_NAME = vfd_fault
-MAX_UPDATE_RATE = 2.0
-```
-
-Reads create the same pin shape; LinuxCNC **reads** `.float` instead of
-writing it. Function **04** = input registers, **03** = holding registers.
-Use whichever the manual specifies. This mill’s H100 fault is input register
-`0x000A` = 10.
-
-### Coolant writes (copy this)
-
-```ini
-[TRANSACTION_04]
-MB_SLAVE_ID = 2
-MB_TX_CODE = fnct_06_write_single_register
-FIRST_ELEMENT = 100          ; PLACEHOLDER — your manual’s freq register
-NELEMENTS = 1
-HAL_TX_NAME = coolant_freq
-MAX_UPDATE_RATE = 2.0
-```
-
-`HAL_TX_NAME = coolant_freq` → pin `mb2hal.coolant_freq.00.float`.
-[`coolant.hal`](../coolant.hal) already nets analog-out-04 (after scale) to
-that pin. Change **slave ID, register, function code, and scale** — not the
-pin name — unless you also change the HAL `net`.
-
-Keep coolant `MAX_UPDATE_RATE` **low** (1–2 Hz). The VFD wants ~10 Hz. Each
-transaction costs `SERIAL_DELAY_MS` plus on-wire time. Three extra 2 Hz writes
-are cheap; three extra 10 Hz writes can starve spindle freq-set.
+A **new link** (second UART) must repeat `LINK_TYPE`, `SERIAL_*`, and
+`MB_SLAVE_ID` on that transaction. Later txs inherit. Optional keys omitted
+are copied from the previous transaction — easy to accidentally inherit the
+VFD’s 38400 none onto the injector if you merge files carelessly.
 
 ---
 
-## 5. Translate a datasheet → transaction
+## 5. Holding registers (not wired yet)
 
-Worked example, imaginary coolant box:
+Dan: override the 1 ms / 100 ms default by **writing holding registers**.
+Those addresses were not in the first testers dump.
 
-> Slave ID 2, 38400 8N1.
-> Holding register 0x0064 = PWM frequency, units 1 Hz.
-> Holding register 0x0065 = duty, units 0.1 % (1000 = 100 %).
-> Function 06 write.
+**Do not** add `fnct_06` placeholders. A timed-out write costs
+`MB_RESPONSE_TIMEOUT_MS` (default 500 ms) and can delay the coil transaction
+past 5 s → injector watchdog trips even though M8 is on.
 
-That becomes:
-
-```ini
-[TRANSACTION_04]
-MB_SLAVE_ID = 2
-MB_TX_CODE = fnct_06_write_single_register
-FIRST_ELEMENT = 100          ; 0x0064
-HAL_TX_NAME = coolant_freq
-MAX_UPDATE_RATE = 2.0
-
-[TRANSACTION_05]
-MB_SLAVE_ID = 2
-MB_TX_CODE = fnct_06_write_single_register
-FIRST_ELEMENT = 101          ; 0x0065
-HAL_TX_NAME = coolant_duty
-MAX_UPDATE_RATE = 2.0
-```
-
-Duty is 0.1 % per count, so 35 % must land in the register as 350. **Do not**
-put that math in G-code. Put it in HAL:
-
-```ini
-# ethercat_mill.ini
-[COOLANT]
-DUTY_SCALE = 10.0     ; 35 % → 350
-FREQ_SCALE = 1.0      ; 20000 Hz → 20000
-```
-
-[`coolant.hal`](../coolant.hal) already does:
+When the map lands, typical conversion from G-code (Hz + duty %) is:
 
 ```
-motion.analog-out-05  →  (M9 mux)  →  coolant-duty-scale  →  mb2hal.coolant_duty.00.float
+period_ms = 1000 / freq_Hz          # 10 Hz → 100 ms
+on_ms     = period_ms * duty / 100  # 1 % → 1 ms
 ```
 
-`FREQ_SCALE` / `DUTY_SCALE` / `PRESSURE_SCALE` are `scale.gain` on those
-components. `1.0` means “G-code units = register units.”
+Put that math in HAL, not in Fusion. Then net to
+`microject.<name>.00.float`.
 
-16-bit holding registers only hold 0–65535 (or −32768–32767 if the device
-treats them as signed). 20000 Hz fits. 200000 will wrap or clamp — if the
-device wants millihertz, scale in HAL and confirm the product still fits.
+Until then M101/M102 only poke analog E4/E5/E6.
 
 ---
 
-## 6. HAL: connect the pin, then maybe gate it
+## 6. HAL: coil enable
 
-mb2hal only **exports** pins. Nothing moves until a HAL `net` feeds them.
-
-VFD (from `custom.hal`):
+[`coolant.hal`](../coolant.hal):
 
 ```hal
-net spindle-speed-final mult2.4.out => mb2hal.freq_set.00.float
+loadusr -Wn microject mb2hal config=microject.mb2hal
+net coolant-flood iocontrol.0.coolant-flood => or2.2.in0
+net coolant-mist  iocontrol.0.coolant-mist  => or2.2.in1
+net coolant-enable or2.2.out => microject.coolant_run.00.bit
 ```
 
-Coolant (from `coolant.hal`):
-
-```hal
-net coolant-freq-cmd motion.analog-out-04 => coolant-freq-scale.in
-net coolant-freq-modbus coolant-freq-scale.out => mb2hal.coolant_freq.00.float
-```
-
-Coolant **enable** is deliberately not a Modbus register on this mill: stock
-**M8/M7** set `iocontrol.0.coolant-flood` / `coolant-mist`. HAL ORs those bits
-and, when false (M9 / abort / Flood off), muxes **duty and pressure to 0**
-before they hit mb2hal. Frequency stays latched so the next M8 does not have
-to rewrite Hz.
-
-If *your* box needs a separate “run” coil (like the VFD’s register 512), add
-another `fnct_05_write_single_coil` or `fnct_06` transaction and net
-`coolant-enable` into it. Copy the VFD `mux4` / control-word pattern in
-`custom.hal`, not the coolant duty mux.
+Stock **M8/M7** set those iocontrol bits. **M9** clears them. Probe Basic
+Flood/Mist buttons and the pendant stay in sync. Do not remap M7/M8/M9.
 
 ---
 
-## 7. G-code side (why M68 / M101 exist)
+## 7. Bring-up checklist
 
-`M68 E<n> Q<value>` is built-in LinuxCNC: “set analog output n to this float
-right now.” It is **one channel per line**.
-
-| `M68` | Pin | This mill |
-|-------|-----|-----------|
-| E0–E3 | `motion.analog-out-00` … `03` | Laser mailbox — do not steal |
-| E4 | `…-04` | Coolant Hz |
-| E5 | `…-05` | Coolant duty % |
-| E6 | `…-06` | Coolant psi |
-
-`M101` is a tiny remap that issues those M68s from `P` / `Q` / `R` so CAM and
-MDI can write one line. `M102` reads [`probe_basic/coolant_tools.ini`](../probe_basic/coolant_tools.ini)
-for the loaded tool and issues the same M68s. Neither talks Modbus.
-
-Details: [COOLANT.md](COOLANT.md).
-
----
-
-## 8. Bring-up checklist
-
-Do this in order. Skipping to “make chips with M8” hides whether the failure
-is RS-485, register number, scale, or G-code.
-
-1. **VFD still works.** `M3 S500` and `halcmd show pin mb2hal.freq_set` should
-   look like they did before you added slave 2. If the spindle dies, the new
-   transactions are starving or jamming the bus — lower coolant
-   `MAX_UPDATE_RATE`, check A/B, check that slave 2 is actually present or
-   disable those txs (below).
-2. **Pins exist.** After LinuxCNC starts:
+1. **VFD still works** on USB0 (`M3 S500`). If the spindle dies after adding
+   a dongle, ports swapped — udev.
+2. **Bench coil** with `mbpoll` (above) before LinuxCNC. Injector should tick
+   at ~10 Hz, 1 % (a faint click / tiny dribble).
+3. LinuxCNC up:
 
    ```bash
-   halcmd show pin mb2hal.coolant
+   halcmd show pin microject
+   # expect microject.coolant_run.00.bit
    ```
 
-   You want `coolant_freq.00.float`, `coolant_duty.00.float`,
-   `coolant_psi.00.float`. Missing pins → `TOTAL_TRANSACTIONS` / section names
-   / `HAL_TX_NAME` typo, or `coolant.hal` commented out while you still
-   expected the nets.
-3. **Poke the analog in MDI** (machine on, no need for flood yet):
+4. MDI `M8`. `halcmd getp microject.coolant_run.00.bit` → TRUE. `M9` → FALSE.
+5. Unplug USB1 with M8 on: within ~5 s the injector must stop (watchdog).
+6. Holding registers: only after Dan’s map. Then add `fnct_06` txs and HAL
+   period/on-time math.
 
-   ```
-   M101 P20000 Q10
-   ```
-
-   ```bash
-   halcmd getp motion.analog-out-04     # ~20000
-   halcmd getp motion.analog-out-05     # ~10
-   halcmd getp mb2hal.coolant_freq.00.float
-   halcmd getp mb2hal.coolant_duty.00.float   # still 0 until M8
-   ```
-
-   Duty mb2hal pin stays 0 until **M8** because of the enable mux. That is
-   success, not a bug.
-4. **Enable:** `M8`, then re-read `mb2hal.coolant_duty.00.float` (and the
-   scaled pin `coolant-duty-scale.out`). `M9` should drop the gated pins to 0
-   while `motion.analog-out-05` may still show 10.
-5. **Watch the device.** If HAL numbers are right and the box ignores them:
-   wrong `FIRST_ELEMENT`, wrong function (03 vs 06, holding vs input), wrong
-   slave ID, or units/scale. Bump `INIT_DEBUG` / per-transaction `DEBUG = 3`
-   and read the LinuxCNC terminal.
-
-### Disable coolant Modbus without deleting the feature
-
-Until slave 2 is on the wire, failed txs add latency and log noise.
-
-1. Comment `[TRANSACTION_04]` … `[TRANSACTION_06]` in `h100.mb2hal`.
-2. Set `TOTAL_TRANSACTIONS = 4`.
-3. Comment `HALFILE = coolant.hal` in `ethercat_mill.ini`.
-
-Leave M101/M102 remaps in place; they only poke analog pins.
+Disable Microject without deleting files: comment `HALFILE = coolant.hal`.
 
 ---
 
-## 9. Common failures
+## 8. Common failures
 
 | Symptom | Usual cause |
 |---------|-------------|
-| `mb2hal` pin missing | `TOTAL_TRANSACTIONS` ≠ number of `[TRANSACTION_xx]` sections; typo in `HAL_TX_NAME` |
-| HAL float correct, device silent | `FIRST_ELEMENT` still hex; slave ID clash with the VFD; A/B swapped |
-| Device reacts but value is 10× or 0.1× | Missing `FREQ_SCALE` / `DUTY_SCALE` |
-| Device reacts, then wraps to a tiny number | Register is 16-bit; scaled value > 65535 |
-| Spindle stutters after adding coolant txs | Coolant `MAX_UPDATE_RATE` too high, or slave 2 absent and timing out |
-| Duty never leaves 0 | Forgot `M8`; or flood/mist bits not on (`halcmd getp iocontrol.0.coolant-flood`) |
-| Laser diameter / length UI goes insane | You netted coolant onto E0–E3. Don’t. |
-| Two USB adapters swap `ttyUSB0` across reboots | udev rule, or better: one dongle, two slaves |
-| Second `loadusr mb2hal` on the same port | Don’t. Extra `[TRANSACTION]` in the existing file |
+| `microject` pin missing | `coolant.hal` not in `[HAL]`, or `loadusr -Wn` / `HAL_MODULE_NAME` mismatch |
+| Coil pin TRUE, no spray | `FIRST_ELEMENT` 0 vs 1; A/B swapped; 24 V missing; wrong tty |
+| Spray for 5 s then dies | Coil writes not cycling (`MAX_UPDATE_RATE`); extra failed txs blocking the UART |
+| VFD and injector swapped | Two USB adapters, no udev rule |
+| Garbage on the VFD after daisy-chain | Injector still 19200 8E1 on the 38400 8N1 bus |
+| Laser UI insane | Coolant analog on E0–E3. Don’t. |
 
 ---
 
-## 10. Function-code cheat sheet
+## 9. Function-code cheat sheet
 
-From the [mb2hal man page](https://linuxcnc.org/docs/html/man/man1/mb2hal.1.html).
-Use the name exactly.
-
-| `MB_TX_CODE` | Modbus | Typical use |
-|--------------|--------|-------------|
-| `fnct_06_write_single_register` | 06 | Setpoint (Hz, duty, RPM, pressure) |
-| `fnct_16_write_multiple_registers` | 16 | Several holding registers in one frame |
-| `fnct_03_read_holding_registers` | 03 | Read back a setpoint or status word |
-| `fnct_04_read_input_registers` | 04 | Read-only process value (this mill’s VFD fault) |
-| `fnct_05_write_single_coil` | 05 | Boolean enable |
-| `fnct_01_read_coils` / `fnct_02_read_discrete_inputs` | 01 / 02 | Boolean status |
-
-PWM coolant on this mill only needs **06 writes**. Add a **03/04 read** later
-if you want actual pressure or a fault code in the Logging tab
-([SIGNAL_LOGGING.md](SIGNAL_LOGGING.md)).
+| `MB_TX_CODE` | Use on this mill |
+|--------------|------------------|
+| `fnct_05_write_single_coil` | Microject run (coil 1) |
+| `fnct_06_write_single_register` | H100 freq/ctrl; Microject on-time/period later |
+| `fnct_04_read_input_registers` | H100 fault / freq fb |
+| `fnct_03_read_holding_registers` | Read-back setpoints (optional) |
 
 ---
 
-## 11. Worksheet (copy into a note)
+## 10. Worksheet
 
 ```
-Device: __________________
-Dongle: /dev/ttyUSB0   (or: ________)
-Baud / parity / stop: ______  (must match H100: 38400 8N1)
-Slave ID: ____  (must not be 1)
+Microject
+  tty: /dev/ttyUSB1
+  19200 8E1  slave 8
+  coil 1 enable:  mbpoll … -t 0 -r 1 1
+  mb2hal FIRST_ELEMENT for that coil: 0 (try 1 if dead)
 
-Freq  register: 0x____  = decimal ____   units: ________   HAL pin: mb2hal.coolant_freq.00.float
-Duty  register: 0x____  = decimal ____   units: ________   HAL pin: mb2hal.coolant_duty.00.float
-Press register: 0x____  = decimal ____   units: ________   HAL pin: mb2hal.coolant_psi.00.float
-
-FREQ_SCALE = ____     DUTY_SCALE = ____     PRESSURE_SCALE = ____
-Duty=0 stops spray?  yes / no   (if no: extra enable coil register ____)
+On-time holding register:  0x____ = ____   units: ms?
+Period  holding register:  0x____ = ____   units: ms?
+Pressure (if any):         0x____ = ____
 ```
-
-Then edit **only** `FIRST_ELEMENT`, `MB_SLAVE_ID`, `MB_TX_CODE` (if not 06),
-and `[COOLANT]*_SCALE`. Pin names and `coolant.hal` nets can stay.
 
 ---
 
 ## See also
 
-| Doc | When |
-|-----|------|
-| [COOLANT.md](COOLANT.md) | M101/M102, analog E4–E6, per-tool INI, RS-485 physical wiring |
-| [GETTING_STARTED.md](GETTING_STARTED.md) § Stage 4 | Where Modbus sits in the bring-up path |
-| [`h100.mb2hal`](../h100.mb2hal) | Live transaction list |
-| [`custom.hal`](../custom.hal) | VFD scale + loadusr |
-| [`coolant.hal`](../coolant.hal) | Coolant nets, M9 gate, scale |
-| [mb2hal(1)](https://linuxcnc.org/docs/html/man/man1/mb2hal.1.html) | Canonical pin names and codes |
+| Doc / file | When |
+|------------|------|
+| [COOLANT.md](COOLANT.md) | M8 coil, analog E4–E6, plumbing |
+| [`microject.mb2hal`](../microject.mb2hal) | Live injector transactions |
+| [`h100.mb2hal`](../h100.mb2hal) | VFD transactions |
+| [`coolant.hal`](../coolant.hal) | flood/mist → coil |
+| [mb2hal.html](https://linuxcnc.org/docs/html/drivers/mb2hal.html) | Pin names and codes |

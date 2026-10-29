@@ -80,7 +80,8 @@ After switching git branches, delete leftover tab folders that lack a matching
 | `ethercat_mill.hal` | Joints, CiA 402, limits, probe mux |
 | `ethercat-conf.xml` | EtherCAT slaves + fault-window SDOs |
 | `custom.hal` | VFD Modbus, at-speed delay, faults |
-| `coolant.hal` | PWM coolant analog → mb2hal |
+| `coolant.hal` | Flood/mist → Microject coil 1 |
+| `microject.mb2hal` | Injector 19200 8E1 slave 8 |
 | `probe_basic/` | UI, macros, tool table, custom tabs |
 | `post-processor/linuxcnc-djr.cps` | Fusion post |
 | `docs/reference/` | Vendor PDFs / worksheets (H100, Sigma II calculator) |

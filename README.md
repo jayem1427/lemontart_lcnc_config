@@ -20,7 +20,7 @@ If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page 
 | UI | [Probe Basic](https://github.com/kcjengr/probe_basic) (QtPyVCP) |
 | Pendant | XHC WHB04B-6 with jog smoothing |
 | Spindle | H100 VFD over Modbus (`mb2hal`) |
-| Coolant | PWM freq/duty/pressure over the same RS-485 dongle (`M101`/`M102`, stock M8/M9) |
+| Coolant | Microject injector: second UART 19200 8E1 slave 8, coil 1 (`M8`/`M9`) |
 | Tool length | Contact toolsetter via **M600** (TooTall18T-style flow) |
 | Tool diameter | Kexin DS-5V-M **laser** diameter / length tab |
 | Metrics | Signal logging + **Servo Tuning** (semi-auto, one-click, inertia WIP) |
@@ -72,8 +72,9 @@ The staged path (sim → EtherCAT → Probe Basic → CAM) is spelled out in
 | `probe_beep.hal` | Audible beep on probe/toolsetter trip or laser beam-block (`beep.mp3`) |
 | `ethercat-conf.xml` | EtherCAT slaves + drive SDOs |
 | `custom.hal` | VFD Modbus, at-speed delay, faults |
-| `coolant.hal` | PWM coolant analog outs → mb2hal |
-| `h100.mb2hal` | VFD + coolant register map |
+| `coolant.hal` | Flood/mist → Microject coil 1 |
+| `h100.mb2hal` | H100 VFD register map |
+| `microject.mb2hal` | Injector 19200 8E1 slave 8, coil 1 |
 | `xhc-whb04b-6.hal` | Pendant |
 | `probe_basic/` | UI, macros, tool table, custom tabs + tool-change dialog |
 | `post-processor/linuxcnc-djr.cps` | Fusion post (M600, XYZA, G93) |

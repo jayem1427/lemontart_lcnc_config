@@ -1,0 +1,37 @@
+# Dan Mills Microject injector driver (separate UART from the H100).
+# Defaults from Microject testers: 19200 8E1, slave 8. DIP switches can change
+# baud/parity; if you match the H100 (38400 8N1) you can merge onto ttyUSB0.
+#
+# Firmware: 1 ms on / 100 ms period (1 % at 10 Hz) until holding registers are
+# written. Coil 1 ON starts spray. Coil drops 5 s after the last valid Modbus
+# message (crash watchdog). Keep MAX_UPDATE_RATE >= ~1 Hz.
+#
+# Bench check (board on USB1, LinuxCNC not required):
+#   mbpoll /dev/ttyUSB1 -v -m rtu -a 8 -b 19200 -P even -t 0 -r 1 1
+#
+# Holding-register addresses for on-time / period are NOT in the first dump.
+# Do not add fnct_06 writes until those numbers are known — failed txs delay
+# the coil write and can trip the 5 s watchdog.
+
+[MB2HAL_INIT]
+VERSION = 1.1
+TOTAL_TRANSACTIONS = 1
+HAL_MODULE_NAME = microject
+INIT_DEBUG = 1
+
+[TRANSACTION_00]
+LINK_TYPE = serial
+SERIAL_PORT = /dev/ttyUSB1
+SERIAL_BAUD = 19200
+SERIAL_BITS = 8
+SERIAL_PARITY = even
+SERIAL_STOP = 1
+SERIAL_DELAY_MS = 20
+MB_SLAVE_ID = 8
+MB_TX_CODE = fnct_05_write_single_coil
+# Dan "coil #1" = mbpoll -r1. mb2hal FIRST_ELEMENT is the 0-based PDU address.
+# If the injector never fires, try FIRST_ELEMENT = 1.
+FIRST_ELEMENT = 0
+NELEMENTS = 1
+HAL_TX_NAME = coolant_run
+MAX_UPDATE_RATE = 2.0

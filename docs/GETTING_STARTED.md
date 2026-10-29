@@ -95,12 +95,11 @@ Homing and limit wiring live in [`ethercat_mill.hal`](../ethercat_mill.hal), not
 H100 manual: [`reference/h100 manual.pdf`](reference/h100%20manual.pdf) — register `0x0201` (freq set), `0x000A` (current fault).
 
 Modbus HAL: [mb2hal documentation](https://linuxcnc.org/docs/html/man/man1/mb2hal.1.html)
-· this mill’s walkthrough: **[MB2HAL.md](MB2HAL.md)** (VFD as the worked
-example, then PWM coolant as a second slave).
+· this mill’s walkthrough: **[MB2HAL.md](MB2HAL.md)** (VFD on USB0, Microject on USB1).
 
-PWM coolant (same RS-485 dongle, slave 2): [COOLANT.md](COOLANT.md). Register
-addresses in `h100.mb2hal` TRANSACTION_04–06 are placeholders until the box is
-on the bench.
+Microject injector: **second** USB–RS-485 dongle, 19200 8E1 slave 8, coil 1 —
+[COOLANT.md](COOLANT.md) · [MB2HAL.md](MB2HAL.md). Do not daisy-chain on the
+H100 at firmware defaults (parity/baud mismatch).
 
 ### Stage 5 — Pendant (XHC WHB04B-6)
 
@@ -148,7 +147,7 @@ ethercat_mill.ini
 │   ├── ethercat_mill.hal      → joints, limits, probe mux, estop
 │   ├── xhc-whb04b-6.hal       → pendant
 │   ├── custom.hal             → VFD Modbus, at-speed, faults
-│   └── coolant.hal            → PWM coolant analog → mb2hal
+│   └── coolant.hal            → Microject coil 1 (second UART)
 ├── POSTGUI probe_basic/probe_basic_postgui.hal
 ├── probe_basic/custom_config.yml
 ├── probe_basic/subroutines/   → probing, M600, tool change

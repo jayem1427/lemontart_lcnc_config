@@ -35,9 +35,8 @@
     {"id": "spindle_freq_fb", "pin": "mb2hal.freq_fb.00.float", "label": "VFD freq fb", "units": "0.1Hz", "color": "#1abc9c", "group": "spindle"},
     {"id": "coolant_freq_cmd", "pin": "motion.analog-out-04", "label": "Coolant Hz", "units": "Hz", "color": "#00bcd4", "group": "coolant"},
     {"id": "coolant_duty_cmd", "pin": "motion.analog-out-05", "label": "Coolant duty cmd", "units": "%", "color": "#0097a7", "group": "coolant"},
-    {"id": "coolant_duty_out", "pin": "coolant-duty-scale.out", "label": "Coolant duty gated", "units": "%", "color": "#00838f", "group": "coolant"},
     {"id": "coolant_psi_cmd", "pin": "motion.analog-out-06", "label": "Coolant psi cmd", "units": "psi", "color": "#26c6da", "group": "coolant"},
-    {"id": "coolant_psi_out", "pin": "coolant-psi-scale.out", "label": "Coolant psi gated", "units": "psi", "color": "#00acc1", "group": "coolant"}
+    {"id": "coolant_run", "pin": "microject.coolant_run.00.bit", "label": "Microject coil 1", "units": "0/1", "color": "#00838f", "group": "coolant"}
   ],
   "plot_groups": [
     {
@@ -104,7 +103,7 @@
       "id": "coolant",
       "title": "PWM coolant (setpoint vs gated Modbus)",
       "y_mode": "auto",
-      "channels": ["coolant_freq_cmd", "coolant_duty_cmd", "coolant_duty_out", "coolant_psi_cmd", "coolant_psi_out"]
+      "channels": ["coolant_freq_cmd", "coolant_duty_cmd", "coolant_psi_cmd", "coolant_run"]
     }
   ]
 }

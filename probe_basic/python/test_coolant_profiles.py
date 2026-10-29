@@ -23,10 +23,10 @@ SHIPPED = os.path.join(HERE, "..", "coolant_tools.ini")
 class CoolantProfileTests(unittest.TestCase):
     def test_shipped_ini_parses(self):
         default, tools = load_profiles(SHIPPED)
-        self.assertEqual(default.freq, 20000)
-        self.assertEqual(default.duty, 30)
+        self.assertEqual(default.freq, 10)
+        self.assertEqual(default.duty, 1)
         self.assertIn(3, tools)
-        self.assertEqual(tools[3].duty, 35)
+        self.assertEqual(tools[3].duty, 2)
         self.assertEqual(tools[99].freq, 0)
         self.assertEqual(tools[99].duty, 0)
 
@@ -34,7 +34,7 @@ class CoolantProfileTests(unittest.TestCase):
         default, tools = load_profiles(SHIPPED)
         self.assertEqual(tools[9].freq, default.freq)
         self.assertEqual(tools[9].pressure, default.pressure)
-        self.assertEqual(tools[9].duty, 25)
+        self.assertEqual(tools[9].duty, 1)
 
     def test_unknown_tool_uses_default(self):
         default, tools = load_profiles(SHIPPED)
