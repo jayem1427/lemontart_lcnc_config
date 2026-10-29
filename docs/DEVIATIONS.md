@@ -195,8 +195,8 @@ Analog setpoints live on **E4/E5/E6** so they never share the laser mailbox
 Keep `#3000 = 0`. Do **not** remap M7/M8/M9. Per-tool Hz/duty/psi is
 `probe_basic/coolant_tools.ini`, applied by **M102** after tool load. Fusion
 still posts M8/M9 (and M102 immediately before coolant-on). Microject is a
-**second UART** (19200 8E1 slave 8, coil 1); H100 stays 38400 8N1. Holding
-registers for pulse timing are not wired yet. Full path: [COOLANT.md](COOLANT.md).
+**second UART** (19200 8E1 slave 8); port 1 is coil 1 + H1 pulse + H2 period.
+H100 stays 38400 8N1. Full path: [COOLANT.md](COOLANT.md).
 
 ### `REMAP=M600` only — not M6
 

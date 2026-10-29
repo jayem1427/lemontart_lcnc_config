@@ -36,7 +36,9 @@
     {"id": "coolant_freq_cmd", "pin": "motion.analog-out-04", "label": "Coolant Hz", "units": "Hz", "color": "#00bcd4", "group": "coolant"},
     {"id": "coolant_duty_cmd", "pin": "motion.analog-out-05", "label": "Coolant duty cmd", "units": "%", "color": "#0097a7", "group": "coolant"},
     {"id": "coolant_psi_cmd", "pin": "motion.analog-out-06", "label": "Coolant psi cmd", "units": "psi", "color": "#26c6da", "group": "coolant"},
-    {"id": "coolant_run", "pin": "microject.coolant_run.00.bit", "label": "Microject coil 1", "units": "0/1", "color": "#00838f", "group": "coolant"}
+    {"id": "coolant_run", "pin": "microject.coolant_run.00.bit", "label": "Microject coil 1", "units": "0/1", "color": "#00838f", "group": "coolant"},
+    {"id": "coolant_pulse", "pin": "microject.coolant_pulse.00.float", "label": "Microject pulse", "units": "ms", "color": "#006064", "group": "coolant"},
+    {"id": "coolant_period", "pin": "microject.coolant_period.00.float", "label": "Microject period", "units": "ms", "color": "#4dd0e1", "group": "coolant"}
   ],
   "plot_groups": [
     {
@@ -103,7 +105,7 @@
       "id": "coolant",
       "title": "PWM coolant (setpoint vs gated Modbus)",
       "y_mode": "auto",
-      "channels": ["coolant_freq_cmd", "coolant_duty_cmd", "coolant_psi_cmd", "coolant_run"]
+      "channels": ["coolant_freq_cmd", "coolant_duty_cmd", "coolant_run", "coolant_pulse", "coolant_period"]
     }
   ]
 }

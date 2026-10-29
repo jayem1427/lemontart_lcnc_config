@@ -1,6 +1,6 @@
 (PWM coolant setpoints. P=Hz, Q=duty percent, R=pressure psi.)
 (Writes M68 E4/E5/E6. Laser owns E0-E3; do not reuse those channels.)
-(Does not enable spray — that is stock M7/M8. M9 gates duty/pressure to 0 in HAL.)
+(Does not enable spray — that is stock M7/M8. M9 zeros pulse length in HAL.)
 
 o<m101> sub
 

@@ -72,9 +72,9 @@ The staged path (sim → EtherCAT → Probe Basic → CAM) is spelled out in
 | `probe_beep.hal` | Audible beep on probe/toolsetter trip or laser beam-block (`beep.mp3`) |
 | `ethercat-conf.xml` | EtherCAT slaves + drive SDOs |
 | `custom.hal` | VFD Modbus, at-speed delay, faults |
-| `coolant.hal` | Flood/mist → Microject coil 1 |
+| `coolant.hal` | Hz/duty → pulse/period ms; flood/mist → coil 1 |
 | `h100.mb2hal` | H100 VFD register map |
-| `microject.mb2hal` | Injector 19200 8E1 slave 8, coil 1 |
+| `microject.mb2hal` | Injector 19200 8E1 slave 8, coil 1 + H1/H2 |
 | `xhc-whb04b-6.hal` | Pendant |
 | `probe_basic/` | UI, macros, tool table, custom tabs + tool-change dialog |
 | `post-processor/linuxcnc-djr.cps` | Fusion post (M600, XYZA, G93) |

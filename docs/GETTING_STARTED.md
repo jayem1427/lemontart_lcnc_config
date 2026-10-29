@@ -97,9 +97,10 @@ H100 manual: [`reference/h100 manual.pdf`](reference/h100%20manual.pdf) — regi
 Modbus HAL: [mb2hal documentation](https://linuxcnc.org/docs/html/man/man1/mb2hal.1.html)
 · this mill’s walkthrough: **[MB2HAL.md](MB2HAL.md)** (VFD on USB0, Microject on USB1).
 
-Microject injector: **second** USB–RS-485 dongle, 19200 8E1 slave 8, coil 1 —
-[COOLANT.md](COOLANT.md) · [MB2HAL.md](MB2HAL.md). Do not daisy-chain on the
-H100 at firmware defaults (parity/baud mismatch).
+Microject injector: **second** USB–RS-485 dongle, 19200 8E1 slave 8, coil 1 +
+H1 pulse / H2 period — [COOLANT.md](COOLANT.md) · [MB2HAL.md](MB2HAL.md).
+Daisy-chain A–A B–B is electrically fine **after** the injector DIP matches
+the H100 (38400 8N1). Factory 19200 8E1 will wreck the VFD bus.
 
 ### Stage 5 — Pendant (XHC WHB04B-6)
 

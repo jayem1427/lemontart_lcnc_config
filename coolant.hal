@@ -1,13 +1,51 @@
-# Microject injector: stock M7/M8 → coil 1. M9 / abort / Flood-off → coil 0.
-# Analog E4/E5/E6 still hold Hz / duty / psi for M101/M102 (laser uses E0-E3).
-# Holding-register writes are not enabled yet — firmware defaults (1 ms on /
-# 100 ms period) apply as soon as coil 1 is true. See docs/COOLANT.md.
+# Microject: M7/M8 → coil 1, analog E4/E5 → pulse length / period (ms).
+# Laser uses analog E0-E3. See docs/COOLANT.md.
+#
+#   period_ms = 1000 / freq_Hz
+#   pulse_ms  = period_ms * duty_percent / 100
+# Firmware default (if these writes never land): 1 ms / 100 ms.
 
 loadusr -Wn microject mb2hal config=microject.mb2hal
 
-addf or2.2 servo-thread
+# Extra count= loads append instances (mill already has limit1.0-3, div2.0-7, mult2.0-15).
+loadrt mux2 names=coolant-pulse-gate
+loadrt limit1 count=1
+loadrt div2 count=1
+loadrt mult2 count=2
 
-# Enable = flood or mist so either Probe Basic button / M7 / M8 starts spray.
+addf or2.2 servo-thread
+addf limit1.4 servo-thread
+addf div2.8 servo-thread
+addf mult2.16 servo-thread
+addf mult2.17 servo-thread
+addf coolant-pulse-gate servo-thread
+addf microject-pulse-scale servo-thread
+addf microject-period-scale servo-thread
+
+# Pulse rate 1-50 Hz (automotive injector, not kHz PWM).
+setp limit1.4.min 1
+setp limit1.4.max 50
+net coolant-freq-cmd motion.analog-out-04 => limit1.4.in
+
+# period_ms = 1000 / Hz
+setp div2.8.in0 1000
+net coolant-freq-clamped limit1.4.out => div2.8.in1
+setp microject-period-scale.gain [COOLANT]PERIOD_SCALE
+net coolant-period-ms div2.8.out => microject-period-scale.in
+net coolant-period-modbus microject-period-scale.out => microject.coolant_period.00.float
+
+# pulse_ms = period_ms * (duty% / 100); M9 forces pulse to 0
+setp mult2.16.in1 0.01
+net coolant-duty-cmd motion.analog-out-05 => mult2.16.in0
+net coolant-duty-frac mult2.16.out => mult2.17.in1
+net coolant-period-ms => mult2.17.in0
+setp coolant-pulse-gate.in0 0
+net coolant-pulse-ms mult2.17.out => coolant-pulse-gate.in1
+setp microject-pulse-scale.gain [COOLANT]PULSE_SCALE
+net coolant-pulse-gated coolant-pulse-gate.out => microject-pulse-scale.in
+net coolant-pulse-modbus microject-pulse-scale.out => microject.coolant_pulse.00.float
+
+# Enable = flood OR mist → coil 1 (also gates pulse length)
 net coolant-flood iocontrol.0.coolant-flood => or2.2.in0
 net coolant-mist  iocontrol.0.coolant-mist  => or2.2.in1
-net coolant-enable or2.2.out => microject.coolant_run.00.bit
+net coolant-enable or2.2.out => microject.coolant_run.00.bit coolant-pulse-gate.sel

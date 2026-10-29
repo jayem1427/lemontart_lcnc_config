@@ -52,9 +52,15 @@ S12000 M3
   → function 06, slave 1, register 513
 ```
 
-**Microject (this mill, coil only so far)**
+**Microject (this mill, port 1)**
 
 ```
+M101 P10 Q1
+  → analog E4 = 10 Hz, E5 = 1 %
+  → coolant.hal: period_ms = 1000/Hz, pulse_ms = period * duty/100
+  → microject.coolant_period.00.float  → fnct_06 Hreg 2 = 100
+  → microject.coolant_pulse.00.float   → fnct_06 Hreg 1 = 1
+
 M8
   → iocontrol.0.coolant-flood
   → or2 with mist
@@ -62,8 +68,7 @@ M8
   → function 05, slave 8, coil 1 (PDU address 0)
 ```
 
-Firmware then pulses the injector at **1 ms on / 100 ms period** until you
-write holding registers (addresses still unknown — do not invent them).
+Firmware default if the Hreg writes never land: **1 ms on / 100 ms period**.
 
 ---
 
@@ -74,8 +79,8 @@ write holding registers (addresses still unknown — do not invent them).
 | Electrical | 2-wire RS-485 | 2-wire RS-485 + **24 V** supply |
 | Baud / bits / parity / stop | 38400 8**N**1 | **19200 8E1** unless DIP switches say otherwise |
 | Slave ID | 1 | **8** |
-| Enable | holding register 512 (control word) | **coil #1** (`fnct_05`) |
-| Pulse recipe | n/a | defaults 1 ms / 100 ms; override via **holding registers** (numbers TBD) |
+| Enable | holding register 512 (control word) | **coil N** for port N (`fnct_05`; port 1 → coil 1) |
+| Pulse recipe | n/a | defaults 1 ms / 100 ms; **H 2N−1** pulse, **H 2N** period (port 1 → H1 / H2) |
 | Watchdog | VFD-specific | coil OFF **5 s** after last **valid** message |
 | Bench tool | — | `mbpoll`, `modbuslens` |
 
@@ -90,10 +95,16 @@ uses `FIRST_ELEMENT = 0`. If the injector never fires, try `1`.
 
 ## 3. Why this mill uses two dongles
 
-RS-485 is a bus: **one master**, many slaves, **same baud/parity**.
+RS-485 is a bus: **one master**, many slaves, **same baud/parity**. The master
+picks a device by **slave ID** in each request (H100 = 1, Microject = 8), not
+by which wire pair it is on.
 
-Microject defaults (**19200 even**) do **not** match the H100 (**38400 none**).
-They cannot share `/dev/ttyUSB0` unless you change the injector DIP switches.
+You *can* daisy-chain A–A, B–B, GND–GND on the existing VFD dongle — that is
+the normal RS-485 topology — **but only after baud and parity match**.
+Microject factory defaults (**19200 even**) do **not** match the H100
+(**38400 none**). Dan’s testers chat: DIPs were not changed before ship.
+Until you flip the injector to 38400 8N1, a series splice will just corrupt
+the VFD bus.
 
 ```
 PC
@@ -106,12 +117,25 @@ That is two buses, two `loadusr mb2hal` processes, two `HAL_MODULE_NAME`s
 
 **Do not** run two mb2hal instances on the **same** tty.
 
-If you later set the injector to 38400 8N1, daisy-chain A/A B/B GND/GND on the
-VFD dongle and move the Microject transactions into `h100.mb2hal` with
-`MB_SLAVE_ID = 8`. Until then, keep them apart.
+If you later set the injector to 38400 8N1, daisy-chain on the VFD dongle and
+move the Microject transactions into `h100.mb2hal` with `MB_SLAVE_ID = 8`.
+Until then, keep them apart.
 
 Physical RS-485: daisy-chain, not a star, not a ring. 120 Ω at the far end.
 Swap A/B on one device if it never answers.
+
+### Bench tools (not a LinuxCNC GUI)
+
+LinuxCNC has no Modbus scanner. Prove the wire first, then watch HAL pins:
+
+| Where | Tool |
+|-------|------|
+| Linux, outside LinuxCNC | `mbpoll` (writes), `modbuslens` (sniff / extra diagnostics) |
+| LinuxCNC running | `halcmd show pin microject` / `halcmd getp …` (this mill’s bring-up below) |
+| Windows laptop | QModMaster, OpenModScan, Modbus Tester (free; Dan noted commercial ones are pricey) |
+
+`mbpoll` examples for port 1 are in [COOLANT.md](COOLANT.md) and in the header
+of [`microject.mb2hal`](../microject.mb2hal).
 
 ---
 
@@ -183,26 +207,30 @@ VFD’s 38400 none onto the injector if you merge files carelessly.
 
 ---
 
-## 5. Holding registers (not wired yet)
+## 5. Holding registers (pulse + period)
 
-Dan: override the 1 ms / 100 ms default by **writing holding registers**.
-Those addresses were not in the first testers dump.
-
-**Do not** add `fnct_06` placeholders. A timed-out write costs
-`MB_RESPONSE_TIMEOUT_MS` (default 500 ms) and can delay the coil transaction
-past 5 s → injector watchdog trips even though M8 is on.
-
-When the map lands, typical conversion from G-code (Hz + duty %) is:
+Dan (port 4 example): pulse length on **Hregister 7**, period on **Hregister 8**.
+That is **two registers per injector port**:
 
 ```
-period_ms = 1000 / freq_Hz          # 10 Hz → 100 ms
-on_ms     = period_ms * duty / 100  # 1 % → 1 ms
+port N:  coil N,  pulse Hreg 2N-1,  period Hreg 2N
 ```
 
-Put that math in HAL, not in Fusion. Then net to
-`microject.<name>.00.float`.
+Port 1 (this config): coil 1, **H1** pulse, **H2** period. mb2hal 0-based:
+`FIRST_ELEMENT` 0 / 0 / 1. Richie landed on port 4 after swapping wires — same
+Modbus, just coil 4 / H7 / H8; pot/switch mode is channels 1–2 only.
 
-Until then M101/M102 only poke analog E4/E5/E6.
+G-code stays Hz + duty %; HAL converts:
+
+```
+period_ms = 1000 / freq_Hz          # 10 Hz → 100
+pulse_ms  = period_ms * duty / 100  # 1 % → 1
+```
+
+Assume milliseconds until a dump says otherwise. If the regs are 0.1 ms,
+`[COOLANT]PULSE_SCALE` / `PERIOD_SCALE` = 10.
+
+Reads (opto inputs, analog) work according to Dan; not mapped in HAL yet.
 
 ---
 
@@ -237,8 +265,10 @@ Flood/Mist buttons and the pendant stay in sync. Do not remap M7/M8/M9.
 
 4. MDI `M8`. `halcmd getp microject.coolant_run.00.bit` → TRUE. `M9` → FALSE.
 5. Unplug USB1 with M8 on: within ~5 s the injector must stop (watchdog).
-6. Holding registers: only after Dan’s map. Then add `fnct_06` txs and HAL
-   period/on-time math.
+6. `M101 P10 Q1` then `M8`:
+   `halcmd getp microject.coolant_period.00.float` → ~100
+   `halcmd getp microject.coolant_pulse.00.float` → ~1
+   `M9` zeros the pulse float even if E5 is still 1.
 
 Disable Microject without deleting files: comment `HALFILE = coolant.hal`.
 
@@ -262,7 +292,7 @@ Disable Microject without deleting files: comment `HALFILE = coolant.hal`.
 | `MB_TX_CODE` | Use on this mill |
 |--------------|------------------|
 | `fnct_05_write_single_coil` | Microject run (coil 1) |
-| `fnct_06_write_single_register` | H100 freq/ctrl; Microject on-time/period later |
+| `fnct_06_write_single_register` | H100 freq/ctrl; Microject pulse (H1) and period (H2) |
 | `fnct_04_read_input_registers` | H100 fault / freq fb |
 | `fnct_03_read_holding_registers` | Read-back setpoints (optional) |
 
@@ -277,9 +307,9 @@ Microject
   coil 1 enable:  mbpoll … -t 0 -r 1 1
   mb2hal FIRST_ELEMENT for that coil: 0 (try 1 if dead)
 
-On-time holding register:  0x____ = ____   units: ms?
-Period  holding register:  0x____ = ____   units: ms?
-Pressure (if any):         0x____ = ____
+Port 1 (default): coil 1, pulse H1, period H2  (mb2hal 0 / 0 / 1)
+Port 4 (Richie):  coil 4, pulse H7, period H8  (mb2hal 3 / 6 / 7)
+Units assumed ms; SCALE if 0.1 ms.
 ```
 
 ---
