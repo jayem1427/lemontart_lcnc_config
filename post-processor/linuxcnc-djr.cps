@@ -55,6 +55,12 @@ groupDefinitions = {
     collapsed: false,
     order: 30
   },
+  coolant: {
+    title: "Coolant",
+    description: "PWM coolant M102 (mill-side per-tool recipe)",
+    collapsed: true,
+    order: 35
+  },
   sequenceNumbers: {
     title: "Sequence numbers",
     description: "Optional N-word block numbering",
@@ -106,6 +112,14 @@ properties = {
       {id: "T_ONLY", title: "T only — no M-code"}
     ],
     value: "M600",
+    scope: "post"
+  },
+  applyToolCoolant: {
+    title: "Apply mill PWM coolant (M102) before M7/M8",
+    description: "When coolant turns on, emit M102 first so LinuxCNC loads Hz / duty / pressure for the current tool from probe_basic/coolant_tools.ini. Numbers stay on the mill; Fusion still only chooses flood/mist/off (M8/M7/M9). Disable if this post is used on a machine without the M102 remap.",
+    group: "coolant",
+    type: "boolean",
+    value: true,
     scope: "post"
   },
   fourthAxisAround: {
@@ -1779,6 +1793,9 @@ function getCoolantCodes(coolant) {
   }
 
   if (m) {
+    if (coolant != COOLANT_OFF && getProperty("applyToolCoolant")) {
+      multipleCoolantBlocks.push("M102");
+    }
     if (Array.isArray(m)) {
       for (var i in m) {
         multipleCoolantBlocks.push(mFormat.format(m[i]));

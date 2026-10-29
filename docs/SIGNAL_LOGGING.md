@@ -247,6 +247,7 @@ Optional `scale` (default `1.0`) multiplies the raw pin value if you need a unit
 | A6 EtherCAT axes | `tune-drive-ferr.*`, `tune-torque.*`, `tune-velocity.*`, `joint.*.pos-fb` | `ethercat-conf.xml` PDOs + `custom.hal` `tune-*` chain |
 | LinuxCNC joints | `joint.*.f-error` | Always present (CSV only; tab does not plot host FERR) |
 | H100 VFD (mb2hal) | `spindle_*` RPM/amps/at-speed/fault/freq | `h100.mb2hal` + spindle nets in `custom.hal` |
+| PWM coolant | analog E4–E6 + `microject.coolant_{run,pulse,period}` | `coolant.hal` + `microject.mb2hal` |
 
 Default sample rate in JSON is **100 Hz**; the UI default/preferred for interactive use is **200 Hz**.
 

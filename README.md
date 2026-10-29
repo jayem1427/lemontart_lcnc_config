@@ -20,6 +20,7 @@ If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page 
 | UI | [Probe Basic](https://github.com/kcjengr/probe_basic) (QtPyVCP) |
 | Pendant | XHC WHB04B-6 with jog smoothing |
 | Spindle | H100 VFD over Modbus (`mb2hal`) |
+| Coolant | Microject injector: second UART 19200 8E1 slave 8, coil 1 (`M8`/`M9`) |
 | Tool length | Contact toolsetter via **M600** (TooTall18T-style flow) |
 | Tool diameter | Kexin DS-5V-M **laser** diameter / length tab |
 | Metrics | Signal logging + **Servo Tuning** (semi-auto, one-click, inertia WIP) |
@@ -34,6 +35,7 @@ If you are brand new to LinuxCNC, I'd recommend giving the GETTING STARTED page 
 | Understand “why doesn’t this behave like stock?” | **[DEVIATIONS.md](docs/DEVIATIONS.md)** |
 | Change tools and probe length (contact setter) | **[TOOLSETTER.md](docs/TOOLSETTER.md)** |
 | Measure diameter with the laser | **[LASER_TOOL_SETTER.md](docs/LASER_TOOL_SETTER.md)** |
+| PWM coolant (Modbus) | **[COOLANT.md](docs/COOLANT.md)** · first-time mb2hal: **[MB2HAL.md](docs/MB2HAL.md)** |
 | Copy tool-change onto another mill | **[INSTALL_TOOL_CHANGE.md](docs/INSTALL_TOOL_CHANGE.md)** |
 | Tweak Probe Basic UI / SET Z / abort dialog | **[PROBE_BASIC_UI.md](docs/PROBE_BASIC_UI.md)** |
 | Example tuning / M600 test G-code | **[TUNING_PROGRAMS.md](docs/TUNING_PROGRAMS.md)** |
@@ -70,7 +72,9 @@ The staged path (sim → EtherCAT → Probe Basic → CAM) is spelled out in
 | `probe_beep.hal` | Audible beep on probe/toolsetter trip or laser beam-block (`beep.mp3`) |
 | `ethercat-conf.xml` | EtherCAT slaves + drive SDOs |
 | `custom.hal` | VFD Modbus, at-speed delay, faults |
-| `h100.mb2hal` | VFD register map |
+| `coolant.hal` | Hz/duty → pulse/period ms; flood/mist → coil 1 |
+| `h100.mb2hal` | H100 VFD register map |
+| `microject.mb2hal` | Injector 19200 8E1 slave 8, coil 1 + H1/H2 |
 | `xhc-whb04b-6.hal` | Pendant |
 | `probe_basic/` | UI, macros, tool table, custom tabs + tool-change dialog |
 | `post-processor/linuxcnc-djr.cps` | Fusion post (M600, XYZA, G93) |

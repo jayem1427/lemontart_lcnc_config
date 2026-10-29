@@ -54,6 +54,7 @@ SUBROUTINE_PATH = .:probe_basic/subroutines
 USER_M_PATH = probe_basic/subroutines
 REMAP=M600 modalgroup=6 ngc=m600
 # Do NOT remap M6 — keep stock M6 for “OK only” / known lengths
+# PWM coolant (optional): REMAP=M101 / M102 — see COOLANT.md
 
 [EMCIO]
 TOOL_CHANGE_AT_G30 = 0

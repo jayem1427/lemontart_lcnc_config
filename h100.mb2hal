@@ -1,5 +1,7 @@
 [MB2HAL_INIT]
 VERSION = 1.1
+# H100 VFD only (slave 1, 38400 8N1). Microject injector is a second UART
+# (19200 8E1, slave 8) in microject.mb2hal — serial settings do not match.
 TOTAL_TRANSACTIONS = 4
 HAL_MODULE_NAME = mb2hal
 INIT_DEBUG = 1

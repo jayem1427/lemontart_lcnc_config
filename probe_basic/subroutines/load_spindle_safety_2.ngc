@@ -51,6 +51,7 @@ o130 if [#11 EQ 0]
 o130 endif
 
 o<program_coolant> call
+M102 (PWM coolant recipe for loaded tool; nozzle aimer above is stock PB)
 
 o<load_spindle_safety_2> endsub
 

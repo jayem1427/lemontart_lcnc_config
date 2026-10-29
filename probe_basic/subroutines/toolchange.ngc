@@ -131,6 +131,7 @@ o200 if [1 EQ 1]
 o200 endif
 
 o<program_coolant> call
+M102 (PWM coolant recipe for loaded tool; nozzle aimer above is stock PB)
 
 (PRINT, o<toolchange> endsub)
 o<toolchange> endsub [1]

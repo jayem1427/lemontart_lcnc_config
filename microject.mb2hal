@@ -1,0 +1,54 @@
+# Dan Mills Microject injector (separate UART from the H100).
+# 19200 8E1, slave 8 unless DIP switches were changed.
+#
+# Channel map (1-based, as Dan / mbpoll -r):
+#   port  coil  pulse Hreg  period Hreg
+#     1     1       1           2     ← this file (injector on port 1)
+#     2     2       3           4
+#     3     3       5           6
+#     4     4       7           8     ← Richie's swapped wiring
+# Channels 1-2 also have local pot/switch; Modbus works on all.
+# mb2hal FIRST_ELEMENT is 0-based, so coil 1 → 0, Hreg 1 → 0, Hreg 2 → 1.
+#
+# Firmware default if you never write Hregs: 1 ms pulse / 100 ms period.
+# Coil falls 5 s after the last valid Modbus message — keep update rate >= 1 Hz.
+#
+# Bench (port 1):
+#   mbpoll /dev/ttyUSB1 -v -m rtu -a 8 -b 19200 -P even -t 0 -r 1 1
+#   mbpoll /dev/ttyUSB1 -v -m rtu -a 8 -b 19200 -P even -t 4 -r 1 1
+#   mbpoll /dev/ttyUSB1 -v -m rtu -a 8 -b 19200 -P even -t 4 -r 2 100
+
+[MB2HAL_INIT]
+VERSION = 1.1
+TOTAL_TRANSACTIONS = 3
+HAL_MODULE_NAME = microject
+INIT_DEBUG = 1
+
+[TRANSACTION_00]
+LINK_TYPE = serial
+SERIAL_PORT = /dev/ttyUSB1
+SERIAL_BAUD = 19200
+SERIAL_BITS = 8
+SERIAL_PARITY = even
+SERIAL_STOP = 1
+SERIAL_DELAY_MS = 20
+MB_SLAVE_ID = 8
+MB_TX_CODE = fnct_05_write_single_coil
+FIRST_ELEMENT = 0
+NELEMENTS = 1
+HAL_TX_NAME = coolant_run
+MAX_UPDATE_RATE = 2.0
+
+[TRANSACTION_01]
+MB_TX_CODE = fnct_06_write_single_register
+FIRST_ELEMENT = 0
+NELEMENTS = 1
+HAL_TX_NAME = coolant_pulse
+MAX_UPDATE_RATE = 2.0
+
+[TRANSACTION_02]
+MB_TX_CODE = fnct_06_write_single_register
+FIRST_ELEMENT = 1
+NELEMENTS = 1
+HAL_TX_NAME = coolant_period
+MAX_UPDATE_RATE = 2.0
