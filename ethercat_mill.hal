@@ -2,7 +2,8 @@
 # 1. CORE MOTION CONTROLLER
 # =========================================================
 loadrt [KINS]KINEMATICS
-loadrt [EMCMOT]EMCMOT servo_period_nsec=[EMCMOT]SERVO_PERIOD num_joints=[KINS]JOINTS num_aio=4 num_dio=5
+# num_aio=7: E0-E3 laser mailbox, E4-E6 PWM coolant (freq/duty/pressure).
+loadrt [EMCMOT]EMCMOT servo_period_nsec=[EMCMOT]SERVO_PERIOD num_joints=[KINS]JOINTS num_aio=7 num_dio=5
 
 # =========================================================
 # 2. ETHERCAT DRIVER & HELPERS
@@ -23,7 +24,7 @@ loadrt and2 count=12
 loadrt debounce cfg=1,3
 loadrt oneshot count=2
 loadrt flipflop count=2
-loadrt or2 count=5
+loadrt or2 count=6
 loadrt near count=3
 loadrt comp count=1
 loadrt constant names=probe-tool-num

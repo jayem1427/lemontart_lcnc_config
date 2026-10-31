@@ -1,5 +1,10 @@
-# 1. Load the Modbus driver
-loadusr -W mb2hal config=h100.mb2hal
+# 1. H100 Modbus is not loaded.
+# One USB-RS485 dongle (/dev/ttyUSB0). Microject owns it at 19200 8E1
+# (coolant.hal). The VFD is 38400 8N1, so it cannot share that port.
+# Spindle command/feedback nets that need mb2hal.* stay unwired.
+# To bring the VFD back: give it its own adapter (or matching baud), then
+# uncomment loadusr and every "# net ... mb2hal" line below.
+# loadusr -W mb2hal config=h100.mb2hal
 
 # 2. Frequency Scaling (RPM to 0.1Hz units)
 # Note: mult2 is already loaded in ethercat_mill.hal. We are using the 5th instance (mult2.4)
@@ -7,7 +12,7 @@ addf mult2.4 servo-thread
 setp mult2.4.in1 0.166666
 
 net pdnt.spindle-speed-abs => mult2.4.in0
-net spindle-speed-final mult2.4.out => mb2hal.freq_set.00.float
+# net spindle-speed-final mult2.4.out => mb2hal.freq_set.00.float
 
 # 3. Control Logic (1=FWD, 2=REV, 0=Stop)
 loadrt mux4 names=vfd_run_mux
@@ -20,7 +25,7 @@ setp vfd_run_mux.in3 8.0 # Stop (invalid state)
 # M3/M4 swap vs VFD wiring (forward/reverse inverted). REVERT: fwd->sel0 rev->sel1
 net spindle-fwd spindle.0.forward => vfd_run_mux.sel1
 net spindle-rev spindle.0.reverse => vfd_run_mux.sel0
-net spindle-modbus-run vfd_run_mux.out => mb2hal.vfd_ctrl.00.float
+# net spindle-modbus-run vfd_run_mux.out => mb2hal.vfd_ctrl.00.float
 
 # 4. Spindle At-Speed Feedback
 addf mult2.5 servo-thread
@@ -28,7 +33,7 @@ addf near.0 servo-thread
 
 # Scale 0.1Hz feedback back to RPM (1 / 0.166666 = 6.0)
 setp mult2.5.in1 6.0
-net spindle-freq-fb mb2hal.freq_fb.00.float => mult2.5.in0
+# net spindle-freq-fb mb2hal.freq_fb.00.float => mult2.5.in0
 net spindle-speed-in mult2.5.out => spindle.0.speed-in
 
 # Compare command vs feedback
@@ -49,7 +54,7 @@ net spindle-at-speed spindle-at-speed-delay.out => spindle.0.at-speed
 # 5. Output Current Monitoring
 addf mult2.6 servo-thread
 setp mult2.6.in1 0.01
-net spindle-current-raw mb2hal.freq_fb.02.float => mult2.6.in0
+# net spindle-current-raw mb2hal.freq_fb.02.float => mult2.6.in0
 net spindle-current mult2.6.out
 
 # 6. VFD Fault Code Monitoring
@@ -62,12 +67,16 @@ addf or2.1 servo-thread
 setp near.1.scale 1.0
 setp near.1.difference 0.5
 setp near.1.in2 64.0
+# Park the unwired fault input off both trip codes. A floating 0 matches
+# |0-0| <= 0.5 and would hold E-stop. The mb2hal net below replaces this.
+setp near.1.in1 -1
 
 setp near.2.scale 1.0
 setp near.2.difference 0.5
 setp near.2.in2 92.0
+setp near.2.in1 -1
 
-net spindle-vfd-fault-code mb2hal.vfd_fault.00.float => near.1.in1 near.2.in1
+# net spindle-vfd-fault-code mb2hal.vfd_fault.00.float => near.1.in1 near.2.in1
 net spindle-vfd-overcurrent near.1.out => or2.1.in0
 net spindle-vfd-overtemperature near.2.out => or2.1.in1
 net spindle-vfd-critical-fault or2.1.out => halui.estop.activate
@@ -81,7 +90,7 @@ loadrt conv_sint_real count=4
 loadrt conv_sint_real count=4
 loadrt mult2 count=4
 loadrt div2 count=4
-loadrt scale names=tune-torque.0,tune-torque.1,tune-torque.2,tune-torque.3,tune-velocity.0,tune-velocity.1,tune-velocity.2,tune-velocity.3,tune-drive-ferr.0,tune-drive-ferr.1,tune-drive-ferr.2,tune-drive-ferr.3
+loadrt scale names=tune-torque.0,tune-torque.1,tune-torque.2,tune-torque.3,tune-velocity.0,tune-velocity.1,tune-velocity.2,tune-velocity.3,tune-drive-ferr.0,tune-drive-ferr.1,tune-drive-ferr.2,tune-drive-ferr.3,microject-pulse-scale,microject-period-scale
 
 addf conv-sint-real.4 servo-thread
 addf conv-sint-real.5 servo-thread

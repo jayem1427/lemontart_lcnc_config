@@ -24,6 +24,7 @@ things together.
 | Task | Doc |
 |------|-----|
 | Load cutter + probe length | [TOOLSETTER.md](TOOLSETTER.md) |
+| PWM coolant / Microject | [COOLANT.md](COOLANT.md) · [MB2HAL.md](MB2HAL.md) |
 | Cancel mid M600 | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Stop / Abort keeps G43 | [DEVIATIONS.md — Keep G43](DEVIATIONS.md#keep-g43-on-stop) |
 | Set WCO Z after shim touch-off | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
@@ -78,7 +79,8 @@ After switching git branches, delete leftover tab folders that lack a matching
 | `ethercat_mill.hal` | Joints, CiA 402, limits/home debounce, shared Y/Z home, probe mux |
 | `ethercat-conf.xml` | EtherCAT slaves + fault-window SDOs |
 | `xhc-whb04b-6.hal` | Pendant MPG (axis + joint jog) |
-| `custom.hal` | VFD Modbus, at-speed delay, faults |
+| `custom.hal` | VFD scale/fault chain; H100 `mb2hal` not loaded (one UART) |
+| `coolant.hal` / `microject.mb2hal` | Microject PWM coolant on `/dev/ttyUSB0` |
 | `probe_basic/` | UI, macros, tool table, custom tabs |
 | `post-processor/linuxcnc-djr.cps` | Fusion post |
 | `docs/reference/` | Vendor PDFs / worksheets (H100, Sigma II calculator) |
@@ -104,12 +106,14 @@ We do not claim these integrations are the only correct approach.
 | Doc | Covers |
 |-----|--------|
 | [A6_TUNING.md](A6_TUNING.md) | A6 SDO map, Servo Tuning tab, 6065/6066 windows |
+| [COOLANT.md](COOLANT.md) | Microject PWM coolant, M201/M202, shared UART test |
 | [DEVIATIONS.md](DEVIATIONS.md) | Differences vs stock LinuxCNC / Probe Basic |
 | [GETTING_STARTED.md](GETTING_STARTED.md) | Zero-to-hero bring-up path |
 | [GRAPHICAL_INERTIA_TUNE.md](GRAPHICAL_INERTIA_TUNE.md) | Inertia identification panel (WIP) |
 | [INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md) | Drop tuning tabs onto another mill |
 | [INSTALL_TOOL_CHANGE.md](INSTALL_TOOL_CHANGE.md) | Copy M600 toolsetter integration |
 | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) | Laser diameter, wiring, HAL mux |
+| [MB2HAL.md](MB2HAL.md) | First-time mb2hal / Microject serial setup |
 | [ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md) | Automated per-axis gain ladder |
 | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) | SET Z DRO, abort dialog, postgui HAL |
 | [PYTHON_PACKAGES.md](PYTHON_PACKAGES.md) | Optional Python deps for plots / FFT |

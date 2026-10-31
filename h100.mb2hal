@@ -1,3 +1,5 @@
+# Not loaded. custom.hal leaves this driver out while Microject owns
+# /dev/ttyUSB0 at 19200 8E1. This map stays 38400 8N1 slave 1.
 [MB2HAL_INIT]
 VERSION = 1.1
 TOTAL_TRANSACTIONS = 4

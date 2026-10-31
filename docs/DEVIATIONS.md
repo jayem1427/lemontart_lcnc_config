@@ -198,8 +198,9 @@ Physical master estop cuts mains. Software NC estop on Slave 3 DI1 gates `iocont
 |-----------|--------|
 | M3/M4 ↔ VFD direction **swapped** | Comment `REVERT: fwd->sel0 rev->sel1` |
 | At-speed | `near.0` (50 RPM) + **`spindle-at-speed-delay` 5 s** |
-| Critical faults | Modbus fault reg `0x000A` codes 64 / 92 → `halui.estop.activate` |
-| `or2` instances | `or2.0`/`or2.3` probe mux; `or2.1` VFD faults; `or2.2`/`or2.4` shared-home ignore. Do not `loadrt or2 names=` |
+| Critical faults | Codes 64 / 92 → `halui.estop.activate`. Input parked at **−1** while `mb2hal` is unloaded (a floating 0 matches and holds E-stop) |
+| `or2` instances | `or2.0`/`or2.3` probe mux; `or2.1` VFD faults; `or2.2`/`or2.4` shared-home ignore; `or2.5` flood/mist. Do not `loadrt or2 names=` |
+| PWM coolant | Second UART | **One dongle, `/dev/ttyUSB0`.** Microject 19200 8E1 slave 8. H100 driver not loaded. M201/M202 → analog E4/E5, M8/M9 → coil 1. M100–M199 cannot be remapped, so these are M201/M202 |
 
 ### Pendant MPG (joint + teleop)
 

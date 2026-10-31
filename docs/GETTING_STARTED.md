@@ -93,6 +93,7 @@ Homing and limit wiring live in [`ethercat_mill.hal`](../ethercat_mill.hal), not
 
 - [`h100.mb2hal`](../h100.mb2hal) — register map; set `SERIAL_PORT`
 - [`custom.hal`](../custom.hal) — RPM scaling, at-speed compare + 5 s settle, fault → estop
+- Coolant owns `/dev/ttyUSB0` ([COOLANT.md](COOLANT.md)). `h100.mb2hal` is not loaded; the spindle Modbus path is unwired
 
 H100 manual: [`reference/h100 manual.pdf`](reference/h100%20manual.pdf) — register `0x0201` (freq set), `0x000A` (current fault).
 
@@ -143,7 +144,8 @@ ethercat_mill.ini
 │   ├── ethercat_loadusr.hal   → lcec_conf + ethercat-conf.xml (once)
 │   ├── ethercat_mill.hal      → joints, limits, probe mux, estop
 │   ├── xhc-whb04b-6.hal       → pendant
-│   └── custom.hal             → VFD Modbus, at-speed, faults
+│   ├── custom.hal             → VFD Modbus, at-speed, faults
+│   └── coolant.hal            → Microject PWM (owns ttyUSB0; VFD driver not loaded)
 ├── POSTGUI probe_basic/probe_basic_postgui.hal
 ├── probe_basic/custom_config.yml
 ├── probe_basic/subroutines/   → probing, M600, tool change
