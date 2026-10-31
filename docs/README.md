@@ -27,7 +27,7 @@ things together.
 | Cancel mid M600 | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Set WCO Z after shim touch-off | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Measure tool diameter (laser) | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
-| PWM coolant (Modbus freq/duty/psi) | [COOLANT.md](COOLANT.md) · [MB2HAL.md](MB2HAL.md) |
+| PWM coolant (Modbus freq/duty/psi) | [MICROJECT.md](MICROJECT.md) · [COOLANT.md](COOLANT.md) · [MB2HAL.md](MB2HAL.md) |
 | Z repeatability tests | [metrology README](../probe_basic/subroutines/metrology/README.md) |
 
 ### Integrator (fork / adapt)
@@ -38,6 +38,7 @@ things together.
 | Copy tool-change to another mill | [INSTALL_TOOL_CHANGE.md](INSTALL_TOOL_CHANGE.md) |
 | Copy servo tuning tabs | [INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md) |
 | Fusion post (M600, XYZA, G93) | [TOOLSETTER.md § CAM](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps) |
+| Install / bench / test the Microject PCB | [MICROJECT.md](MICROJECT.md) |
 | PWM coolant (M101/M102, Modbus) | [COOLANT.md](COOLANT.md) |
 | First-time mb2hal (VFD + coolant) | [MB2HAL.md](MB2HAL.md) |
 
@@ -115,6 +116,7 @@ We do not claim these integrations are the only correct approach.
 | [INSTALL_TOOL_CHANGE.md](INSTALL_TOOL_CHANGE.md) | Copy M600 toolsetter integration |
 | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) | Laser diameter, wiring, HAL mux |
 | [MB2HAL.md](MB2HAL.md) | Configure mb2hal for analog devices (VFD, PWM coolant) |
+| [MICROJECT.md](MICROJECT.md) | Microject PCB: wire, Modbus bench, LinuxCNC test |
 | [ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md) | Automated per-axis gain ladder |
 | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) | SET Z DRO, abort dialog, postgui HAL |
 | [PYTHON_PACKAGES.md](PYTHON_PACKAGES.md) | Optional Python deps for plots / FFT |

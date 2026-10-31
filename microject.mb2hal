@@ -1,4 +1,5 @@
 # Dan Mills Microject injector (separate UART from the H100).
+# Install, mbpoll, and LinuxCNC test: docs/MICROJECT.md
 # 19200 8E1, slave 8 unless DIP switches were changed.
 #
 # Channel map (1-based, as Dan / mbpoll -r):

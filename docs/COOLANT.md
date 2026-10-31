@@ -3,6 +3,7 @@
 Dan Mills **Microject** injector driver: an automotive fuel injector pulsed as
 an MQL valve. Fusion still emits stock **M7 / M8 / M9**.
 
+**At the machine:** **[MICROJECT.md](MICROJECT.md)** (wire, `mbpoll`, LinuxCNC, in one page).
 **Never configured mb2hal?** **[MB2HAL.md](MB2HAL.md)**. This page is the mill map.
 
 This is **not** Probe Basic’s programmable nozzle aimer (`program_coolant.ngc`).

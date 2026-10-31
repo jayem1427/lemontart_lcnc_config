@@ -8,6 +8,7 @@ devices:
 | H100 VFD | Spindle RPM / run / fault | `/dev/ttyUSB0` 38400 **8N1** slave **1** (`h100.mb2hal`) |
 | Microject | Injector enable (coil 1) | `/dev/ttyUSB1` 19200 **8E1** slave **8** (`microject.mb2hal`) |
 
+Bench and LinuxCNC steps: **[MICROJECT.md](MICROJECT.md)**.
 Day-to-day M-codes and wiring: **[COOLANT.md](COOLANT.md)**. Upstream:
 [mb2hal](https://linuxcnc.org/docs/html/drivers/mb2hal.html).
 
@@ -318,6 +319,7 @@ Units assumed ms; SCALE if 0.1 ms.
 
 | Doc / file | When |
 |------------|------|
+| [MICROJECT.md](MICROJECT.md) | Wire, mbpoll, LinuxCNC test |
 | [COOLANT.md](COOLANT.md) | M8 coil, analog E4–E6, plumbing |
 | [`microject.mb2hal`](../microject.mb2hal) | Live injector transactions |
 | [`h100.mb2hal`](../h100.mb2hal) | VFD transactions |
