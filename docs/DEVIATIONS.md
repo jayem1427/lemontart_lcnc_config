@@ -34,6 +34,7 @@ Stock references:
 | Manual Tool Change dialog | Stock QtPyVCP; Esc cancels | **Custom dialog** with **ABORT**; Esc/close ignored — [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
 | Drive position deviation | Drive defaults | **SDO 6065/6066** **0.5 mm / 0.5° / 250 ms** (6065 → **2.0** during one-click / inertia moves) — [A6_TUNING](A6_TUNING.md) |
 | Laser tool setter | M62 P0 mux to `motion.probe-input` for G38 | [LASER_TOOL_SETTER](LASER_TOOL_SETTER.md) |
+| Coolant | Stock M7/M8/M9 bits only | **Microject** 19200 8E1 slave 8 coil 1 on a second UART; M8/M9 unchanged — [MICROJECT.md](MICROJECT.md) |
 | Pocket probe traverse feed | `#3017` from Probe Basic | **Local fix** — several `probe_*.ngc` had bare `[3017]` (3017 mm/min literal) |
 | PROBE SPINDLE NOSE ZERO | Runs on setter input | **Aborts if T#3014 loaded** — HAL routes touch probe only when that tool is in spindle |
 
@@ -186,6 +187,16 @@ WHB normally requires per-axis homed for MPG jog. Tied to **machine on** so benc
 ---
 
 ## RS274NGC and tool change
+
+### PWM coolant — M101/M102, stock M7/M8/M9
+
+Analog setpoints live on **E4/E5/E6** so they never share the laser mailbox
+(E0–E3) or Probe Basic’s dormant nozzle aimer (`program_coolant.ngc` → `M68 E0`).
+Keep `#3000 = 0`. Do **not** remap M7/M8/M9. Per-tool Hz/duty/psi is
+`probe_basic/coolant_tools.ini`, applied by **M102** after tool load. Fusion
+still posts M8/M9 (and M102 immediately before coolant-on). Microject is a
+**second UART** (19200 8E1 slave 8); port 1 is coil 1 + H1 pulse + H2 period.
+H100 stays 38400 8N1. Procedure: [MICROJECT.md](MICROJECT.md). Map: [COOLANT.md](COOLANT.md).
 
 ### `REMAP=M600` only — not M6
 

@@ -8,6 +8,7 @@ o<m600> sub
 #2000 = 1
 o<tool_touch_off> call
 #2002 = 0
+M102 (apply PWM coolant recipe for the tool now in the spindle)
 
 
 o<m600> endsub

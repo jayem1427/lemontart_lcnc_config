@@ -212,6 +212,9 @@ Results publish with `M68 E0` (corrected diameter or length) and `M68 E1` (1 = s
 Each accepted (or final-failed) tip hit also publishes `M68 E2` (X mm) and `M68 E3`
 (packed: `seq*10000 + side*100 + slot*10 + ok`, side 1 = +X, 2 = −X).
 
+PWM coolant uses **E4–E6** (`num_aio=7`). Do not publish laser hits on those
+channels — [COOLANT.md](COOLANT.md).
+
 ---
 
 ## Files involved

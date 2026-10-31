@@ -32,7 +32,13 @@
     {"id": "spindle_at_speed", "pin": "spindle.0.at-speed", "label": "S at-speed", "units": "0/1", "color": "#2ecc71", "group": "spindle"},
     {"id": "spindle_vfd_fault", "pin": "mb2hal.vfd_fault.00.float", "label": "VFD fault", "units": "code", "color": "#e67e22", "group": "spindle"},
     {"id": "spindle_freq_cmd", "pin": "mb2hal.freq_set.00.float", "label": "VFD freq cmd", "units": "0.1Hz", "color": "#9b59b6", "group": "spindle"},
-    {"id": "spindle_freq_fb", "pin": "mb2hal.freq_fb.00.float", "label": "VFD freq fb", "units": "0.1Hz", "color": "#1abc9c", "group": "spindle"}
+    {"id": "spindle_freq_fb", "pin": "mb2hal.freq_fb.00.float", "label": "VFD freq fb", "units": "0.1Hz", "color": "#1abc9c", "group": "spindle"},
+    {"id": "coolant_freq_cmd", "pin": "motion.analog-out-04", "label": "Coolant Hz", "units": "Hz", "color": "#00bcd4", "group": "coolant"},
+    {"id": "coolant_duty_cmd", "pin": "motion.analog-out-05", "label": "Coolant duty cmd", "units": "%", "color": "#0097a7", "group": "coolant"},
+    {"id": "coolant_psi_cmd", "pin": "motion.analog-out-06", "label": "Coolant psi cmd", "units": "psi", "color": "#26c6da", "group": "coolant"},
+    {"id": "coolant_run", "pin": "microject.coolant_run.00.bit", "label": "Microject coil 1", "units": "0/1", "color": "#00838f", "group": "coolant"},
+    {"id": "coolant_pulse", "pin": "microject.coolant_pulse.00.float", "label": "Microject pulse", "units": "ms", "color": "#006064", "group": "coolant"},
+    {"id": "coolant_period", "pin": "microject.coolant_period.00.float", "label": "Microject period", "units": "ms", "color": "#4dd0e1", "group": "coolant"}
   ],
   "plot_groups": [
     {
@@ -94,6 +100,12 @@
       "title": "VFD frequency command / feedback (0.1 Hz units)",
       "y_mode": "auto",
       "channels": ["spindle_freq_cmd", "spindle_freq_fb"]
+    },
+    {
+      "id": "coolant",
+      "title": "PWM coolant (setpoint vs gated Modbus)",
+      "y_mode": "auto",
+      "channels": ["coolant_freq_cmd", "coolant_duty_cmd", "coolant_run", "coolant_pulse", "coolant_period"]
     }
   ]
 }

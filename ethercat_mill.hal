@@ -2,7 +2,8 @@
 # 1. CORE MOTION CONTROLLER
 # =========================================================
 loadrt [KINS]KINEMATICS
-loadrt [EMCMOT]EMCMOT servo_period_nsec=[EMCMOT]SERVO_PERIOD num_joints=[KINS]JOINTS num_aio=4 num_dio=5
+# num_aio=7: E0-E3 laser mailbox, E4-E6 PWM coolant (freq/duty/pressure).
+loadrt [EMCMOT]EMCMOT servo_period_nsec=[EMCMOT]SERVO_PERIOD num_joints=[KINS]JOINTS num_aio=7 num_dio=5
 
 # =========================================================
 # 2. ETHERCAT DRIVER & HELPERS

@@ -2,11 +2,11 @@
 
 Semi-automatic tool length measurement for a **manual collet spindle**, based on [TooTall18T/tool_length_probe](https://github.com/TooTall18T/tool_length_probe) v5.0.2, adapted for Probe Basic.
 
-**See also:** [GETTING_STARTED.md](GETTING_STARTED.md) (learning path) · [DEVIATIONS.md](DEVIATIONS.md) (vs stock configs) · [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) (SET Z, UI) · [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) (Kexin DS-5V-M laser setter)
+**See also:** [GETTING_STARTED.md](GETTING_STARTED.md) (learning path) · [DEVIATIONS.md](DEVIATIONS.md) (vs stock configs) · [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) (SET Z, UI) · [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) (Kexin DS-5V-M laser setter) · [COOLANT.md](COOLANT.md) (`M102` after M600)
 
 ## INI (`ethercat_mill.ini`)
 
-- `REMAP=M600 modalgroup=6 ngc=m600` — CAM entry for change + probe (**do not remap M6**)
+- `REMAP=M600 modalgroup=6 ngc=m600` — CAM entry for change + probe (**do not remap M6**). Ends with **M102** (PWM coolant recipe for the new tool).
 - `TOOL_CHANGE_AT_G30=0`, `TOOL_CHANGE_QUILL_UP=0` — LinuxCNC built-in M6 motion disabled; macros handle retract and G30
 - `SUBROUTINE_PATH` / `USER_M_PATH` → `probe_basic/subroutines`
 - `[ATC] POCKETS=1` — satisfies Probe Basic ATC-aware subroutines; tab hidden via `ATC_TAB_DISPLAY=0`
