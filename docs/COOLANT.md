@@ -86,6 +86,29 @@ M9
 
 ---
 
+## MQL tab
+
+Probe Basic tab **MQL** (`probe_basic/user_tabs/mql_control/`) is a front end
+for the same M201 words.
+
+| Control | Does |
+|---------|------|
+| P slider | Pulse rate 1–50 Hz (same clamp as `limit1.4`), 0.5 Hz steps |
+| Q slider | Duty 0–100 %, 0.1 % steps. Squared travel: half the slider is 0–25 % |
+| Pulse train | Valve timeline for the first 500 ms, to scale. Blue while M7/M8 is on |
+| APPLY | MDI `M201 P Q`. Outlined amber when the screen differs from E4/E5 |
+| LIVE | Sends M201 automatically ~0.3 s after a slider release or ± tap |
+| M8 SPRAY ON | Sends the on-screen M201, then M8 |
+| REVERT | Reloads what the machine is using (E4/E5) |
+| Presets | Named P/Q pairs in `probe_basic/mql_presets.json` |
+| Tool recipe | LOAD / SAVE TO TOOL edits `[T<n>]` in `coolant_tools.ini` (comments kept). M202 re-reads it every call |
+
+MDI is blocked while a program runs; put M201/M202 in the G-code instead.
+The pulse-length tile turns amber under 1 ms (the firmware default) as a
+hint that the injector may not fully open.
+
+---
+
 ## Analog channels
 
 `num_aio=7`. Laser owns E0–E3.

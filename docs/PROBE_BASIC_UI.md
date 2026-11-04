@@ -157,6 +157,7 @@ If Probe Basic fails to render on your GPU driver, launch with
 | Servo Tuning | `probe_basic/user_tabs/servo_tuner/` | [A6_TUNING.md](A6_TUNING.md) |
 | Logging | `probe_basic/user_tabs/signal_monitor/` | [SIGNAL_LOGGING.md](SIGNAL_LOGGING.md) |
 | Laser Setter | `probe_basic/user_tabs/laser_setter/` | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
+| MQL | `probe_basic/user_tabs/mql_control/` | [COOLANT.md](COOLANT.md#mql-tab) |
 
 Probe Basic auto-loads every subfolder under `USER_TABS_PATH`. `template_*` folders are upstream scaffolding only.
 

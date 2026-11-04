@@ -1,0 +1,376 @@
+/* MQL — Probe Basic dark theme (BebasKai) */
+
+QWidget#MQL {
+    background-color: #2e3436;
+    color: rgb(238, 238, 236);
+    font: 12pt "BebasKai";
+}
+
+QFrame#headerBar,
+QFrame#setpointCard,
+QFrame#previewCard,
+QFrame#presetCard,
+QFrame#toolCard {
+    background-color: #363b3d;
+    border: 1px solid #8a8484;
+    border-radius: 8px;
+}
+
+QFrame#headerBar QLabel,
+QFrame#setpointCard QLabel,
+QFrame#previewCard QLabel,
+QFrame#presetCard QLabel,
+QFrame#toolCard QLabel {
+    background: transparent;
+    border: none;
+}
+
+QLabel#lblTitle {
+    color: white;
+    font: 22pt "BebasKai";
+}
+
+QLabel#lblSubtitle {
+    color: #9a9e9f;
+    font: 13pt "BebasKai";
+    padding-top: 6px;
+}
+
+QFrame#headerBar QLabel#pill {
+    color: rgb(238, 238, 236);
+    font: 14pt "BebasKai";
+    padding: 8px 16px 6px 16px;
+    min-height: 22px;
+    background-color: #4a4f51;
+    border: 1px solid #8a8484;
+    border-radius: 16px;
+}
+
+QFrame#headerBar QLabel#pill[state="on"] {
+    color: #0b2a3a;
+    background-color: #5ec8ff;
+    border-color: #2a8fc4;
+}
+
+QFrame#headerBar QLabel#pill[state="pending"] {
+    color: #fcaf3e;
+    border-color: #fcaf3e;
+}
+
+QFrame#headerBar QLabel#pill[state="warn"] {
+    color: #fcaf3e;
+}
+
+QLabel#cardTitle {
+    color: white;
+    font: 15pt "BebasKai";
+}
+
+/* ---- setpoint cards ---- */
+
+QFrame#setpointCard QLabel#setpointCode,
+QFrame#toolCard QLabel#setpointCode {
+    color: white;
+    font: 20pt "BebasKai";
+    background-color: rgb(85, 85, 238);
+    border: 2px solid #2222aa;
+    border-radius: 24px;
+    padding-top: 4px;
+}
+
+QFrame#setpointCard QLabel#setpointTitle {
+    color: white;
+    font: 18pt "BebasKai";
+}
+
+QLabel#setpointHint {
+    color: #9a9e9f;
+    font: 11pt "BebasKai";
+}
+
+QDoubleSpinBox#setpointValue {
+    color: #5ec8ff;
+    font: 28pt "BebasKai";
+    background: #23282a;
+    border: 1px solid #4a4f51;
+    border-radius: 6px;
+    padding: 0 8px;
+    min-height: 62px;
+    min-width: 160px;
+    selection-background-color: rgb(85, 85, 238);
+}
+
+QDoubleSpinBox#setpointValue QLineEdit {
+    color: #5ec8ff;
+    background: transparent;
+    border: none;
+    padding: 10px 6px 6px 6px;
+    font: 28pt "BebasKai";
+    min-height: 48px;
+    selection-background-color: rgb(85, 85, 238);
+}
+
+QDoubleSpinBox#setpointValue:focus {
+    border-color: #5ec8ff;
+}
+
+QFrame#setpointCard QLabel#setpointUnit {
+    color: #b8bcbe;
+    font: 18pt "BebasKai";
+    min-width: 36px;
+}
+
+QFrame#setpointCard QLabel#setpointScale {
+    color: #7d8284;
+    font: 10pt "BebasKai";
+}
+
+QSlider#setpointSlider {
+    min-height: 44px;
+    background: transparent;
+}
+
+QSlider#setpointSlider::groove:horizontal {
+    height: 10px;
+    background: #1f2325;
+    border: 1px solid #111;
+    border-radius: 5px;
+}
+
+QSlider#setpointSlider::sub-page:horizontal {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #3a3f9e, stop:1 #5ec8ff);
+    border: 1px solid #111;
+    border-radius: 5px;
+}
+
+QSlider#setpointSlider::handle:horizontal {
+    width: 30px;
+    height: 30px;
+    margin: -11px 0;
+    border-radius: 16px;
+    border: 2px solid #5555ee;
+    background: qradialgradient(cx:0.5, cy:0.4, radius:0.6, fx:0.5, fy:0.3,
+        stop:0 #ffffff, stop:1 #c9ccd0);
+}
+
+QSlider#setpointSlider::handle:horizontal:pressed {
+    border-color: #5ec8ff;
+}
+
+/* ---- buttons ---- */
+
+QPushButton {
+    color: white;
+    border: 2px solid black;
+    border-radius: 6px;
+    padding: 5px 14px;
+    background: qlineargradient(
+        spread:pad, x1:0, y1:1, x2:0, y2:0,
+        stop:0 rgba(46, 52, 54, 255),
+        stop:0.5 rgba(82, 82, 83, 255),
+        stop:0.86 rgba(82, 82, 83, 255),
+        stop:1 rgba(213, 218, 216, 255)
+    );
+    font: 14pt "BebasKai";
+    min-height: 36px;
+}
+
+QPushButton:hover {
+    background: qlineargradient(x1:0, y1:1, x2:0, y2:0,
+        stop:0 #3d4446, stop:0.5 #6a6d6e, stop:1 #e8ecea);
+}
+
+QPushButton:pressed {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #5a5f61, stop:1 #2e3436);
+}
+
+QPushButton:disabled {
+    background: #4a4f51;
+    color: rgb(170, 170, 170);
+    border-color: #3a3a3a;
+}
+
+QPushButton#btnStep {
+    font: 20pt "BebasKai";
+    padding: 0 0 2px 0;
+}
+
+QPushButton#btnApply {
+    min-width: 130px;
+    background: qlineargradient(x1:0, y1:1, x2:0, y2:0,
+        stop:0 #3a3f9e, stop:0.5 #5555ee, stop:1 #9a9eff);
+    border-color: #2222aa;
+}
+
+QPushButton#btnApply[pending="true"] {
+    border: 2px solid #fcaf3e;
+}
+
+QPushButton#btnApply:disabled {
+    background: #4a4f51;
+    border-color: #3a3a3a;
+}
+
+QPushButton#btnLive:checked {
+    color: #0f2a05;
+    background: qlineargradient(x1:0, y1:1, x2:0, y2:0,
+        stop:0 #4e9a06, stop:0.5 #73d216, stop:1 #c4f08a);
+    border-color: #2f5d03;
+}
+
+QPushButton#btnSprayOn {
+    background: qlineargradient(x1:0, y1:1, x2:0, y2:0,
+        stop:0 #1d5d80, stop:0.5 #2a8fc4, stop:1 #a6defa);
+    border-color: #0b2a3a;
+}
+
+QPushButton#btnSprayOff,
+QPushButton#btnDelete {
+    background: qlineargradient(x1:0, y1:1, x2:0, y2:0,
+        stop:0 #6b1a1a, stop:0.5 #a52a2a, stop:1 #e6a0a0);
+    border-color: #3a0b0b;
+}
+
+QPushButton#btnSprayOn:disabled,
+QPushButton#btnSprayOff:disabled {
+    background: #4a4f51;
+    border-color: #3a3a3a;
+}
+
+QLabel#lblGcode {
+    color: #8ae234;
+    font: 15pt "DejaVu Sans Mono";
+    background: #23282a;
+    border: 1px solid #4a4f51;
+    border-radius: 6px;
+    padding: 8px 14px;
+    min-height: 28px;
+}
+
+/* ---- stat tiles ---- */
+
+QFrame#statTile {
+    background-color: #2b3032;
+    border: 1px solid #4a4f51;
+    border-radius: 6px;
+    min-height: 58px;
+}
+
+QFrame#statTile[warn="true"] {
+    border-color: #fcaf3e;
+}
+
+QFrame#statTile QLabel#statValue {
+    color: white;
+    font: 20pt "BebasKai";
+    min-height: 28px;
+    padding-top: 2px;
+}
+
+QFrame#statTile[warn="true"] QLabel#statValue {
+    color: #fcaf3e;
+}
+
+QFrame#statTile QLabel#statCaption {
+    color: #9a9e9f;
+    font: 10pt "BebasKai";
+}
+
+/* ---- presets / tool ---- */
+
+QListWidget#presetList {
+    background: #23282a;
+    border: 1px solid #4a4f51;
+    border-radius: 6px;
+    color: rgb(238, 238, 236);
+    font: 14pt "BebasKai";
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget#presetList::item {
+    padding: 8px 10px;
+    margin: 2px 0;
+    border-radius: 5px;
+    border: 1px solid transparent;
+}
+
+QListWidget#presetList::item:hover {
+    background: #343a3c;
+}
+
+QListWidget#presetList::item:selected {
+    background: rgba(85, 85, 238, 90);
+    border-color: rgb(85, 85, 238);
+    color: white;
+}
+
+QLineEdit#leName,
+QSpinBox#spinTool {
+    color: white;
+    background: #23282a;
+    border: 1px solid #4a4f51;
+    border-radius: 6px;
+    padding: 6px 10px 4px 10px;
+    font: 15pt "BebasKai";
+    min-height: 40px;
+    selection-background-color: rgb(85, 85, 238);
+}
+
+QLineEdit#leName:focus,
+QSpinBox#spinTool:focus {
+    border-color: #5ec8ff;
+}
+
+QSpinBox#spinTool {
+    font: 20pt "BebasKai";
+    min-height: 48px;
+}
+
+QSpinBox#spinTool QLineEdit {
+    color: white;
+    background: transparent;
+    border: none;
+    font: 20pt "BebasKai";
+    padding: 6px 4px 2px 4px;
+}
+
+QFrame#toolCard QLabel#lblToolInfo {
+    color: #b8bcbe;
+    font: 13pt "BebasKai";
+}
+
+QScrollBar:vertical {
+    background: #23282a;
+    width: 12px;
+    border: none;
+}
+
+QScrollBar::handle:vertical {
+    background: #5a5f61;
+    border-radius: 5px;
+    min-height: 30px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+/* ---- status line ---- */
+
+QLabel#lblMessage {
+    color: #9a9e9f;
+    font: 13pt "BebasKai";
+    padding: 2px 4px;
+}
+
+QLabel#lblMessage[state="ok"] {
+    color: #8ae234;
+}
+
+QLabel#lblMessage[state="error"] {
+    color: #ef2929;
+}
