@@ -79,8 +79,8 @@ After switching git branches, delete leftover tab folders that lack a matching
 | `ethercat_mill.hal` | Joints, CiA 402, limits/home debounce, shared Y/Z home, probe mux |
 | `ethercat-conf.xml` | EtherCAT slaves + fault-window SDOs |
 | `xhc-whb04b-6.hal` | Pendant MPG (axis + joint jog) |
-| `custom.hal` | VFD scale/fault chain; H100 `mb2hal` not loaded (one UART) |
-| `coolant.hal` / `microject.mb2hal` | Microject PWM coolant on `/dev/ttyUSB0` |
+| `custom.hal` | H100 VFD over `mb2hal` (own CH340 adapter): scale, at-speed, fault chain |
+| `coolant.hal` / `microject.mb2hal` | Microject PWM coolant (own FTDI adapter) |
 | `probe_basic/` | UI, macros, tool table, custom tabs |
 | `post-processor/linuxcnc-djr.cps` | Fusion post |
 | `docs/reference/` | Vendor PDFs / worksheets (H100, Sigma II calculator) |

@@ -1,7 +1,6 @@
 # Dan Mills Microject injector.
-# Owns /dev/ttyUSB0 at 19200 8E1. The H100 driver is not loaded: it needs
-# 38400 8N1 and cannot share this UART. Move this SERIAL_PORT when the VFD
-# gets its own adapter.
+# Own adapter: FTDI FT232R USB-RS485 (serial BG02XIBV), 19200 8E1.
+# The H100 VFD (38400 8N1) is on the CH340 adapter (h100.mb2hal).
 # 19200 8E1, slave 8 unless DIP switches were changed.
 #
 # Channel map (1-based, as Dan / mbpoll -r):
@@ -16,10 +15,10 @@
 # Firmware default if you never write Hregs: 1 ms pulse / 100 ms period.
 # Coil falls 5 s after the last valid Modbus message — keep update rate >= 1 Hz.
 #
-# Bench (port 1, shared spindle dongle):
-#   mbpoll /dev/ttyUSB0 -v -m rtu -a 8 -b 19200 -P even -t 0 -r 1 1
-#   mbpoll /dev/ttyUSB0 -v -m rtu -a 8 -b 19200 -P even -t 4 -r 1 1
-#   mbpoll /dev/ttyUSB0 -v -m rtu -a 8 -b 19200 -P even -t 4 -r 2 100
+# Bench (port 1, FTDI adapter; stop LinuxCNC first):
+#   mbpoll /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0 -v -m rtu -a 8 -b 19200 -P even -t 0 -r 1 1
+#   mbpoll /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0 -v -m rtu -a 8 -b 19200 -P even -t 4 -r 1 1
+#   mbpoll /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0 -v -m rtu -a 8 -b 19200 -P even -t 4 -r 2 100
 
 [MB2HAL_INIT]
 VERSION = 1.1
@@ -29,7 +28,7 @@ INIT_DEBUG = 1
 
 [TRANSACTION_00]
 LINK_TYPE = serial
-SERIAL_PORT = /dev/ttyUSB0
+SERIAL_PORT = /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0
 SERIAL_BAUD = 19200
 SERIAL_BITS = 8
 SERIAL_PARITY = even

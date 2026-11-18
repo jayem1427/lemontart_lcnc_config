@@ -51,7 +51,7 @@ Full list and learning paths: **[docs/README.md](docs/README.md)**.
 4. Clone this tree and edit:
    - `ethercat-conf.xml` — your slave chain
    - `ethercat_mill.ini` / `ethercat_mill.hal` — scales, limits, homing
-   - `h100.mb2hal` — `SERIAL_PORT`
+   - `h100.mb2hal` / `microject.mb2hal` — `SERIAL_PORT` (`/dev/serial/by-id/...`)
    - `PROGRAM_PREFIX` in the INI — must point at *your* NC programs directory
 5. Launch with `linuxcnc ethercat_mill.ini` (set `QT_QUICK_BACKEND=software` if Probe Basic fails to render).
 

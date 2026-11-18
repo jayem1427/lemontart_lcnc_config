@@ -21,7 +21,7 @@ Leave `#3000 = 0`.
 | Firmware default | 1 ms on / 100 ms period if you never write Hregs |
 | Watchdog | Coil OFF **5 s** after the last valid Modbus message |
 | Reads | Opto inputs + analog readable; not wired in HAL yet |
-| UART | **`/dev/ttyUSB0` only.** Injector is 19200 8E1; H100 is 38400 8N1. The VFD driver is not loaded. |
+| UART | Own **FTDI** adapter (`/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0`). The H100 VFD (38400 8N1) is on a separate CH340 adapter |
 
 Port map (Dan, testers chat — Richie on port 4 after swapping wires):
 
@@ -59,9 +59,8 @@ M8 / M7  →  microject.coolant_run.00.bit  → coil 1
 M9       →  coil 0  and  pulse 0
 ```
 
-Microject owns `/dev/ttyUSB0`. `h100.mb2hal` is not loaded, so M3 does not
-reach the VFD. A second dongle (or matching baud) is required before the
-spindle can share this bus.
+Microject has its own adapter; the spindle (`h100.mb2hal`) runs on a second
+one, so M3 and M8 work at the same time. See [MB2HAL.md §3](MB2HAL.md).
 
 `M201 P10 Q1` → 100 ms period, 1 ms pulse (firmware default). This is an
 **injector pulse**, not 20 kHz servo PWM.
@@ -127,10 +126,10 @@ If Hregs are 0.1 ms counts, set `[COOLANT]PULSE_SCALE` / `PERIOD_SCALE` to 10.
 
 ```bash
 # coil 1 on
-mbpoll /dev/ttyUSB0 -v -m rtu -a 8 -b 19200 -P even -t 0 -r 1 1
+mbpoll /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0 -v -m rtu -a 8 -b 19200 -P even -t 0 -r 1 1
 # pulse 1 ms, period 100 ms (port 1)
-mbpoll /dev/ttyUSB0 -v -m rtu -a 8 -b 19200 -P even -t 4 -r 1 1
-mbpoll /dev/ttyUSB0 -v -m rtu -a 8 -b 19200 -P even -t 4 -r 2 100
+mbpoll /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0 -v -m rtu -a 8 -b 19200 -P even -t 4 -r 1 1
+mbpoll /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0 -v -m rtu -a 8 -b 19200 -P even -t 4 -r 2 100
 ```
 
 Windows (free): QModMaster, OpenModScan, Modbus Tester. `modbuslens` does
@@ -145,13 +144,13 @@ LinuxCNC: `M8` then `halcmd getp microject.coolant_run.00.bit` and
 
 ```
 PC
- └─ USB–RS-485  /dev/ttyUSB0   19200 8E1   Microject slave 8
-     H100 (38400 8N1) is not on this adapter. Its driver is not loaded.
+ ├─ CH340 USB–RS-485   38400 8N1   H100 VFD slave 1
+ └─ FTDI USB–RS-485    19200 8E1   Microject slave 8
 ```
 
 24 V to the PCB. Injector on **port 1** (GM0521994 is a 12 V coil; the board
-drives it). udev: two adapters swap tty numbers across reboots unless bound by
-serial.
+drives it). Both `.mb2hal` files use `/dev/serial/by-id/` paths so the two
+adapters can't swap when tty numbers change across reboots.
 
 ---
 

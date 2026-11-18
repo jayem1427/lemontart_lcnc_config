@@ -1,5 +1,6 @@
-# Not loaded. custom.hal leaves this driver out while Microject owns
-# /dev/ttyUSB0 at 19200 8E1. This map stays 38400 8N1 slave 1.
+# H100 VFD, 38400 8N1 slave 1. Loaded by custom.hal.
+# Own adapter: CH340 USB-RS485 (by-id path below, survives tty renumbering).
+# Microject is on the FTDI adapter (microject.mb2hal) — separate bus.
 [MB2HAL_INIT]
 VERSION = 1.1
 TOTAL_TRANSACTIONS = 4
@@ -8,7 +9,7 @@ INIT_DEBUG = 1
 
 [TRANSACTION_00]
 LINK_TYPE = serial
-SERIAL_PORT = /dev/ttyUSB0
+SERIAL_PORT = /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
 SERIAL_BAUD = 38400
 SERIAL_BITS = 8
 SERIAL_PARITY = none

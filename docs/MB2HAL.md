@@ -5,8 +5,10 @@ devices:
 
 | Device | Role | Link |
 |--------|------|------|
-| H100 VFD | Spindle RPM / run / fault | Map is 38400 **8N1** slave **1**. **Not loaded** — no second dongle |
-| Microject | Injector enable (coil 1) | `/dev/ttyUSB0` 19200 **8E1** slave **8** (`microject.mb2hal`) |
+| H100 VFD | Spindle RPM / run / fault | CH340 adapter, 38400 **8N1** slave **1** (`h100.mb2hal`, loaded by `custom.hal`) |
+| Microject | Injector enable (coil 1) | FTDI adapter, 19200 **8E1** slave **8** (`microject.mb2hal`, loaded by `coolant.hal`) |
+
+Both `SERIAL_PORT`s use `/dev/serial/by-id/...` paths, not `/dev/ttyUSBn`. See §3.
 
 Day-to-day M-codes and wiring: **[COOLANT.md](COOLANT.md)**. Upstream:
 [mb2hal](https://linuxcnc.org/docs/html/drivers/mb2hal.html).
@@ -95,8 +97,7 @@ uses `FIRST_ELEMENT = 0`. If the injector never fires, try `1`.
 
 ## 3. Why both devices need their own dongle
 
-This mill currently has **one** dongle. Microject is on it. The H100 driver
-is not loaded.
+This mill has **two** dongles, one per device. Both mb2hal instances load.
 
 RS-485 is a bus: **one master**, many slaves, **same baud/parity**. The master
 picks a device by **slave ID** in each request (H100 = 1, Microject = 8), not
@@ -110,15 +111,20 @@ Until you flip the injector to 38400 8N1, a series splice will just corrupt
 the VFD bus.
 
 ```
-Now:
 PC
- └─ dongle    /dev/ttyUSB0   19200 8E1   Microject slave 8
-
-When the spindle comes back (second dongle, or injector DIP'd to 38400 8N1):
-PC
- ├─ dongle A  /dev/ttyUSB0   38400 8N1   H100 slave 1
- └─ dongle B  /dev/ttyUSB1   19200 8E1   Microject slave 8
+ ├─ CH340 dongle  /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
+ │                38400 8N1   H100 slave 1       (h100.mb2hal)
+ └─ FTDI dongle   /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0
+                  19200 8E1   Microject slave 8  (microject.mb2hal)
 ```
+
+`/dev/ttyUSB0`/`ttyUSB1` numbering depends on plug-in order and can swap
+across reboots. The `by-id` paths can't: the FTDI has a unique serial
+(`BG02XIBV`) and the CH340 is the only one of its kind on this PC. If you ever
+add a **second CH340** (they have no serial number), switch both files to
+`/dev/serial/by-path/...` (bound to the physical USB port) instead.
+
+Find which adapter is which: `ls -l /dev/serial/by-id/`.
 
 Two buses means two `loadusr mb2hal` processes and two `HAL_MODULE_NAME`s
 (`mb2hal` and `microject`). Legal.
@@ -178,7 +184,7 @@ Pins are then `microject.<HAL_TX_NAME>.00.bit` (coil) or `.float` (register).
 ```ini
 [TRANSACTION_00]
 LINK_TYPE = serial
-SERIAL_PORT = /dev/ttyUSB0
+SERIAL_PORT = /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0
 SERIAL_BAUD = 19200
 SERIAL_BITS = 8
 SERIAL_PARITY = even
@@ -260,8 +266,8 @@ Flood/Mist buttons and the pendant stay in sync. Do not remap M7/M8/M9.
 
 ## 7. Bring-up checklist
 
-1. **VFD still works** on USB0 (`M3 S500`). If the spindle dies after adding
-   a dongle, ports swapped — udev.
+1. **VFD works** (`M3 S500`). If the spindle or injector is dead, check
+   `ls -l /dev/serial/by-id/` matches the `SERIAL_PORT` in each `.mb2hal`.
 2. **Bench coil** with `mbpoll` (above) before LinuxCNC. Injector should tick
    at ~10 Hz, 1 % (a faint click / tiny dribble).
 3. LinuxCNC up:
@@ -272,7 +278,7 @@ Flood/Mist buttons and the pendant stay in sync. Do not remap M7/M8/M9.
    ```
 
 4. MDI `M8`. `halcmd getp microject.coolant_run.00.bit` → TRUE. `M9` → FALSE.
-5. Unplug USB1 with M8 on: within ~5 s the injector must stop (watchdog).
+5. Unplug the FTDI adapter with M8 on: within ~5 s the injector must stop (watchdog).
 6. `M201 P10 Q1` then `M8`:
    `halcmd getp microject.coolant_period.00.float` → ~100
    `halcmd getp microject.coolant_pulse.00.float` → ~1
@@ -289,7 +295,7 @@ Disable Microject without deleting files: comment `HALFILE = coolant.hal`.
 | `microject` pin missing | `coolant.hal` not in `[HAL]`, or `loadusr -Wn` / `HAL_MODULE_NAME` mismatch |
 | Coil pin TRUE, no spray | `FIRST_ELEMENT` 0 vs 1; A/B swapped; 24 V missing; wrong tty |
 | Spray for 5 s then dies | Coil writes not cycling (`MAX_UPDATE_RATE`); extra failed txs blocking the UART |
-| VFD and injector swapped | Two USB adapters, no udev rule |
+| VFD and injector swapped | `SERIAL_PORT` set to `/dev/ttyUSBn` instead of a `by-id` path |
 | Garbage on the VFD after daisy-chain | Injector still 19200 8E1 on the 38400 8N1 bus |
 | Laser UI insane | Coolant analog on E0–E3. Don’t. |
 
@@ -310,7 +316,7 @@ Disable Microject without deleting files: comment `HALFILE = coolant.hal`.
 
 ```
 Microject
-  tty: /dev/ttyUSB0
+  tty: /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0
   19200 8E1  slave 8
   coil 1 enable:  mbpoll … -t 0 -r 1 1
   mb2hal FIRST_ELEMENT for that coil: 0 (try 1 if dead)

@@ -16,7 +16,7 @@ that is where “why doesn’t this match the manual?” usually lives.
 | EtherCAT NIC address | Your `ip a` result ≠ ours |
 | `ethercat-conf.xml` slave order / PDOs | Chain layout and drive firmware |
 | `[JOINT_*] SCALE`, limits, homing | Ball screws, encoders, switch placement |
-| `h100.mb2hal` serial port | `/dev/ttyUSB0` is not universal |
+| `h100.mb2hal` / `microject.mb2hal` serial ports | `/dev/serial/by-id/...` paths are specific to our adapters — `ls -l /dev/serial/by-id/` |
 | `PROGRAM_PREFIX` in `ethercat_mill.ini` | Currently a developer path; point at your NC programs directory |
 | Probe tool number (default T99) | Must match tool table, `#3014`, and HAL — see [TOOLSETTER.md](TOOLSETTER.md) |
 
@@ -93,7 +93,7 @@ Homing and limit wiring live in [`ethercat_mill.hal`](../ethercat_mill.hal), not
 
 - [`h100.mb2hal`](../h100.mb2hal) — register map; set `SERIAL_PORT`
 - [`custom.hal`](../custom.hal) — RPM scaling, at-speed compare + 5 s settle, fault → estop
-- Coolant owns `/dev/ttyUSB0` ([COOLANT.md](COOLANT.md)). `h100.mb2hal` is not loaded; the spindle Modbus path is unwired
+- VFD and coolant each have their own USB-RS485 adapter ([MB2HAL.md](MB2HAL.md) §3)
 
 H100 manual: [`reference/h100 manual.pdf`](reference/h100%20manual.pdf) — register `0x0201` (freq set), `0x000A` (current fault).
 
@@ -145,7 +145,7 @@ ethercat_mill.ini
 │   ├── ethercat_mill.hal      → joints, limits, probe mux, estop
 │   ├── xhc-whb04b-6.hal       → pendant
 │   ├── custom.hal             → VFD Modbus, at-speed, faults
-│   └── coolant.hal            → Microject PWM (owns ttyUSB0; VFD driver not loaded)
+│   └── coolant.hal            → Microject PWM (own FTDI adapter)
 ├── POSTGUI probe_basic/probe_basic_postgui.hal
 ├── probe_basic/custom_config.yml
 ├── probe_basic/subroutines/   → probing, M600, tool change
@@ -167,7 +167,7 @@ ethercat_mill.ini
 2. Edit `ethercat_mill.ini`:
    - `PROGRAM_PREFIX` → your NC programs directory.
 3. Edit `/etc/ethercat.conf` and `ethercat-conf.xml` for your NIC and slaves.
-4. Edit `h100.mb2hal` → `SERIAL_PORT`.
+4. Edit `h100.mb2hal` and `microject.mb2hal` → `SERIAL_PORT` (use `/dev/serial/by-id/...`).
 5. `linuxcnc ethercat_mill.ini` (use `QT_QUICK_BACKEND=software` if Probe Basic fails to render on your GPU).
 6. **Machine On** → if estop loops, check Slave 3 DI1 (software estop NC).
 7. Home X/Y (Z/A behavior depends on bench flags — read [DEVIATIONS.md](DEVIATIONS.md)).
