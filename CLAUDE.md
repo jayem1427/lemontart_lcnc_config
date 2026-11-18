@@ -7,6 +7,12 @@ postmortems are in [docs/CURSOR_HISTORY.md](docs/CURSOR_HISTORY.md). The raw
 transcripts are local only, in `.cursor-history/` (gitignored). Docs index:
 [docs/README.md](docs/README.md).
 
+The docs are one topic per page (SETUP, HARDWARE, CONFIG_TOUR, TOOL_CHANGE,
+SPINDLE, COOLANT, MODBUS, SERVO_TUNING, …). When you change behaviour, update
+the page that owns that topic rather than adding a new doc, and add symptoms
+you hit to `docs/TROUBLESHOOTING.md`. Write for someone copying this setup to
+their own machine: plain language, short sections, real values from the config.
+
 ## Working with Jon
 
 - **Do it, test it, report in one line.** Keep the talk short. If something

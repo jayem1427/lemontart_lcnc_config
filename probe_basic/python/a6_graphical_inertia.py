@@ -20,7 +20,7 @@ The Sigma II two-point analysis (Tp − Tf, α cursors) still runs as a
 cross-check and supplies the Tp/Tf/α-window plot overlays.
 
 C00.06 is written only when quality is ``good``. See
-docs/GRAPHICAL_INERTIA_TUNE.md. Separate from F30.10 and one-click gains.
+docs/INERTIA_TUNING.md. Separate from F30.10 and one-click gains.
 """
 
 from __future__ import annotations

@@ -1,86 +1,62 @@
-# Probe Basic UI customizations
+# Probe Basic UI changes
 
-Stock [Probe Basic](https://github.com/kcjengr/probe_basic) is the shell; this repo adds machine-specific HAL, DRO widgets, and operator shortcuts. For toolsetter / M600 / probe routing, see [TOOLSETTER.md](TOOLSETTER.md).
-
----
-
-## Display configuration (`ethercat_mill.ini`)
-
-| Setting | Value | vs stock PB template |
-|---------|-------|----------------------|
-| `DISPLAY` | `probe_basic` | Same |
-| `DRO_DISPLAY` | `XYZA` | Custom folder below |
-| `GEOMETRY` | `XYZA` | Template often XYZ |
-| `[TRAJ] AXES` | `4` | Needed by `go_to_zero` / `go_to_home` macros |
-| `TOOL_TABLE_COLUMNS` | `TDZR` | Template `TZDR` / `TPDZR` |
-| `ATC_TAB_DISPLAY` | `0` | ATC tab hidden |
-| `MAX_FEED_OVERRIDE` | `2.5` (250%) | Template `2.0` |
-| `CONFIG_FILE` | `probe_basic/custom_config.yml` | Minimal overrides |
-| `USER_DROS_PATH` | `probe_basic/user_dro_display/` | Custom SET Z DRO |
-| `USER_BUTTONS_PATH` | `probe_basic/user_buttons/` | Template placeholder |
-
-Required INI keys for Probe Basic compatibility: [`probe_basic/pb_required_ini_settings.ini`](../probe_basic/pb_required_ini_settings.ini) — compare when merging upgrades.
+[Probe Basic](https://github.com/kcjengr/probe_basic) 0.6.6 is the UI. This
+page covers what's different from a stock install: INI display settings, a
+custom DRO with a **SET Z** shortcut, a tool-change dialog with an **ABORT**
+button, four custom tabs, and a few fixes to Probe Basic's own macros.
 
 ---
 
-## Custom XYZA DRO — SET Z / REF ALL
+## Display settings (`[DISPLAY]` in the INI)
 
-**Files:** [`probe_basic/user_dro_display/xyza_dros/dros_xyza.py`](../probe_basic/user_dro_display/xyza_dros/dros_xyza.py), [`dros_xyza.ui`](../probe_basic/user_dro_display/xyza_dros/dros_xyza.ui)
+| Setting | Value | Why |
+|---------|-------|-----|
+| `DRO_DISPLAY` | `XYZA` | Loads the custom DRO below |
+| `GEOMETRY` | `XYZA` | 4-axis backplot |
+| `TOOL_TABLE_COLUMNS` | `TDZR` | No pocket column. It's a manual mill |
+| `ATC_TAB_DISPLAY` | `0` | Hides the ATC tab. `[ATC] POCKETS = 1` is still set because Probe Basic's macros read it |
+| `MAX_FEED_OVERRIDE` | `2.5` | 250 % instead of 200 % |
+| `USER_TABS_PATH` | `probe_basic/user_tabs/` | Custom tabs |
+| `CONFIG_FILE` | `probe_basic/custom_config.yml` | Swaps in the custom tool-change dialog |
 
-The main DRO panel includes a **SET Z** button (left) and mm entry field (right). This is a Lemontart-specific shortcut not present in upstream Probe Basic.
+`[TRAJ] AXES = 4` is required too. Probe Basic's go-to-zero / go-to-home
+macros read it, and without it those buttons fail.
 
-**REF ALL** always shows the label `REF ALL` (does not flip to `HOMED`). It still runs `machine.home.all` and disables while any joint is homing. Homing order is Z → X → Y → A — see [DEVIATIONS.md](DEVIATIONS.md#ref-all-sequence).
+When upgrading Probe Basic, compare your INI with
+[`probe_basic/pb_required_ini_settings.ini`](../probe_basic/pb_required_ini_settings.ini).
 
-### What it does
-
-Sets the **active work offset Z** so the current tool position equals the value you enter — without running a full probe cycle.
-
-Implementation: MDI `o<set_wco_z> call [<value>]` → [`probe_basic/subroutines/set_wco_z.ngc`](../probe_basic/subroutines/set_wco_z.ngc):
-
-```ngc
-G92.1
-G10 L20 P0 Z#<z_value>
-```
-
-### When to use
-
-| Entry | Meaning |
-|-------|---------|
-| `0` | Current tip is exactly at WCO Z zero |
-| `0.05` | Tip is 0.05 mm **above** zero (e.g. after feeling a 50 µm shim) |
-| `-5` | Tip is 5 mm **below** the WCO plane you want as Z=0 |
-
-Press **Enter** in the field or click **SET Z**. Empty field opens a numeric dialog (default 0).
-
-### Constraints
-
-- Machine must not be estopped; runs in MDI mode.
-- Clears G92 with `G92.1` before `G10 L20` (matches startup intent).
-- Does **not** update tool length (`G43` / tool table) — only WCS offset.
-- For automatic Z from probing, use Probe tab **Z minus WCO** routines instead.
+If Probe Basic doesn't draw properly on your graphics card, start it with
+`QT_QUICK_BACKEND=software` (`launch.sh` already does this).
 
 ---
 
-## Spindle RPM and load (postgui HAL)
+## SET Z on the DRO
 
-[`probe_basic/probe_basic_postgui.hal`](../probe_basic/probe_basic_postgui.hal) wires:
+The XYZA DRO (`probe_basic/user_dro_display/xyza_dros/`) adds a **SET Z**
+button and a number field. It sets the active work offset so the current tool
+tip reads the number you type:
 
-```hal
-net spindle-speed-in => qtpyvcp.spindle-encoder-rpm.in
-net spindle-current => mult2.7.in0
-net spindle-load-percent mult2.7.out => qtpyvcp.spindle-load-indicator.in-f
-```
+| Type | Means |
+|------|-------|
+| `0` | The tip is exactly at work Z zero |
+| `0.05` | The tip is 0.05 mm above zero, e.g. resting on a 50 µm shim |
+| `-5` | The tip is 5 mm below the Z zero you want |
 
-- **RPM** comes from VFD feedback (`custom.hal` → `spindle-speed-in`), not from a sim `scale_to_rpm` block.
-- **Load %** assumes ~4.2 A max motor current (`mult2.7.in1 = 23.81`). Tune if your spindle current scale differs.
+Press Enter or click SET Z. It runs `o<set_wco_z> call [value]`, which does
+`G92.1` then `G10 L20 P0 Z<value>`. It changes only the work offset, never tool
+length.
 
-Stock Probe Basic sim loops `probe-in` through QtPyVCP. This config **leaves that disconnected** so only `ethercat_mill.hal` drives `motion.probe-input`.
+**REF ALL** on this DRO always reads "REF ALL". It doesn't switch to "HOMED".
+
+The `xyzac_dros/` and `xyzbc_dros/` folders are unused alternatives. Only the
+one named by `DRO_DISPLAY` loads.
 
 ---
 
-## Manual tool change dialog (ABORT CYCLE)
+## Tool-change dialog with ABORT
 
-Stock Probe Basic uses the QtPyVCP `ToolChangeDialog`. This repo **replaces** it via [`probe_basic/custom_config.yml`](../probe_basic/custom_config.yml):
+`custom_config.yml` replaces QtPyVCP's tool-change dialog with
+`probe_basic/toolchange_dialog.py`:
 
 ```yaml
 dialogs:
@@ -90,84 +66,78 @@ dialogs:
       ui_file: {{ file.dir }}/toolchange_dialog_pb.ui
 ```
 
-**Files:** [`toolchange_dialog.py`](../probe_basic/toolchange_dialog.py), [`toolchange_dialog_pb.ui`](../probe_basic/toolchange_dialog_pb.ui)
+| | Stock | This config |
+|---|-------|-------------|
+| Continue | OK button | **ONCE TOOL IS LOADED - PRESS TO RESUME** |
+| Cancel | Esc or closing the window | **ABORT** button only. Esc and close are ignored |
+| After ABORT | Unclear state | Program aborted → `G49` → retract → park at the tool-load spot |
 
-### Behavior vs stock
-
-| | Stock PB | This machine |
-|---|----------|--------------|
-| Resume | OK / change button | **ONCE TOOL IS LOADED - PRESS TO RESUME** |
-| Cancel mid-change | Often Esc / window close | **ABORT** button only — Esc and close are **ignored** |
-| After ABORT | Interpreter stuck or ambiguous | `program.abort()` → MDI `o<abort_tool_change> call` → **G49** → G53 Z0 → tool-load XY (270, 100) |
-| After estop during dialog | — | Park skipped (machine disabled); `on_abort.ngc` handles spindle/coolant and **restores G43** if a measured tool is loaded |
-
-HAL contract is unchanged: same `qtpyvcp_manualtoolchange` pins (`change`, `changed`, `number`). Postgui wiring stays stock.
-
-Used by `M6` (manual OK mode), **M6 G43**, and **M600** collet pause in `tool_touch_off.ngc`. Full flow: [TOOLSETTER.md](TOOLSETTER.md#abort--cancel-during-m600).
+It uses the same HAL pins as stock (`qtpyvcp_manualtoolchange`), so nothing
+changes in postgui HAL. Behaviour around it: [TOOL_CHANGE.md](TOOL_CHANGE.md).
 
 ---
 
-## User buttons
+## Postgui HAL
 
-[`probe_basic/user_buttons/template_user_buttons/`](../probe_basic/user_buttons/template_user_buttons/) is the stock template (empty shell). Machine actions live on **Probe Basic built-in tabs** (Tool Setter, Probe, Tool Change) mapped to subroutines in `probe_basic/subroutines/`.
+`probe_basic/probe_basic_postgui.hal` differs from Probe Basic's sim version:
 
-Key mappings (full table in [TOOLSETTER.md](TOOLSETTER.md#probe-basic-ui--which-button-does-what)):
-
-| Control | Subroutine |
-|---------|------------|
-| LOAD SPINDLE | `load_spindle_safety_2.ngc` |
-| TOUCH OFF CURRENT TOOL | `tool_touch_off.ngc` |
-| SET TOOL TOUCH OFF POS | teaches `#5181–#5183` |
-| UPDATE (tool setter) | `tool_setter_param_update.ngc` |
-| UPDATE PROBE PARAMS | `touch_probe_param_update.ngc` |
+| Stock sim | Here |
+|-----------|------|
+| Loops `probe-in` through `qtpyvcp.probe-in` | Not connected: `ethercat_mill.hal` already drives the probe signal, and a second writer won't load |
+| RPM from a simulated encoder | RPM from the VFD (`spindle-speed-in`) |
+| — | Spindle load % from VFD current (`mult2.7`, assumes ~4.2 A full load) |
+| Cycle timer idle from `halui.program.is-idle` | Same signal, via the pendant's `pdnt.program.is-idle` net |
 
 ---
 
-## Other DRO variants in repo
+## Custom tabs
 
-| Folder | Purpose |
-|--------|---------|
-| `xyza_dros/` | **Active** — 4-axis + SET Z |
-| `xyzac_dros/` | Alternate 5-axis-style layout (not selected in INI) |
-| `xyzbc_dros/` | Alternate BC layout (not selected in INI) |
-
-Only the path named by `DRO_DISPLAY` in the INI is loaded.
-
----
-
-## Cycle timer
-
-`time` component in postgui drives Probe Basic run timer widgets. Idle detection uses `pdnt.program.is-idle` (shared net with WHB pendant) inverted to `time.0.start`.
-
----
-
-## Launch note
-
-If Probe Basic fails to render on your GPU driver, launch with
-`QT_QUICK_BACKEND=software linuxcnc ethercat_mill.ini`.
-
----
-
----
-
-## Custom Probe Basic tabs
-
-| Tab | Folder | Doc |
-|-----|--------|-----|
-| Servo Tuning | `probe_basic/user_tabs/servo_tuner/` | [A6_TUNING.md](A6_TUNING.md) |
+| Tab | Folder | Page |
+|-----|--------|------|
+| Servo Tuning | `probe_basic/user_tabs/servo_tuner/` | [SERVO_TUNING.md](SERVO_TUNING.md) |
 | Logging | `probe_basic/user_tabs/signal_monitor/` | [SIGNAL_LOGGING.md](SIGNAL_LOGGING.md) |
 | Laser Setter | `probe_basic/user_tabs/laser_setter/` | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
-| MQL | `probe_basic/user_tabs/mql_control/` | [COOLANT.md](COOLANT.md#mql-tab) |
+| MQL | `probe_basic/user_tabs/mql_control/` | [COOLANT.md](COOLANT.md#the-mql-tab) |
 
-Probe Basic auto-loads every subfolder under `USER_TABS_PATH`. `template_*` folders are upstream scaffolding only.
+`template_main/` and `template_sidebar/` are Probe Basic's empty templates.
+
+**Probe Basic loads every folder in `user_tabs/`**, and crashes at startup if
+a folder doesn't contain `<name>/<name>.py`. That happens after switching git
+branches: a tab that exists on one branch leaves a folder with only
+`__pycache__` behind. Delete those folders.
+
+```bash
+ls probe_basic/user_tabs/*/   # every folder should have its matching .py
+```
+
+To add a tab to another machine, copy its folder into your `USER_TABS_PATH`
+and restart. Each tab's page lists the HAL and files it depends on.
+
+---
+
+## Local fixes to Probe Basic macros
+
+The `probe_basic/subroutines/` folder holds Probe Basic's macros with a few
+machine-specific fixes. Re-apply them if you merge in a newer Probe Basic:
+
+- **Pocket / valley / calibration probe feed.** Several `probe_*.ngc` files
+  passed `[3017]` (a literal 3017 mm/min) instead of `[#3017]` (the traverse
+  feed parameter). Fixed here.
+- **`probe_spindle_nose.ngc`** refuses to run with the touch probe loaded.
+  HAL routes the probe input to the touch probe in that state, so a setter
+  probe would never trip and Z would crash.
+- **`tool_touch_off.ngc`** has many changes. See
+  [TOOL_CHANGE.md](TOOL_CHANGE.md#how-the-length-is-calculated).
 
 ---
 
 ## Upgrading Probe Basic
 
-1. Diff your INI against new `pb_required_ini_settings.ini`.
-2. Preserve: `SUBROUTINE_PATH`, `REMAP=M600`, `TOOL_CHANGE_*`, `ON_ABORT_COMMAND`, custom `USER_DROS_PATH`.
-3. Merge `probe_basic_postgui.hal` carefully — keep spindle and probe deviations above.
-4. Re-run teach steps for toolsetter (`#5181–#5183`, `#3010`) if `linuxcnc.var` is reset.
-
-Upstream docs: [Probe Basic wiki / README](https://github.com/kcjengr/probe_basic).
+1. Compare your INI with the new `pb_required_ini_settings.ini`.
+2. Keep: `SUBROUTINE_PATH`, `REMAP=M600/M201/M202`, `TOOL_CHANGE_*`,
+   `ON_ABORT_COMMAND`, `USER_DROS_PATH`, `USER_TABS_PATH`, `CONFIG_FILE`.
+3. Merge `probe_basic_postgui.hal` by hand. Keep the spindle and probe
+   differences above.
+4. If you take new macros, re-apply the local fixes.
+5. If `linuxcnc.var` got reset, re-teach the setter position (`#5181–#5183`)
+   and spindle zero (`#3010`).

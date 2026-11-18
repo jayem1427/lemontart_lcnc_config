@@ -66,5 +66,5 @@ PY
 
 ## Related
 
-- Same rule noted in `docs/TOOLSETTER.md` for ABORT messages.
+- Same rule noted in `docs/TOOL_CHANGE.md` for ABORT messages.
 - Laser measure macros: `probe_basic/subroutines/laser_*.ngc`

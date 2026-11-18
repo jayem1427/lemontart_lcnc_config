@@ -1,126 +1,51 @@
-# Documentation index
+# Docs
 
-Guides for the Lemontart EtherCAT mill config. This repo is a **working reference**
-assembled from examples — not a polished product. When in doubt, trust upstream
-LinuxCNC and Probe Basic docs; use these pages to see how *this* machine wires
-things together.
+Everything about this mill's config, one topic per page. New here? Read them
+in this order: **SETUP → HARDWARE → CONFIG_TOUR**, then whichever feature
+you're working on.
 
-**Start here:** [GETTING_STARTED.md](GETTING_STARTED.md) (zero → hero) ·
-[DEVIATIONS.md](DEVIATIONS.md) (vs stock LinuxCNC / Probe Basic)
+## Getting started
 
----
+| Page | What's in it |
+|------|--------------|
+| [SETUP.md](SETUP.md) | Installing the software, getting the config, step-by-step bring-up |
+| [HARDWARE.md](HARDWARE.md) | Parts list, wiring, drive inputs, RS-485, E-stop |
+| [CONFIG_TOUR.md](CONFIG_TOUR.md) | How the files fit together, homing, following error, differences from stock |
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Symptoms and their real causes |
 
-## Learning paths
+## Features
 
-### Brand new to LinuxCNC
+| Page | What's in it |
+|------|--------------|
+| [TOOL_CHANGE.md](TOOL_CHANGE.md) | `M600` tool change, tool length, probe routing, Stop behaviour |
+| [CAM.md](CAM.md) | The Fusion 360 post |
+| [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) | Tool diameter with a laser beam sensor |
+| [SPINDLE.md](SPINDLE.md) | H100 VFD over Modbus |
+| [COOLANT.md](COOLANT.md) | Microject MQL coolant, `M201`/`M202`, the MQL tab |
+| [MODBUS.md](MODBUS.md) | mb2hal basics, adapters, bench testing |
+| [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) | UI settings, SET Z, ABORT dialog, custom tabs, macro fixes |
+| [SIGNAL_LOGGING.md](SIGNAL_LOGGING.md) | Logging HAL signals to CSV |
 
-1. [GETTING_STARTED.md](GETTING_STARTED.md) — staged path (sim → EtherCAT → Probe Basic → CAM)
-2. [LinuxCNC documentation](https://linuxcnc.org/docs/html/) — official reference
-3. [Probe Basic](https://github.com/kcjengr/probe_basic) — UI install and concepts
-4. Return here when motion works and you need toolsetter / laser / tuning specifics
+## Servo tuning
 
-### Operator (day-to-day)
+| Page | What's in it |
+|------|--------------|
+| [SERVO_TUNING.md](SERVO_TUNING.md) | Start here: the tab, the three ways to tune, test programs, presets, installing on another machine |
+| [ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md) | How the automatic tuner works and how to read its journal |
+| [INERTIA_TUNING.md](INERTIA_TUNING.md) | Measuring the inertia ratio (work in progress) |
+| [SERVO_TUNING_LLM.md](SERVO_TUNING_LLM.md) | Prompt to give an AI for tuning help |
 
-| Task | Doc |
-|------|-----|
-| Load cutter + probe length | [TOOLSETTER.md](TOOLSETTER.md) |
-| PWM coolant / Microject | [COOLANT.md](COOLANT.md) · [MB2HAL.md](MB2HAL.md) |
-| Cancel mid M600 | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
-| Stop / Abort keeps G43 | [DEVIATIONS.md — Keep G43](DEVIATIONS.md#keep-g43-on-stop) |
-| Set WCO Z after shim touch-off | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) |
-| Measure tool diameter (laser) | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
-| Z repeatability tests | [metrology README](../probe_basic/subroutines/metrology/README.md) |
+## For AI assistants (and the curious)
 
-### Integrator (fork / adapt)
+| Page | What's in it |
+|------|--------------|
+| [../CLAUDE.md](../CLAUDE.md) | Working brief: safety rules, machine facts, open issues |
+| [agent-skills/](agent-skills/) | Checklists for editing HAL and G-code macros without breaking startup |
+| [CURSOR_HISTORY.md](CURSOR_HISTORY.md) | How this config evolved, what failed, what was abandoned |
 
-| Task | Doc |
-|------|-----|
-| Why doesn't this match the manual? | [DEVIATIONS.md](DEVIATIONS.md) |
-| Copy tool-change to another mill | [INSTALL_TOOL_CHANGE.md](INSTALL_TOOL_CHANGE.md) |
-| Copy servo tuning tabs | [INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md) |
-| Fusion post (M600, XYZA, G93) | [TOOLSETTER.md § CAM](TOOLSETTER.md#cam--post-processor-linuxcnc-djrcps) |
+## Reference material
 
-### Servo tuning
-
-| Workflow | Doc |
-|----------|-----|
-| Manual zone ladder | [SERVO_TUNING.md](SERVO_TUNING.md) |
-| Clipboard → LLM | [SEMI_AUTO_TUNING.md](SEMI_AUTO_TUNING.md) · [SERVO_TUNING_LLM.md](SERVO_TUNING_LLM.md) |
-| One-click per axis | [ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md) |
-| Inertia panel (WIP) | [GRAPHICAL_INERTIA_TUNE.md](GRAPHICAL_INERTIA_TUNE.md) |
-| SDO map / APPLY path | [A6_TUNING.md](A6_TUNING.md) |
-| Example tuning G-code | [TUNING_PROGRAMS.md](TUNING_PROGRAMS.md) |
-| Signal logging | [SIGNAL_LOGGING.md](SIGNAL_LOGGING.md) |
-
----
-
-## Custom Probe Basic tabs
-
-Probe Basic loads **every** folder under `probe_basic/user_tabs/`. This machine ships:
-
-| Tab folder | Purpose | Doc |
-|------------|---------|-----|
-| `servo_tuner/` | A6 SDO read/write, FERR plot, semi-auto + one-click tune | [A6_TUNING.md](A6_TUNING.md) |
-| `signal_monitor/` | Multi-channel HAL CSV logging + live plots | [SIGNAL_LOGGING.md](SIGNAL_LOGGING.md) |
-| `laser_setter/` | Kexin DS-5V-M diameter / beam cal UI | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
-| `template_*` | Upstream QtPyVCP scaffolding (safe to ignore) | — |
-
-After switching git branches, delete leftover tab folders that lack a matching
-`{name}/{name}.py` — see [README § branch switching](../README.md#dev-notes-switching-feature-branches).
-
----
-
-## Config file map
-
-| Path | Role |
-|------|------|
-| `ethercat_mill.ini` | Main INI |
-| `ethercat_loadusr.hal` | `lcec_conf` once (TWOPASS-safe) |
-| `ethercat_mill.hal` | Joints, CiA 402, limits/home debounce, shared Y/Z home, probe mux |
-| `ethercat-conf.xml` | EtherCAT slaves + fault-window SDOs |
-| `xhc-whb04b-6.hal` | Pendant MPG (axis + joint jog) |
-| `custom.hal` | H100 VFD over `mb2hal` (own CH340 adapter): scale, at-speed, fault chain |
-| `coolant.hal` / `microject.mb2hal` | Microject PWM coolant (own FTDI adapter) |
-| `probe_basic/` | UI, macros, tool table, custom tabs |
-| `post-processor/linuxcnc-djr.cps` | Fusion post |
-| `docs/reference/` | Vendor PDFs / worksheets (H100, Sigma II calculator) |
-
----
-
-## External sources we leaned on
-
-| Source | What we borrowed |
-|--------|------------------|
-| [TooTall18T/tool_length_probe](https://github.com/TooTall18T/tool_length_probe) | M600 flow, `tool_touch_off.ngc`, setter teach |
-| [kcjengr/probe_basic](https://github.com/kcjengr/probe_basic) | UI shell, probe routines |
-| [linuxcnc-ethercat](https://github.com/linuxcnc-ethercat/linuxcnc-ethercat) | `lcec` + CiA 402 patterns |
-| [kalico sota-motion](https://github.com/dderg/kalico/tree/sota-motion) | SDO-based servo tuning approach |
-| [LinuxCNC docs](https://linuxcnc.org/docs/html/) | INI/HAL/remap reference |
-
-We do not claim these integrations are the only correct approach.
-
----
-
-## All guides (alphabetical)
-
-| Doc | Covers |
-|-----|--------|
-| [A6_TUNING.md](A6_TUNING.md) | A6 SDO map, Servo Tuning tab, 6065/6066 windows |
-| [COOLANT.md](COOLANT.md) | Microject PWM coolant, M201/M202, shared UART test |
-| [DEVIATIONS.md](DEVIATIONS.md) | Differences vs stock LinuxCNC / Probe Basic |
-| [GETTING_STARTED.md](GETTING_STARTED.md) | Zero-to-hero bring-up path |
-| [GRAPHICAL_INERTIA_TUNE.md](GRAPHICAL_INERTIA_TUNE.md) | Inertia identification panel (WIP) |
-| [INSTALL_SERVO_TUNING.md](INSTALL_SERVO_TUNING.md) | Drop tuning tabs onto another mill |
-| [INSTALL_TOOL_CHANGE.md](INSTALL_TOOL_CHANGE.md) | Copy M600 toolsetter integration |
-| [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) | Laser diameter, wiring, HAL mux |
-| [MB2HAL.md](MB2HAL.md) | First-time mb2hal / Microject serial setup |
-| [ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md) | Automated per-axis gain ladder |
-| [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) | SET Z DRO, abort dialog, postgui HAL |
-| [PYTHON_PACKAGES.md](PYTHON_PACKAGES.md) | Optional Python deps for plots / FFT |
-| [SEMI_AUTO_TUNING.md](SEMI_AUTO_TUNING.md) | Clipboard → LLM tuning loop |
-| [SEMI_AUTO_TUNING_SCOPE.md](SEMI_AUTO_TUNING_SCOPE.md) | Semi-auto design notes |
-| [SERVO_TUNING.md](SERVO_TUNING.md) | Manual gain zone ladder |
-| [SERVO_TUNING_LLM.md](SERVO_TUNING_LLM.md) | LLM tuning playbook |
-| [SIGNAL_LOGGING.md](SIGNAL_LOGGING.md) | Logging tab, `signals.json` |
-| [TOOLSETTER.md](TOOLSETTER.md) | M600, touch probe routing, Fusion post |
-| [TUNING_PROGRAMS.md](TUNING_PROGRAMS.md) | Example frozen tuning / test G-code |
+- [reference/h100 manual.pdf](reference/h100%20manual.pdf): H100 VFD manual (Modbus registers, fault codes)
+- [reference/Sigma II Parameter Calculator Rev 2.42.xls](reference/): Yaskawa worksheet used to cross-check inertia
+- [../probe_basic/subroutines/metrology/README.md](../probe_basic/subroutines/metrology/README.md): Z repeatability test macros
+- Upstream: [LinuxCNC docs](https://linuxcnc.org/docs/html/) · [Probe Basic](https://github.com/kcjengr/probe_basic) · [linuxcnc-ethercat](https://github.com/linuxcnc-ethercat/linuxcnc-ethercat) · [mb2hal](https://linuxcnc.org/docs/html/drivers/mb2hal.html)

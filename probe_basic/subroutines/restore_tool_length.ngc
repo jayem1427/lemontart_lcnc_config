@@ -6,7 +6,7 @@ o<restore_tool_length> sub
 ; Cannot be called from RS274NGC_STARTUP_CODE — O-words are illegal there
 ; ("Bad character 'o' used on startup").
 ; Revert: stop calling this from on_abort.ngc; put G49 back after G40.
-; See docs/DEVIATIONS.md "Keep G43 on Stop".
+; See docs/TOOL_CHANGE.md "Keep G43 on Stop".
 
 o<10> if [#5400 GT 0]
   o<20> if [#5403 GT 0]

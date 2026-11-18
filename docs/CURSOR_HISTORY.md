@@ -56,7 +56,7 @@ Full transcripts are local only in `.cursor-history/` (gitignored; secrets redac
 
 ### July 2026: toolsetter, tuning tabs, logging
 - **Contact toolsetter**: TooTall18T `tool_touch_off.ngc` + `REMAP=M600`
-  (M6 not remapped), `TOOL_CHANGE_AT_G30=0`, `[ATC] POCKETS=1`, `TOOLSETTER.md`.
+  (M6 not remapped), `TOOL_CHANGE_AT_G30=0`, `[ATC] POCKETS=1`, `TOOLSETTER.md` (now `TOOL_CHANGE.md`).
   Bugs fixed: an inline `;` on the REMAP line, nested comments, `M61` not setting
   `_selected_tool`, negative tool length (ABS bug), a feed hold that never cleared (`M50`).
   Merged via PR #9.

@@ -1264,7 +1264,7 @@ class UserTab(QWidget):
         """ONE-CLICK on the left, CLIPBOARD copies pushed to the right.
 
         One ribbon instead of two so FERR + parameters get the vertical space
-        back. See docs/ONE_CLICK_TUNING.md / docs/SEMI_AUTO_TUNING.md.
+        back. See docs/ONE_CLICK_TUNING.md / docs/SERVO_TUNING.md.
         """
         bar = QFrame(self)
         bar.setObjectName("presetsBar")

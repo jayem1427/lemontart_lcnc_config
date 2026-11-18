@@ -12,7 +12,7 @@ G40
 ; G49 stays here on purpose. Dialog abort is mid-M600: the cutter in the
 ; collet may not match H anymore. Global Stop does not use this file —
 ; it keeps G43 via on_abort -> restore_tool_length. Revert of Stop/G43
-; policy: docs/DEVIATIONS.md "Keep G43 on Stop".
+; policy: docs/TOOL_CHANGE.md "Keep G43 on Stop".
 G49
 
 G53 G0 Z0

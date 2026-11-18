@@ -1,164 +1,136 @@
-# PWM coolant (Microject)
+# MQL coolant (Microject)
 
-Dan Mills **Microject** injector driver: an automotive fuel injector pulsed as
-an MQL valve. Fusion still emits stock **M7 / M8 / M9**.
+Coolant on this mill is minimum-quantity lubrication: an automotive fuel
+injector pulsed by Dan Mills' **Microject** controller. LinuxCNC controls it
+over Modbus. You set how often it pulses (Hz) and what fraction of each pulse
+the valve is open (duty %). M7/M8/M9 turn it on and off as usual, so CAM output
+needs no changes.
 
-**Never configured mb2hal?** **[MB2HAL.md](MB2HAL.md)**. This page is the mill map.
-
-This is **not** Probe Basic’s programmable nozzle aimer (`program_coolant.ngc`).
-Leave `#3000 = 0`.
-
----
-
-## What is live
-
-| Piece | Value |
-|-------|--------|
-| Serial | 19200 **8E1**, slave **8** (DIP switches can change this) |
-| Enable | **Coil N** for injector port N. Default **port 1 → coil 1** |
-| Pulse length | Holding register **2N−1** (port 1 → **H1**). Units treated as **ms** |
-| Period | Holding register **2N** (port 1 → **H2**). Units treated as **ms** |
-| Firmware default | 1 ms on / 100 ms period if you never write Hregs |
-| Watchdog | Coil OFF **5 s** after the last valid Modbus message |
-| Reads | Opto inputs + analog readable; not wired in HAL yet |
-| UART | Own **FTDI** adapter (`/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0`). The H100 VFD (38400 8N1) is on a separate CH340 adapter |
-
-Port map (Dan, testers chat — Richie on port 4 after swapping wires):
-
-| Port | Coil | Pulse Hreg | Period Hreg | Local pot/switch |
-|------|------|------------|-------------|------------------|
-| 1 | 1 | 1 | 2 | yes |
-| 2 | 2 | 3 | 4 | yes |
-| 3 | 3 | 5 | 6 | no |
-| 4 | 4 | 7 | 8 | no |
-
-Modbus works on every port. Pot/switch mode is channels 1–2 only. This config
-is **port 1**. If the injector is on port 4, change `FIRST_ELEMENT` in
-[`microject.mb2hal`](../microject.mb2hal) to coil=3, pulse=6, period=7
-(0-based).
+New to Modbus in LinuxCNC? Read [MODBUS.md](MODBUS.md) first.
 
 ---
 
-## Pipeline
+## Using it
+
+| G-code | Does |
+|--------|------|
+| `M201 P<Hz> Q<duty%>` | Set pulse rate (1–50 Hz) and duty (0–100 %) |
+| `M202` | Load the current tool's recipe from `probe_basic/coolant_tools.ini`, then same as M201 |
+| `M7` or `M8` | Injector on |
+| `M9` | Injector off. Aborts also issue M9 |
 
 ```
-M201 P<Hz> Q<duty%>     (or M202 from coolant_tools.ini)
-        │
-        ▼
- analog E4 / E5
-        │
-        ▼
- coolant.hal
-   period_ms = 1000 / Hz
-   pulse_ms  = period_ms * duty / 100
-        │
-        ├─ microject.coolant_period.00.float  → Hreg 2
-        └─ microject.coolant_pulse.00.float   → Hreg 1  (0 when M9)
-
-M8 / M7  →  microject.coolant_run.00.bit  → coil 1
-M9       →  coil 0  and  pulse 0
-```
-
-Microject has its own adapter; the spindle (`h100.mb2hal`) runs on a second
-one, so M3 and M8 work at the same time. See [MB2HAL.md §3](MB2HAL.md).
-
-`M201 P10 Q1` → 100 ms period, 1 ms pulse (firmware default). This is an
-**injector pulse**, not 20 kHz servo PWM.
-
----
-
-## G-code
-
-| Code | Role |
-|------|------|
-| **M201 P Q** | Hz and duty % → period/pulse ms on the wire |
-| **M202** | Load `probe_basic/coolant_tools.ini` for the current tool, then same as M201 |
-| **M8 / M7** | Coil 1 ON |
-| **M9** | Coil 1 OFF, pulse length 0. Abort already issues M9 |
-
-```
-M202
+T3 M600
+M202        (use T3's recipe)
 M8
 ...
 M9
 ```
 
----
+`M201 P10 Q1` gives a 100 ms period with a 1 ms pulse, the controller's
+default. These are custom M-codes in the 200s because LinuxCNC can't remap
+M100–M199 (they're reserved for user M-files).
 
-## MQL tab
+### Per-tool recipes
 
-Probe Basic tab **MQL** (`probe_basic/user_tabs/mql_control/`) is a front end
-for the same M201 words.
+`probe_basic/coolant_tools.ini` holds a `[T<n>]` section per tool with its Hz
+and duty. Tools without a section use `[COOLANT]DEFAULT_FREQ` /
+`DEFAULT_DUTY` from the INI (10 Hz, 1 %). M202 re-reads the file every time,
+so edits take effect without a restart.
+
+### The MQL tab
+
+Probe Basic's **MQL** tab is a front end for the same commands:
 
 | Control | Does |
 |---------|------|
-| P slider | Pulse rate 1–50 Hz (same clamp as `limit1.4`), 0.5 Hz steps |
-| Q slider | Duty 0–100 %, 0.1 % steps. Squared travel: half the slider is 0–25 % |
-| Pulse train | Valve timeline for the first 500 ms, to scale. Blue while M7/M8 is on |
-| APPLY | MDI `M201 P Q`. Outlined amber when the screen differs from E4/E5 |
-| LIVE | Sends M201 automatically ~0.3 s after a slider release or ± tap |
-| M8 SPRAY ON | Sends the on-screen M201, then M8 |
-| REVERT | Reloads what the machine is using (E4/E5) |
-| Presets | Named P/Q pairs in `probe_basic/mql_presets.json` |
-| Tool recipe | LOAD / SAVE TO TOOL edits `[T<n>]` in `coolant_tools.ini` (comments kept). M202 re-reads it every call |
+| P slider | Pulse rate 1–50 Hz in 0.5 Hz steps |
+| Q slider | Duty 0–100 % in 0.1 % steps. The first half of the slider covers 0–25 %, where MQL actually runs |
+| Pulse preview | Draws the valve timing for the first 500 ms to scale. Blue while spraying |
+| APPLY | Sends `M201 P… Q…`. Outlined amber when the screen doesn't match the machine |
+| LIVE | Sends M201 automatically about 0.3 s after you let go of a slider |
+| REVERT | Reloads what the machine is using now |
+| M8 SPRAY ON / M9 OFF | Sends the on-screen M201 and then M8, or M9 |
+| Presets | Named Hz/duty pairs, saved in `probe_basic/mql_presets.json` |
+| Tool recipe | LOAD / SAVE TO TOOL reads and writes `[T<n>]` in `coolant_tools.ini`, keeping your comments |
 
-MDI is blocked while a program runs; put M201/M202 in the G-code instead.
-The pulse-length tile turns amber under 1 ms (the firmware default) as a
-hint that the injector may not fully open.
-
----
-
-## Analog channels
-
-`num_aio=7`. Laser owns E0–E3.
-
-| E | Pin | Meaning |
-|---|-----|---------|
-| 4 | `motion.analog-out-04` | Pulse rate (Hz), clamped 1–50 in HAL |
-| 5 | `motion.analog-out-05` | Duty (%) |
-| 6 | `motion.analog-out-06` | Pressure — **not sent** (no register yet) |
-
-If Hregs are 0.1 ms counts, set `[COOLANT]PULSE_SCALE` / `PERIOD_SCALE` to 10.
+The buttons are disabled while a program runs (put M201/M202 in the G-code
+instead) and when the machine is off. The pulse-length readout turns amber
+under 1 ms as a hint that the injector may not fully open.
 
 ---
 
-## Bench (no LinuxCNC)
+## How it works
+
+```
+M201 P Q  ──►  analog outputs E4 (Hz), E5 (duty %)
+                         │
+                   coolant.hal
+                   clamp Hz to 1–50
+                   period_ms = 1000 / Hz
+                   pulse_ms  = period_ms × duty / 100   (forced to 0 when off)
+                         │
+                         ├─► microject.coolant_period.00.float ─► holding register 2
+                         └─► microject.coolant_pulse.00.float  ─► holding register 1
+
+M7 / M8  ──►  flood OR mist (or2.5)  ──►  microject.coolant_run.00.bit  ──►  coil 1
+```
+
+Analog outputs E0–E3 belong to the laser setter. E6 (pressure) is stored but
+not sent anywhere yet.
+
+## The Microject controller
+
+| Setting | Value |
+|---------|-------|
+| Adapter | FTDI USB-RS485, `/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0` |
+| Serial | 19200 8E1 (DIP switches can change this) |
+| Slave ID | 8 |
+| Power | 24 V to the board. The injector here is a GM0521994 12 V coil, which the board drives |
+| Default if never configured | 1 ms pulse every 100 ms |
+| Watchdog | Turns the injector off 5 s after the last valid Modbus message. mb2hal rewrites the coil twice a second to keep it alive |
+
+Each of the four injector ports N has its own coil and two holding registers:
+
+| Port | Coil | Pulse register | Period register | Local pot/switch |
+|------|------|----------------|-----------------|------------------|
+| 1 (used here) | 1 | 1 | 2 | yes |
+| 2 | 2 | 3 | 4 | yes |
+| 3 | 3 | 5 | 6 | no |
+| 4 | 4 | 7 | 8 | no |
+
+The numbers above are 1-based, as the Microject docs and `mbpoll` count.
+`microject.mb2hal` uses 0-based addresses, so port 1 is coil 0, pulse 0,
+period 1. To use port 4, change them to 3 / 6 / 7.
+
+Registers are treated as milliseconds. If yours turn out to be 0.1 ms units,
+set `[COOLANT]PULSE_SCALE` and `PERIOD_SCALE` to 10 in the INI.
+
+## Checking it
+
+With LinuxCNC running: `M201 P10 Q1`, then `M8`.
 
 ```bash
-# coil 1 on
-mbpoll /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0 -v -m rtu -a 8 -b 19200 -P even -t 0 -r 1 1
-# pulse 1 ms, period 100 ms (port 1)
-mbpoll /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0 -v -m rtu -a 8 -b 19200 -P even -t 4 -r 1 1
-mbpoll /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02XIBV-if00-port0 -v -m rtu -a 8 -b 19200 -P even -t 4 -r 2 100
+halcmd getp microject.coolant_run.00.bit       # TRUE
+halcmd getp microject.coolant_period.00.float  # ~100
+halcmd getp microject.coolant_pulse.00.float   # ~1
 ```
 
-Windows (free): QModMaster, OpenModScan, Modbus Tester. `modbuslens` does
-diagnostics `mbpoll` does not.
+`M9` sets the run bit FALSE and the pulse to 0. To test the watchdog, unplug
+the FTDI adapter while it's spraying: the injector must stop within about 5 s.
 
-LinuxCNC: `M8` then `halcmd getp microject.coolant_run.00.bit` and
-`microject.coolant_pulse.00.float` / `coolant_period.00.float`.
-
----
-
-## Wiring
-
-```
-PC
- ├─ CH340 USB–RS-485   38400 8N1   H100 VFD slave 1
- └─ FTDI USB–RS-485    19200 8E1   Microject slave 8
-```
-
-24 V to the PCB. Injector on **port 1** (GM0521994 is a 12 V coil; the board
-drives it). Both `.mb2hal` files use `/dev/serial/by-id/` paths so the two
-adapters can't swap when tty numbers change across reboots.
-
----
+Without LinuxCNC (stop it first), see [MODBUS.md](MODBUS.md#bench-testing).
 
 ## Files
 
-| Path | Role |
+| File | Role |
 |------|------|
-| `microject.mb2hal` | Coil 1 + H1 pulse + H2 period |
-| `coolant.hal` | Hz/duty → ms, flood/mist → coil |
-| `h100.mb2hal` | VFD only |
-| `probe_basic/coolant_tools.ini` | Per-tool Hz/duty (default 10 Hz / 1 %) |
+| `microject.mb2hal` | Coil + pulse + period transactions |
+| `coolant.hal` | Hz/duty → ms, M7/M8 → coil |
+| `probe_basic/subroutines/m201.ngc` | The `M201` remap |
+| `probe_basic/python/coolant_remap.py`, `coolant_profiles.py` | The `M202` remap, and the recipe file reader/writer |
+| `probe_basic/coolant_tools.ini` | Per-tool recipes |
+| `probe_basic/user_tabs/mql_control/` | MQL tab |
+
+This isn't Probe Basic's programmable coolant nozzle feature
+(`program_coolant.ngc`). Leave `#3000 = 0`.
