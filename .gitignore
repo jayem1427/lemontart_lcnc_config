@@ -66,3 +66,6 @@ logs/tuning/ui_smoke/
 # Laser setter per-hit CSVs (keep directory)
 logs/laser_hits/**/*.csv
 !logs/laser_hits/.gitkeep
+
+# Cursor chat export (local only; distilled in docs/CURSOR_HISTORY.md)
+.cursor-history/
