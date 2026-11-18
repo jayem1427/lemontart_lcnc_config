@@ -6,19 +6,19 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1200</width>
-    <height>700</height>
+    <width>1645</width>
+    <height>619</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>MQL</string>
   </property>
   <layout class="QVBoxLayout" name="rootLayout">
-   <property name="spacing"><number>10</number></property>
-   <property name="leftMargin"><number>10</number></property>
-   <property name="topMargin"><number>10</number></property>
-   <property name="rightMargin"><number>10</number></property>
-   <property name="bottomMargin"><number>10</number></property>
+   <property name="spacing"><number>8</number></property>
+   <property name="leftMargin"><number>8</number></property>
+   <property name="topMargin"><number>8</number></property>
+   <property name="rightMargin"><number>8</number></property>
+   <property name="bottomMargin"><number>8</number></property>
   </layout>
  </widget>
  <resources/>

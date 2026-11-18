@@ -155,12 +155,12 @@ class SetpointControl(QFrame):
         self.spin.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.spin.setKeyboardTracking(False)
         self.spin.setMinimumWidth(168)
-        self.spin.setFixedHeight(62)
+        self.spin.setFixedHeight(50)
         self.spin.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         line_edit = self.spin.lineEdit()
         if line_edit is not None:
             line_edit.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            line_edit.setMinimumHeight(48)
+            line_edit.setMinimumHeight(40)
 
         unit_lbl = QLabel(unit)
         unit_lbl.setObjectName("setpointUnit")
@@ -180,7 +180,7 @@ class SetpointControl(QFrame):
             btn.setAutoRepeat(True)
             btn.setAutoRepeatDelay(400)
             btn.setAutoRepeatInterval(80)
-            btn.setFixedSize(52, 48)
+            btn.setFixedSize(52, 44)
             btn.setFocusPolicy(Qt.NoFocus)
 
         self.slider = QSlider(Qt.Horizontal)
@@ -212,8 +212,8 @@ class SetpointControl(QFrame):
         scale_row.addWidget(hi_lbl)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 10)
-        layout.setSpacing(6)
+        layout.setContentsMargins(14, 8, 14, 6)
+        layout.setSpacing(2)
         layout.addLayout(header)
         layout.addLayout(slider_row)
         layout.addLayout(scale_row)
@@ -285,7 +285,7 @@ class PulsePreview(QWidget):
     def __init__(self, parent=None):
         super(PulsePreview, self).__init__(parent)
         self.setObjectName("pulsePreview")
-        self.setMinimumHeight(120)
+        self.setMinimumHeight(64)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._freq = 10.0
         self._duty = 1.0
@@ -448,8 +448,8 @@ class UserTab(QWidget):
         frame.setObjectName(name)
         frame.setAttribute(Qt.WA_StyledBackground, True)
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(16, 12, 16, 14)
-        layout.setSpacing(8)
+        layout.setContentsMargins(14, 8, 14, 10)
+        layout.setSpacing(6)
         if title:
             lbl = QLabel(title)
             lbl.setObjectName("cardTitle")
@@ -461,7 +461,7 @@ class UserTab(QWidget):
         tile.setObjectName("statTile")
         tile.setAttribute(Qt.WA_StyledBackground, True)
         box = QVBoxLayout(tile)
-        box.setContentsMargins(10, 6, 10, 6)
+        box.setContentsMargins(10, 3, 10, 3)
         box.setSpacing(0)
         value = QLabel("-")
         value.setObjectName("statValue")
@@ -488,9 +488,14 @@ class UserTab(QWidget):
         self.lbl_active.setObjectName("pill")
         self.lbl_spray = QLabel()
         self.lbl_spray.setObjectName("pill")
+        # Status line lives in the header so the tab fits Probe Basic's 619 px tab area.
+        self.lbl_message = QLabel()
+        self.lbl_message.setObjectName("lblMessage")
+        self.lbl_message.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.lbl_message.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         hbox.addWidget(title)
         hbox.addWidget(subtitle)
-        hbox.addStretch(1)
+        hbox.addWidget(self.lbl_message, 1)
         hbox.addWidget(self.lbl_active)
         hbox.addWidget(self.lbl_spray)
         root.addWidget(header)
@@ -626,9 +631,6 @@ class UserTab(QWidget):
         tool_box.addLayout(tool_btns)
         right.addWidget(tool_card, 0)
 
-        self.lbl_message = QLabel()
-        self.lbl_message.setObjectName("lblMessage")
-        root.addWidget(self.lbl_message)
 
         self.btn_apply.clicked.connect(self._apply)
         self.btn_revert.clicked.connect(self._load_active_into_controls)
@@ -992,5 +994,6 @@ class UserTab(QWidget):
     def _message(self, text, state="info"):
         LOG.info("mql: %s", text)
         self.lbl_message.setText(text)
+        self.lbl_message.setToolTip(text)
         self.lbl_message.setProperty("state", state)
         _repolish(self.lbl_message)
