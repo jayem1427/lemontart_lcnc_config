@@ -1,0 +1,103 @@
+{
+  "score_formula": "peak_abs + 2.0 * rms",
+  "improvement_min_pct": 3.0,
+  "example_session": {
+    "X": {
+      "peak": 0.0412,
+      "rms": 0.023941073493057907,
+      "score": 0.08908214698611581,
+      "n_samples": 16,
+      "fs_hz": 50.0,
+      "gate": "FAIL",
+      "why": "short buffer (16)"
+    },
+    "Y": {
+      "peak": 0.0335,
+      "rms": 0.018895022492709555,
+      "score": 0.0712900449854191,
+      "n_samples": 16,
+      "fs_hz": 50.0,
+      "gate": "FAIL",
+      "why": "short buffer (16)"
+    },
+    "Z": {
+      "peak": 0.0198,
+      "rms": 0.011386868807973507,
+      "score": 0.042573737615947016,
+      "n_samples": 16,
+      "fs_hz": 50.0,
+      "gate": "FAIL",
+      "why": "short buffer (16)"
+    },
+    "A": {
+      "peak": 2.48,
+      "rms": 1.3403302997768871,
+      "score": 5.160660599553774,
+      "n_samples": 16,
+      "fs_hz": 50.0,
+      "gate": "FAIL",
+      "why": "short buffer (16)"
+    }
+  },
+  "sim_cases": [
+    {
+      "label": "1 \u00b7 soft baseline",
+      "peak": 0.04401026772360654,
+      "rms": 0.024424878627294106,
+      "score": 0.09286002497819476,
+      "gate_min_hz": 25.0,
+      "unstable": false,
+      "why": "",
+      "hf": 8.818802935919946e-05,
+      "ring": 0.01495886707457487,
+      "gains": {
+        "speed_gain_hz": 40.0,
+        "pos_gain_rad_s": 55.0,
+        "integral_ms": 12.0
+      }
+    },
+    {
+      "label": "2 \u00b7 climbed gains (stable)",
+      "peak": 0.010491591708557338,
+      "rms": 0.005393706805325773,
+      "score": 0.021279005319208885,
+      "gate_min_hz": 25.0,
+      "unstable": false,
+      "why": "",
+      "hf": 0.0018861465230364065,
+      "ring": 0.06466618866453051,
+      "gains": {
+        "speed_gain_hz": 88.0,
+        "pos_gain_rad_s": 176.0,
+        "integral_ms": 5.0
+      }
+    },
+    {
+      "label": "3 \u00b7 over-gain (rings)",
+      "peak": 0.017698847163471945,
+      "rms": 0.007837072775131584,
+      "score": 0.03337299271373512,
+      "gate_min_hz": 25.0,
+      "unstable": true,
+      "why": "resonance peak 180.0 Hz (mag 0.009232, x1470.2 floor, amp floor 0.001); HF energy 69%; ring score 0.89",
+      "hf": 0.6905829944282175,
+      "ring": 0.8936922870257302,
+      "gains": {
+        "speed_gain_hz": 120.0,
+        "pos_gain_rad_s": 200.0,
+        "integral_ms": 5.0
+      }
+    }
+  ],
+  "hardware_presets": {
+    "X": "config/tuning/presets/X/one_click_best_20260712.json",
+    "Y": "config/tuning/presets/Y/one_click_best_20260712.json"
+  },
+  "figures": [
+    "01_score_formula_example_session.png",
+    "02_fft_gate_baseline_best_ring.png",
+    "03_ladder_accept_reject.png",
+    "04_short_stroke_gate_lesson.png",
+    "05_sim_campaign_score_trail.png"
+  ]
+}

@@ -34,6 +34,7 @@ you're working on.
 | [ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md) | How the automatic tuner works and how to read its journal |
 | [INERTIA_TUNING.md](INERTIA_TUNING.md) | Measuring the inertia ratio (work in progress) |
 | [SERVO_TUNING_LLM.md](SERVO_TUNING_LLM.md) | Prompt to give an AI for tuning help |
+| [SERVO_SWAP.md](SERVO_SWAP.md) | Using a different servo drive (e.g. Leadshine EL8-EC): what's A6-specific and what to replace |
 
 ## For AI assistants (and the curious)
 
@@ -42,6 +43,7 @@ you're working on.
 | [../CLAUDE.md](../CLAUDE.md) | Working brief: safety rules, machine facts, open issues |
 | [agent-skills/](agent-skills/) | Checklists for editing HAL and G-code macros without breaking startup |
 | [CURSOR_HISTORY.md](CURSOR_HISTORY.md) | How this config evolved, what failed, what was abandoned |
+| [../agent/README.md](../agent/README.md) | Agent pack: skills + docs bundle, rebuilt with `scripts/build_agent_release.py` |
 
 ## Reference material
 

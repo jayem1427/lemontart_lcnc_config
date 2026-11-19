@@ -98,6 +98,9 @@ written so they can be handed to one. Some useful starting points:
   suggests something I already abandoned.
 - [docs/SERVO_TUNING_LLM.md](docs/SERVO_TUNING_LLM.md) is a prompt for
   AI-assisted servo tuning.
+- [agent/README.md](agent/README.md) describes a self-contained "agent pack"
+  (two skills plus a copy of these docs, built into `release/lemontart-agent/`)
+  for assistants that can read files but can't see this repo.
 
 Give it several of the config files at once. They reference each other heavily,
 and most mistakes come from editing one without the others.

@@ -12,6 +12,11 @@ StepperOnline software or USB cable needed. It supports three ways of tuning:
 
 The approach is based on [kalico sota-motion](https://github.com/dderg/kalico/tree/sota-motion).
 
+Everything here is specific to **StepperOnline A6** drives: parameter numbers,
+presets, the one-click ladder. On a different drive family, read
+[SERVO_SWAP.md](SERVO_SWAP.md) first and don't point these parameter numbers at
+it.
+
 ---
 
 ## Three rules
