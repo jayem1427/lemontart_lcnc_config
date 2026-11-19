@@ -69,3 +69,8 @@ logs/laser_hits/**/*.csv
 
 # Cursor chat export (local only; distilled in docs/CURSOR_HISTORY.md)
 .cursor-history/
+
+# Metrology sessions (probe repeatability, surface maps) are kept
+!logs/metrology/
+!logs/metrology/**/
+!logs/metrology/**/*.csv
