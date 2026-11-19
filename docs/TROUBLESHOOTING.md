@@ -65,6 +65,7 @@ errors.
 | Probe input stuck on | An unplugged NC probe floats high |
 | PROBE SPINDLE NOSE crashes Z | The touch probe was loaded. The macro now refuses to run in that state |
 | M600 never probes | Setter position (`#5181–#5183`) or spindle zero (`#3010`) not taught |
+| "Spindle zero not configured" and every probe/laser setting reads 0 | `linuxcnc.var` got zeroed (seen after an unclean shutdown). Close LinuxCNC first (it rewrites the file on exit), then restore it from git: `git log -- linuxcnc.var` to find a good commit, `git show <commit>:linuxcnc.var > linuxcnc.var`. Check `git diff linuxcnc.var` before committing it |
 | M600 doesn't stop at the setter | Correct: it stops at the tool-load spot (G53 X270 Y100), then moves to the setter |
 | M600 runs but never shows the dialog | The same tool is already loaded with a known length. That's the skip, working as intended |
 | Work Z jumps after Stop | Something issued `G49`. This config keeps `G43` on Stop. See [TOOL_CHANGE.md](TOOL_CHANGE.md#keep-g43-on-stop) |
