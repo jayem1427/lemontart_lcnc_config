@@ -72,7 +72,7 @@ their own machine: plain language, short sections, real values from the config.
 | Item | Value |
 |---|---|
 | Config repo | `/home/jon/linuxcnc/configs/ethercat_mill` → GitHub `jayem1427/lemontart_lcnc_config` (older Cursor paths say `~/Desktop/ethercat_mill`) |
-| Branches | `main`, `dev` (integration), `dev-jerk-testing` (**current**, holds tpnext + rewire + Microject), `dev-no-limit-switches` (local WIP snapshot). Old work is in `archive/*` tags |
+| Branches | `main` and `dev-jerk-testing` were consolidated on 2026-11-18 (same commit; both carry the tpnext INI). Work on `dev-jerk-testing`. `dev` was deleted (fully merged). `dev-no-limit-switches` is a local WIP snapshot. Old work is in `archive/*` tags |
 | LinuxCNC | stock apt **2.9.8** (`launch.sh`, Desktop "Launch_Mill") **and** experimental **tpnext-ma** run-in-place build at `~/src/linuxcnc-tpnext` (`launch-tpnext.sh`, Desktop "EtherCAT Mill (tpnext / jerk)") |
 | OS / RT | Debian, PREEMPT_RT kernel 6.12.x-rt |
 | UI | Probe Basic 0.6.6 / QtPyVCP 5.1.0 (Debian pkg). Log: `~/qtpyvcp.log` |
