@@ -31,3 +31,10 @@ The CSVs are LinuxCNC `(LOG,...)` output and are space-separated, with columns `
 | `ridge_x_cleaned.csv` (10), `ridge_y_cleaned.csv` (10) | X +0.0343, Y −0.0054 | after cleaning the X home trigger and sensor and re-homing |
 
 Re-homing repeats to about 2 µm, and cleaning the switch didn't change anything: X stays about +33 µm from 11-18. The vise didn't move, according to Jon. Charts are in `plots.html`.
+
+## Touch probe Z reference (for T99 length)
+
+Touch probe T99, loaded with tool length 0, probed Z five times at G54 X0 Y0 (machine X 97.013, Y 141.8911):
+the spindle nose was at machine **Z −17.3502** when the probe tripped (sd 0.3 µm).
+Once a setter-measured cutter is touched off on the same spot, the T99 length =
+−17.3502 − (G54 Z offset after the touch-off). Store it with `G10 L1 P99 Z<length>`.

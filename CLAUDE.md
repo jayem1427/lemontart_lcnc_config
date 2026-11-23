@@ -176,5 +176,9 @@ their own machine: plain language, short sections, real values from the config.
   Keep C00.06 ≈ 100–120 % (manual). Drive-internal ID (C07/F30) isn't reachable over EtherCAT.
 - **"Must re-home to jog after a job":** after M30 the machine is still in Auto with a stuck jog. A HAL plan was drafted but never built.
 - **Conversational tab** hard-codes `M6`. The fix lives in the system package `qtpyvcp_conversational_gcode`.
+- **X shifted +33 µm between 11-18 and 11-23** on the same block and G54 (`logs/metrology/`).
+  Re-homing repeats to about 2 µm, cleaning the switch changed nothing, and Y barely moved. Thermal
+  frame growth could explain at most about 15–20 µm. A warm-up test (probe every 15 min from cold, no
+  re-home, log the chiller temperature) is planned but deferred.
 - **The INI on `dev-jerk-testing` uses tpnext-only keys** (`TPMOD=tpnextmod`,
   `PLANNER_TYPE`, `MAX_JERK`). Check that the stock `launch.sh` still starts before relying on it.
