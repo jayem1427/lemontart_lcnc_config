@@ -1,0 +1,202 @@
+<title>Block Probe Repeatability</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow measurement-report column; per-axis panels of strip charts in micrometres */
+:root{
+  --bg:#f5f6f4; --panel:#ffffff; --fg:#1d2321; --muted:#5d6763; --rule:#d9dedb;
+  --x:#2f6f9f; --y:#b5562a; --band:rgba(47,111,159,.10); --ok:#2e7d4f;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#161a19; --panel:#1f2523; --fg:#e4e9e6; --muted:#9aa5a0; --rule:#323a37;
+  --x:#7fb6e0; --y:#ec9a6e; --band:rgba(127,182,224,.12); --ok:#6cc596; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#161a19; --panel:#1f2523; --fg:#e4e9e6; --muted:#9aa5a0; --rule:#323a37;
+  --x:#7fb6e0; --y:#ec9a6e; --band:rgba(127,182,224,.12); --ok:#6cc596; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:15px;line-height:1.55}
+main{max-width:860px;margin:0 auto;padding-block:32px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:28px}
+h1{font-size:26px;font-weight:600;margin:0;text-wrap:balance}
+h2{font-size:17px;font-weight:600;margin:0;text-wrap:balance}
+.lede{color:var(--muted);margin:6px 0 0;max-width:65ch}
+.mono,td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--rule);text-align:left;white-space:nowrap}
+th{font-weight:500;color:var(--muted);font-size:12px;letter-spacing:.04em;text-transform:uppercase}
+td.num,th.num{text-align:right}
+.ok{color:var(--ok);font-weight:500}
+.panel{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:18px;display:grid;gap:12px;min-width:0}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:16px}
+.chart{min-width:0}
+.chart h3{font-size:13px;font-weight:500;margin:0 0 4px;color:var(--muted)}
+svg{display:block;width:100%;height:auto}
+svg text{fill:var(--muted);font-family:var(--mono);font-size:10px}
+.note{color:var(--muted);font-size:13px;margin:0;max-width:70ch}
+.key{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.key span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px;background:var(--c)}
+</style>
+
+<main>
+<header>
+  <h1>Block Probe Repeatability</h1>
+  <p class="lede">Probe Basic ridge probe, touch probe T99, 10 runs per axis on the same block, measure-only mode. Plots show each run's difference from the 10-run mean in micrometres.</p>
+</header>
+
+<section class="panel">
+  <h2>Summary</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th></th><th class="num">Mean</th><th class="num">Std dev</th><th class="num">Spread</th><th class="num">Hand-found</th><th class="num">Diff</th></tr></thead>
+    <tbody id="sum"></tbody>
+  </table></div>
+  <p class="note">Centers are machine coordinates. X hand-found values came from your two edge points (71.643 and 122.383). Y wasn't hand-found: a coarse pass located it first, starting 0.59 mm off center.</p>
+</section>
+
+<section class="panel">
+  <h2>Session comparison</h2>
+  <p class="note">Every run from each session, in µm relative to the 11-18 mean. Short bars mark each session's mean. 11-23 sessions, in order: first check after power-up, then three runs after re-homing X, then ten runs after cleaning the X home trigger and sensor and re-homing.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Session</th><th class="num">X center</th><th class="num">X width</th><th class="num">Y center</th><th class="num">Y width</th></tr></thead>
+    <tbody id="cmp"></tbody>
+  </table></div>
+  <div class="charts">
+    <div class="chart"><h3>X center, µm from 11-18</h3><div id="cxc"></div></div>
+    <div class="chart"><h3>X width, µm from 11-18</h3><div id="cxw"></div></div>
+    <div class="chart"><h3>Y center, µm from 11-18</h3><div id="cyc"></div></div>
+    <div class="chart"><h3>Y width, µm from 11-18</h3><div id="cyw"></div></div>
+  </div>
+  <p class="note">The X center stays about +33 µm from 11-18 through every 11-23 session. Re-homing and cleaning the home switch both left it in place, and each home repeats to about 2 µm. Y is within 6 µm, drifting a few µm during the session.</p>
+</section>
+
+<section class="panel">
+  <h2>X axis, 11-18</h2>
+  <div class="key"><span style="--c:var(--x)">run value</span><span style="--c:var(--band)">±1σ band</span></div>
+  <div class="charts">
+    <div class="chart"><h3>Width, µm from 50.7416 mm</h3><div id="xw"></div></div>
+    <div class="chart"><h3>Center, µm from 97.0122 mm</h3><div id="xc"></div></div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Y axis, 11-18</h2>
+  <div class="key"><span style="--c:var(--y)">run value</span><span style="--c:var(--band)">±1σ band</span></div>
+  <div class="charts">
+    <div class="chart"><h3>Width, µm from 50.8083 mm</h3><div id="yw"></div></div>
+    <div class="chart"><h3>Center, µm from 141.8911 mm</h3><div id="yc"></div></div>
+    <div class="chart"><h3>−Y edge, µm from mean</h3><div id="ye1"></div></div>
+    <div class="chart"><h3>+Y edge, µm from mean</h3><div id="ye2"></div></div>
+  </div>
+  <p class="note">Both Y edges step about +1 µm together after run 3 while the width holds. That points to the part or machine moving slightly (thermal or settling), not to probe scatter.</p>
+</section>
+
+<section class="panel">
+  <h2>Top surface map</h2>
+  <p class="note">16 × 16 grid, 3 mm pitch, G54 X/Y −22.5 to +22.5 (2.9 mm in from each edge). One slow touch per point at F50. View from above: +X right, +Y up.</p>
+  <div class="tablewrap"><table><tbody id="zsum"></tbody></table></div>
+  <div class="charts">
+    <div class="chart"><h3>Height above lowest point, µm</h3><div id="zraw"></div></div>
+    <div class="chart"><h3>Height with tilt removed, µm</h3><div id="zres"></div></div>
+  </div>
+  <p class="note">Most of the 0.84 mm height range is tilt: the top rises toward +X and +Y, which looks like the part sitting tilted in the vise. With the tilt removed, the bands running along X show surface form or texture, and they are far larger than the probe's ~1 µm repeatability.</p>
+</section>
+</main>
+
+<script>
+const G54X=97.013, G54Y=183.0339;
+const X={w:[50.739135,50.742645,50.741729,50.740814,50.740127,50.741043,50.741729,50.743408,50.742340,50.743331],
+         c:[-0.000823,0.000397,-0.001434,-0.000442,-0.000556,-0.001091,-0.000595,-0.000671,-0.001129,-0.001243].map(v=>v+G54X)};
+const Yr=[[50.808792,-41.143546,-15.739150,-66.547942],[50.808105,-41.143661,-15.739608,-66.547713],[50.808181,-41.143089,-15.738998,-66.547179],
+ [50.808486,-41.142173,-15.737930,-66.546416],[50.809249,-41.142326,-15.737701,-66.546950],[50.807876,-41.142326,-15.738388,-66.546264],
+ [50.807342,-41.142593,-15.738922,-66.546264],[50.807876,-41.142631,-15.738693,-66.546569],[50.809173,-41.142669,-15.738082,-66.547255],
+ [50.807495,-41.142516,-15.738769,-66.546264]];
+const Y={w:Yr.map(r=>r[0]),c:Yr.map(r=>r[1]+G54Y),e1:Yr.map(r=>r[3]+G54Y),e2:Yr.map(r=>r[2]+G54Y)};
+const mean=a=>a.reduce((s,v)=>s+v,0)/a.length;
+const sd=a=>{const m=mean(a);return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/(a.length-1))};
+const f=(v,d=4)=>v.toFixed(d);
+const um=v=>(v*1000).toFixed(1)+" µm";
+
+const rows=[["X width",X.w,50.740],["X center",X.c,97.013],["Y width",Y.w,null],["Y center",Y.c,null]];
+document.getElementById("sum").innerHTML=rows.map(([n,a,h])=>{
+  const m=mean(a);return `<tr><td>${n}</td><td class="num">${f(m)}</td><td class="num">${um(sd(a))}</td><td class="num">${um(Math.max(...a)-Math.min(...a))}</td>
+  <td class="num">${h==null?"—":f(h,3)}</td><td class="num ${h!=null?"ok":""}">${h==null?"—":um(m-h)}</td></tr>`}).join("");
+
+function strip(id,arr,color){
+  const m=mean(arr),s=sd(arr),d=arr.map(v=>(v-m)*1000), S=s*1000;
+  const W=400,H=170,L=34,R=10,T=10,B=26;
+  const lim=Math.max(3,Math.ceil(Math.max(...d.map(Math.abs),S)+0.5));
+  const xs=i=>L+(W-L-R)*(i/(arr.length-1)), ys=v=>T+(H-T-B)*(1-(v+lim)/(2*lim));
+  let g="";
+  for(let t=-lim;t<=lim;t++){ if(lim>4&&t%2) continue;
+    g+=`<line x1="${L}" x2="${W-R}" y1="${ys(t)}" y2="${ys(t)}" stroke="var(--rule)" stroke-width="${t===0?1.2:0.6}"/>
+        <text x="${L-6}" y="${ys(t)+3}" text-anchor="end">${t>0?"+":""}${t}</text>`;}
+  g+=`<rect x="${L}" y="${ys(S)}" width="${W-L-R}" height="${ys(-S)-ys(S)}" fill="var(--band)"/>`;
+  g+=`<polyline points="${d.map((v,i)=>xs(i)+","+ys(v)).join(" ")}" fill="none" stroke="${color}" stroke-width="1.4" stroke-opacity=".55"/>`;
+  g+=d.map((v,i)=>`<circle cx="${xs(i)}" cy="${ys(v)}" r="3.6" fill="${color}"><title>run ${i+1}: ${f(arr[i])} mm (${v>=0?"+":""}${v.toFixed(2)} µm)</title></circle>`).join("");
+  g+=arr.map((_,i)=>`<text x="${xs(i)}" y="${H-8}" text-anchor="middle">${i+1}</text>`).join("");
+  document.getElementById(id).innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="per-run deviation">${g}</svg>`;
+}
+strip("xw",X.w,"var(--x)");strip("xc",X.c,"var(--x)");
+strip("yw",Y.w,"var(--y)");strip("yc",Y.c,"var(--y)");strip("ye1",Y.e1,"var(--y)");strip("ye2",Y.e2,"var(--y)");
+
+/* Z map: row-major, j = Y index (-22.5..+22.5), i = X index */
+const Z=[-17.85329,-17.82559,-17.78691,-17.75494,-17.73740,-17.70863,-17.70543,-17.68323,-17.67812,-17.65805,-17.63463,-17.59923,-17.57367,-17.57016,-17.59938,-17.53339,-17.78378,-17.75609,-17.73961,-17.71024,-17.67926,-17.65439,-17.63989,-17.62898,-17.60541,-17.58282,-17.57512,-17.55421,-17.55421,-17.54819,-17.54338,-17.51111,-17.80186,-17.76219,-17.72771,-17.69444,-17.64813,-17.61670,-17.58237,-17.55833,-17.54666,-17.52774,-17.51607,-17.49249,-17.48723,-17.47746,-17.47754,-17.45229,-17.73801,-17.70993,-17.68887,-17.66797,-17.64218,-17.62234,-17.59915,-17.58084,-17.55536,-17.53133,-17.50928,-17.46930,-17.44351,-17.41689,-17.40216,-17.39156,-17.67453,-17.66537,-17.63234,-17.59991,-17.57237,-17.56200,-17.54468,-17.52095,-17.51874,-17.50722,-17.49394,-17.47510,-17.46938,-17.45023,-17.43680,-17.41803,-17.65462,-17.62158,-17.61258,-17.59137,-17.56833,-17.54926,-17.51408,-17.51912,-17.48715,-17.46793,-17.45435,-17.44321,-17.42757,-17.40399,-17.40186,-17.38515,-17.58183,-17.56909,-17.54498,-17.51012,-17.50531,-17.49066,-17.46556,-17.48166,-17.44435,-17.45290,-17.42848,-17.43581,-17.42657,-17.41467,-17.39674,-17.38057,-17.52789,-17.52370,-17.46777,-17.46045,-17.43565,-17.43314,-17.40994,-17.40422,-17.40353,-17.36134,-17.37225,-17.36226,-17.35997,-17.33266,-17.35303,-17.33594,-17.47647,-17.45129,-17.42787,-17.40552,-17.38278,-17.37248,-17.35013,-17.34502,-17.34273,-17.34364,-17.32884,-17.31175,-17.31007,-17.28314,-17.28452,-17.28474,-17.43901,-17.40651,-17.37576,-17.35081,-17.30931,-17.29955,-17.30901,-17.28734,-17.26971,-17.25781,-17.24324,-17.25552,-17.25087,-17.24309,-17.24347,-17.22913,-17.38873,-17.36638,-17.33182,-17.30862,-17.29390,-17.27597,-17.26788,-17.26605,-17.24103,-17.21089,-17.21181,-17.22310,-17.20288,-17.20876,-17.20326,-17.19746,-17.34181,-17.31549,-17.28932,-17.27940,-17.26430,-17.23225,-17.21883,-17.21555,-17.19189,-17.18365,-17.18427,-17.18556,-17.17938,-17.16405,-17.15359,-17.14665,-17.30183,-17.26865,-17.24103,-17.21242,-17.19830,-17.17450,-17.16443,-17.14879,-17.13513,-17.13376,-17.12659,-17.12224,-17.12560,-17.12117,-17.12430,-17.11789,-17.32381,-17.27605,-17.23630,-17.19571,-17.16428,-17.14749,-17.12315,-17.11758,-17.11446,-17.10751,-17.09760,-17.08577,-17.08165,-17.07982,-17.07379,-17.07303,-17.28406,-17.25240,-17.22546,-17.19525,-17.17000,-17.16107,-17.14757,-17.13239,-17.11949,-17.10698,-17.10301,-17.09134,-17.08417,-17.07860,-17.07616,-17.07036,-17.18060,-17.15520,-17.12659,-17.09775,-17.07608,-17.06639,-17.05434,-17.04579,-17.03343,-17.02802,-17.02702,-17.01588,-17.01604,-17.01894,-17.02138,-17.01329];
+const N=16, P=k=>-22.5+3*k;
+/* least-squares plane z = a x + b y + c (grid is symmetric, so the normal equations decouple) */
+let sx=0,sy=0,sxx=0,syy=0,sz=0;
+Z.forEach((z,k)=>{const x=P(k%N),y=P(Math.floor(k/N));sx+=x*z;sy+=y*z;sxx+=x*x;syy+=y*y;sz+=z});
+const a=sx/sxx,b=sy/syy,c0=sz/Z.length;
+const R=Z.map((z,k)=>(z-(a*P(k%N)+b*P(Math.floor(k/N))+c0))*1000);
+const zmin=Math.min(...Z), RAW=Z.map(z=>(z-zmin)*1000);
+const rms=Math.sqrt(R.reduce((s,v)=>s+v*v,0)/R.length);
+document.getElementById("zsum").innerHTML=[
+ ["Height range",um((Math.max(...Z)-zmin))],
+ ["Tilt along X",(a*1000).toFixed(2)+" µm/mm ("+(Math.atan(a)*180/Math.PI).toFixed(3)+"°)"],
+ ["Tilt along Y",(b*1000).toFixed(2)+" µm/mm ("+(Math.atan(b)*180/Math.PI).toFixed(3)+"°)"],
+ ["Flatness, tilt removed",(Math.max(...R)-Math.min(...R)).toFixed(0)+" µm peak-to-valley, "+rms.toFixed(0)+" µm RMS"]
+].map(([k,v])=>`<tr><td>${k}</td><td class="num">${v}</td></tr>`).join("");
+
+function lerp(c1,c2,t){return c1.map((v,i)=>Math.round(v+(c2[i]-v)*t))}
+const seq=t=>{const s=[[38,70,83],[42,157,143],[233,196,106]];return t<.5?lerp(s[0],s[1],t*2):lerp(s[1],s[2],(t-.5)*2)};
+const div=t=>{const lo=[47,111,159],mid=[236,238,236],hi=[181,86,42];return t<.5?lerp(lo,mid,t*2):lerp(mid,hi,(t-.5)*2)};
+function heat(id,vals,lo,hi,ramp,fmt){
+  const cell=21,L=30,T=6,W=L+N*cell+56,H=T+N*cell+30;let g="";
+  vals.forEach((v,k)=>{const i=k%N,j=Math.floor(k/N),t=Math.min(1,Math.max(0,(v-lo)/(hi-lo))),c=ramp(t);
+    g+=`<rect x="${L+i*cell}" y="${T+(N-1-j)*cell}" width="${cell}" height="${cell}" fill="rgb(${c})"><title>X ${P(i)}, Y ${P(j)}: ${fmt(v)} µm</title></rect>`});
+  [0,5,10,15].forEach(k=>{g+=`<text x="${L+k*cell+cell/2}" y="${T+N*cell+14}" text-anchor="middle">${P(k)}</text>
+    <text x="${L-5}" y="${T+(N-1-k)*cell+cell/2+3}" text-anchor="end">${P(k)}</text>`});
+  g+=`<text x="${L+N*cell/2}" y="${H-2}" text-anchor="middle">X (G54 mm)</text>`;
+  const bx=L+N*cell+14,bh=N*cell;
+  for(let s=0;s<40;s++){const c=ramp(1-s/39);g+=`<rect x="${bx}" y="${T+s*bh/40}" width="10" height="${bh/40+0.6}" fill="rgb(${c})"/>`}
+  g+=`<text x="${bx+14}" y="${T+8}">${fmt(hi)}</text><text x="${bx+14}" y="${T+bh}">${fmt(lo)}</text>`;
+  document.getElementById(id).innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="surface heat map">${g}</svg>`;
+}
+heat("zraw",RAW,0,Math.max(...RAW),seq,v=>v.toFixed(0));
+const rl=Math.ceil(Math.max(...R.map(Math.abs))/10)*10;
+heat("zres",R,-rl,rl,div,v=>(v>0?"+":"")+v.toFixed(0));
+
+/* session comparison */
+const D={"x18":{"w":[50.739135,50.742645,50.741729,50.740814,50.740127,50.741043,50.741729,50.743408,50.74234,50.743331],"c":[-0.000823,0.000397,-0.001434,-0.000442,-0.000556,-0.001091,-0.000595,-0.000671,-0.001129,-0.001243]},"y18":{"w":[50.808792,50.808105,50.808181,50.808486,50.809249,50.807876,50.807342,50.807876,50.809173,50.807495],"c":[-0.000746,-0.000861,-0.000289,0.000627,0.000474,0.000474,0.000207,0.000169,0.000131,0.000284]},"x23":{"w":[50.745239,50.747604,50.745162,50.746078,50.746078,50.746917,50.745162,50.747756,50.747756,50.747604],"c":[0.033814,0.032937,0.032403,0.031716,0.03225,0.032212,0.034081,0.032784,0.032631,0.032174]},"y23":{"w":[50.806198,50.807113,50.807571,50.807724,50.806961,50.807647,50.808029,50.807952,50.808181,50.808639],"c":[-0.002665,-0.002512,-0.002588,-0.002512,-0.00297,-0.003313,-0.003656,-0.002932,-0.003199,-0.003733]},"x23h":{"w":[50.746231,50.746841,50.74707],"c":[0.034691,0.034691,0.034043]},"x23c":{"w":[50.745162,50.747756,50.746841,50.746307,50.746307,50.746765,50.746307,50.747833,50.746231,50.74768],"c":[0.035988,0.033547,0.03431,0.034043,0.033967,0.033967,0.033967,0.034806,0.033776,0.034882]},"y23c":{"w":[50.806961,50.807037,50.807113,50.807342,50.807495,50.808639,50.8078,50.807342,50.806884,50.808029],"c":[-0.005182,-0.004992,-0.005335,-0.005373,-0.005755,-0.005259,-0.004992,-0.00606,-0.005526,-0.00564]}};
+const SES=[["11-18","17.1 °C","18"],["11-23","14.9 °C","23"],["11-23","re-homed X","23h"],["11-23","cleaned + re-homed","23c"]];
+const SC=["var(--x)","var(--y)","var(--muted)","var(--ok)"];
+const sgn=v=>(v>=0?"+":"")+v.toFixed(1);
+document.getElementById("cmp").innerHTML=SES.map(([d,t,k])=>{
+  const cell=(ax,m)=>{const s=D[ax+k];if(!s)return '<td class="num">—</td>';const base=mean(D[ax+"18"][m]);
+    return `<td class="num">${sgn((mean(s[m])-base)*1000)} µm <span style="color:var(--muted)">(n=${s[m].length})</span></td>`};
+  return `<tr><td>${d} · ${t}</td>${cell("x","c")}${cell("x","w")}${cell("y","c")}${cell("y","w")}</tr>`}).join("");
+function cmpChart(id,ax,m){
+  const base=mean(D[ax+"18"][m]), W=400,H=200,L=40,R=10,T=10,B=40;
+  const cols=SES.map((s,i)=>({s,i,v:D[ax+s[2]]?D[ax+s[2]][m].map(v=>(v-base)*1000):null})).filter(c=>c.v);
+  const all=cols.flatMap(c=>c.v), lo=Math.floor(Math.min(0,...all)/5)*5-2, hi=Math.ceil(Math.max(0,...all)/5)*5+2;
+  const ys=v=>T+(H-T-B)*(hi-v)/(hi-lo), cw=(W-L-R)/SES.length, xc=i=>L+cw*(i+0.5);
+  const step=(hi-lo)>30?10:5; let g="";
+  for(let t=Math.ceil(lo/step)*step;t<=hi;t+=step) g+=`<line x1="${L}" x2="${W-R}" y1="${ys(t)}" y2="${ys(t)}" stroke="var(--rule)" stroke-width="${t===0?1.2:0.6}"/><text x="${L-6}" y="${ys(t)+3}" text-anchor="end">${t>0?"+":""}${t}</text>`;
+  cols.forEach(({s,i,v})=>{
+    v.forEach((y,k)=>{const jx=xc(i)+((k%5)-2)*5;g+=`<circle cx="${jx}" cy="${ys(y)}" r="3.2" fill="${SC[i]}" fill-opacity=".8"><title>${s[0]} ${s[1]}, run ${k+1}: ${sgn(y)} µm</title></circle>`});
+    const mu=mean(v);g+=`<line x1="${xc(i)-cw*0.32}" x2="${xc(i)+cw*0.32}" y1="${ys(mu)}" y2="${ys(mu)}" stroke="var(--fg)" stroke-width="1.6"/>`;
+  });
+  SES.forEach((s,i)=>{g+=`<text x="${xc(i)}" y="${H-B+14}" text-anchor="middle">${s[0]}</text><text x="${xc(i)}" y="${H-B+27}" text-anchor="middle">${s[1].replace("cleaned + re-homed","cleaned")}</text>`});
+  document.getElementById(id).innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="session comparison">${g}</svg>`;
+}
+cmpChart("cxc","x","c");cmpChart("cxw","x","w");cmpChart("cyc","y","c");cmpChart("cyw","y","w");
+</script>

@@ -22,3 +22,12 @@ The CSVs are LinuxCNC `(LOG,...)` output and are space-separated, with columns `
 - **The X center moved 33.5 µm.** Y moved only 3 µm. A shift that size is far outside both the probe scatter and anything temperature can explain, which is about 2.5 µm of screw shrinkage at X 97 mm. That leaves the X home position, or the part moving in the vise in X.
 - **The X width grew 4.9 µm.** A 2.2 °C colder aluminium block should have shrunk by about 2.6 µm, and that's only partly offset by the steel screw shrinking (+1.3 µm). This is unexplained. Possible causes are debris on an X face or the machine not having warmed up yet.
 - **Y matches 11-18** to within a few µm.
+
+## X home checks (same session)
+
+| Run set | X center (G54) | Note |
+|---|---|---|
+| `ridge_x_rehome1.csv` (3) | +0.0345 | after re-homing X |
+| `ridge_x_cleaned.csv` (10), `ridge_y_cleaned.csv` (10) | X +0.0343, Y −0.0054 | after cleaning the X home trigger and sensor and re-homing |
+
+Re-homing repeats to about 2 µm, and cleaning the switch didn't change anything: X stays about +33 µm from 11-18. The vise didn't move, according to Jon. Charts are in `plots.html`.
