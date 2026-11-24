@@ -70,6 +70,18 @@ svg text{fill:var(--muted);font-family:var(--mono);font-size:10px}
 </section>
 
 <section class="panel">
+  <h2>Z at the block center</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Session</th><th class="num">Spindle-nose Z at probe trip</th><th class="num">Repeatability</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td>11-18 · 17.1 °C</td><td class="num">≈ −17.372</td><td class="num">±15 µm (estimate)</td><td>From the 16 × 16 map. No point at the exact center, so averaged from 4 points 1.5 mm away that span 60 µm of surface step</td></tr>
+      <tr><td>11-23 · 14.9 °C</td><td class="num">−17.3502</td><td class="num">0.3 µm sd (n=5)</td><td>Five touches at G54 X0 Y0, fast then slow at F50, touch probe with no tool length</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">Today reads about 21 µm higher, but that's inside the 11-18 estimate's uncertainty. For a real same-spot comparison, re-probe the four 11-18 points at ±1.5 mm. Today's −17.3502 is also the reference for the touch probe length: T99 length = −17.3502 − (G54 Z after touching a setter-measured cutter off at the same spot).</p>
+</section>
+
+<section class="panel">
   <h2>X axis, 11-18</h2>
   <div class="key"><span style="--c:var(--x)">run value</span><span style="--c:var(--band)">±1σ band</span></div>
   <div class="charts">
