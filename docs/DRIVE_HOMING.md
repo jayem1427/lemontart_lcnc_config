@@ -49,20 +49,41 @@ zero at the index". `a6home` plays that part with the drive. This means:
    that in the same servo cycle, then moves to `HOME` at `HOME_FINAL_VEL`.
 
 **Failure handling.** A drive fault, a homing error (statusword bit 13), a
-missing mode acknowledge, or `DRIVE_HOME_TIMEOUT` never clear `index-enable`;
-that would read as "index found". Instead `a6home.N.amp-fault` goes true:
-LinuxCNC aborts homing, turns the machine off, and the joint stays unhomed.
-After an abort (also ESC), `a6home` keeps the drive holding its actual
-position and keeps amp-fault on until LinuxCNC's command has caught up. That
-way CSP never gets a stale target, which is the Er87.1 jump other A6 users hit.
-The reason is printed: `a6home: joint N drive homing failed: ...`.
+missing mode acknowledge, `DRIVE_HOME_TIMEOUT`, or an ESC abort never clear
+`index-enable`; that would read as "index found".
+- `a6home.N.amp-fault` goes true **only until LinuxCNC has disabled the joint**
+  (`joint.N.amp-enable-out` low), then it's released. LinuxCNC releases
+  `index-enable` only when its homing state machine runs, which needs the
+  machine on, and it refuses to turn on while an amp fault is present.
+  Holding amp-fault until `index-enable` dropped would leave a machine that
+  can never be turned on again. The bench test checks for this.
+- Machine off or E-stop during drive homing: `a6home` goes straight to
+  holding, without waiting for its timeout.
+- While holding, the drive keeps its own actual position, and LinuxCNC's
+  feedback is the real position, so its command re-syncs while it's off. Once
+  the machine is on, `index-enable` is released, and the command matches the
+  drive within 0.01 mm, `a6home` is idle again. CSP never gets a stale target,
+  which is the Er87.1 jump other A6 users hit.
+- The reason is printed on the terminal: `a6home: joint N drive homing failed: ...`. LinuxCNC shows "joint N amplifier fault"; turn the machine on and home again.
 
-**Bench test** (`sh components/test/test_a6home.sh`), all passing: normal
-hard stop + Z; stale homed bits at start; two homes in a row; drive fault
-during homing; homing error (bit 13); drive never acknowledges mode 6;
-LinuxCNC abort mid-homing. A negative control proves that passing LinuxCNC's
-command straight through trips Er87.1 in the simulated drive, so the test can
-catch the failure it guards against.
+**Bench test** (`sh components/test/test_a6home.sh`): 16/16 pass. It covers 8
+scenarios, each run under both ways LinuxCNC writes `index-enable` (2.9 every
+cycle, tpnext on edges):
+- normal hard stop + Z;
+- stale homed bits at start;
+- two homes in a row;
+- drive fault during homing;
+- homing error (bit 13);
+- drive never acknowledges mode 6;
+- ESC abort with the machine on;
+- E-stop or machine off mid-homing.
+
+After every failure, a simulated operator turns the machine back on and jogs
+1 mm, proving the joint is usable and nothing is stuck. A negative control
+proves that passing LinuxCNC's command straight through trips Er87.1 in the
+simulated drive. The motion model follows `homing.c`/`control.c` (2.9 and
+tpnext): homing only runs while enabled, amp faults refuse enable, and the
+command follows the feedback while disabled.
 
 **Useful pins:** `a6home.N.hstate` (0 idle, 1 request, 2 start, 3 running, 4
 handback, 5 error, 6 aborted), `.homing`, `.homed`, `.failed`, `.cw-out`,
@@ -232,7 +253,7 @@ The code is done (see "How it works"). These values are placeholders until the t
 | `DRIVE_HOME_SPEED_FAST/SLOW`, `DRIVE_HOME_ACCEL` | INI | XY 15 mm/s / 1 mm/s / 100 mm/s²; Z 10 mm/s; A 10 °/s / 1 °/s | D3 |
 | Hard-stop torque / speed / stall time (`0x2010:31/32/…`) | `ethercat-conf.xml` SDO, **not set yet** | drive defaults | D0 confirms the addresses, D3 tunes. fer662 homed on the defaults |
 | `HOME_OFFSET` | INI | 0 (= machine zero at the Z pulse) | D4 |
-| `HOME` | INI | 0 (no final move) | D4 |
+| `HOME` | INI | X/Y +15, Z −15 (park 15 mm off the Z pulse) | D4. Must be clear of the limit switch: LinuxCNC ignores limits only while homing, so a joint that ends homing on its limit switch faults |
 | `MIN_LIMIT` / `MAX_LIMIT` | INI | unchanged (still the wide values for unhomed jogging) | D4/T8. With zero at the stop end, the old wide limits **let G-code reach the hard stop**. Tighten them once travel is measured |
 | `DRIVE_HOME_TIMEOUT` | INI | 120 s (A 60 s) | D3, once the real homing time is known. The drive's own limit is C10.08 (`0x2010:09`, default 60 s) |
 
@@ -380,8 +401,9 @@ Machine zero moves on every axis. With **CLAUDE.md rules 1 and 2** in force:
 | R4 | A fault read as "index found" → false "homed" | `a6home` never clears index-enable on failure; T6b |
 | R5 | Stop-to-Z clearance near 0 or 10 mm → home jumps 10 mm | D3 step 4 |
 | R6 | Too much homing torque damages screw bearings or the coupling | Start at 20 %, step up 5 % at a time, dedicated rigid stop |
-| R7 | Drive following-error window trips while pushing against the stop | D3 step 3 |
+| R7 | Drive following-error window (0.5 mm / 250 ms here; fer662 likely ran the much wider default) trips Er47.0 while pushing against the stop | D3 step 3. If it does: check `0x6065` can be mapped into the RxPDO, then use the prepared `a6home.N.ferr-window` (commented block in `ethercat_mill.hal`) to widen it only while the drive homes |
 | R8 | Machine zero moves → stored positions crash | T8 |
+| R9 | The joint parks on its limit switch after homing → "joint N on limit switch error" | `HOME` 15 mm off the Z pulse; D4 checks the switch is clear at `HOME` |
 
 ## 7. Rollback
 Check out `dev-jerk-testing` (or revert this branch's commits). That restores the `6060 = 08` SDO and the switch-homing `HOME_*` values; the unused `a6home` module can stay installed.

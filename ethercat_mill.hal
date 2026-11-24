@@ -175,7 +175,7 @@ net x-status-word   lcec.0.0.status-word  => cia402.0.statusword a6home.0.status
 # REVERT: net x-ctrl-word cia402.0.controlword => lcec.0.0.ctrl-word
 net x-ctrl-word-cia cia402.0.controlword => a6home.0.cw-in
 net x-ctrl-word     a6home.0.cw-out      => lcec.0.0.ctrl-word
-net x-amp-enable    joint.0.amp-enable-out => cia402.0.enable
+net x-amp-enable    joint.0.amp-enable-out => cia402.0.enable a6home.0.amp-enable
 # If the machine faults at enable with no drive alarm, comment these four drv-fault nets out.
 # DRIVE-HOMING: amp fault = drive fault OR failed/aborted drive homing
 # REVERT: net x-amp-fault cia402.0.drv-fault => joint.0.amp-fault-in
@@ -187,6 +187,11 @@ net x-opmode-disp   lcec.0.0.opmode-display    => a6home.0.opmode-display
 net x-index-enable  joint.0.index-enable      <=> a6home.0.index-enable
 setp a6home.0.joint-no 0
 setp a6home.0.done-timeout [JOINT_0]DRIVE_HOME_TIMEOUT
+# R7 (optional, only after D0/D3 show Er47.0 during the stop push AND 0x6065 is RxPDO-mappable):
+# map 6065 (32-bit, halPin ferr-window) in ethercat-conf.xml, drop its sdoConfig, then:
+#   setp a6home.0.ferr-normal 6554
+#   setp a6home.0.ferr-homing 131072
+#   net x-ferr-window a6home.0.ferr-window => lcec.0.0.ferr-window
 setp lcec.0.0.home-method      [JOINT_0]DRIVE_HOME_METHOD
 setp lcec.0.0.home-speed-fast  [JOINT_0]DRIVE_HOME_SPEED_FAST
 setp lcec.0.0.home-speed-slow  [JOINT_0]DRIVE_HOME_SPEED_SLOW
@@ -215,7 +220,7 @@ net y-status-word   lcec.0.1.status-word  => cia402.1.statusword a6home.1.status
 # REVERT: net y-ctrl-word cia402.1.controlword => lcec.0.1.ctrl-word
 net y-ctrl-word-cia cia402.1.controlword => a6home.1.cw-in
 net y-ctrl-word     a6home.1.cw-out      => lcec.0.1.ctrl-word
-net y-amp-enable    joint.1.amp-enable-out => cia402.1.enable
+net y-amp-enable    joint.1.amp-enable-out => cia402.1.enable a6home.1.amp-enable
 # DRIVE-HOMING: amp fault = drive fault OR failed/aborted drive homing
 # REVERT: net y-amp-fault cia402.1.drv-fault => joint.1.amp-fault-in
 net y-drv-fault     cia402.1.drv-fault => a6home.1.drv-fault
@@ -226,6 +231,11 @@ net y-opmode-disp   lcec.0.1.opmode-display    => a6home.1.opmode-display
 net y-index-enable  joint.1.index-enable      <=> a6home.1.index-enable
 setp a6home.1.joint-no 1
 setp a6home.1.done-timeout [JOINT_1]DRIVE_HOME_TIMEOUT
+# R7 (optional, only after D0/D3 show Er47.0 during the stop push AND 0x6065 is RxPDO-mappable):
+# map 6065 (32-bit, halPin ferr-window) in ethercat-conf.xml, drop its sdoConfig, then:
+#   setp a6home.1.ferr-normal 6554
+#   setp a6home.1.ferr-homing 131072
+#   net y-ferr-window a6home.1.ferr-window => lcec.0.1.ferr-window
 setp lcec.0.1.home-method      [JOINT_1]DRIVE_HOME_METHOD
 setp lcec.0.1.home-speed-fast  [JOINT_1]DRIVE_HOME_SPEED_FAST
 setp lcec.0.1.home-speed-slow  [JOINT_1]DRIVE_HOME_SPEED_SLOW
@@ -254,7 +264,7 @@ net z-status-word   lcec.0.2.status-word  => cia402.2.statusword a6home.2.status
 # REVERT: net z-ctrl-word cia402.2.controlword => lcec.0.2.ctrl-word
 net z-ctrl-word-cia cia402.2.controlword => a6home.2.cw-in
 net z-ctrl-word     a6home.2.cw-out      => lcec.0.2.ctrl-word
-net z-amp-enable    joint.2.amp-enable-out => cia402.2.enable
+net z-amp-enable    joint.2.amp-enable-out => cia402.2.enable a6home.2.amp-enable
 # DRIVE-HOMING: amp fault = drive fault OR failed/aborted drive homing
 # REVERT: net z-amp-fault cia402.2.drv-fault => joint.2.amp-fault-in
 net z-drv-fault     cia402.2.drv-fault => a6home.2.drv-fault
@@ -265,6 +275,11 @@ net z-opmode-disp   lcec.0.2.opmode-display    => a6home.2.opmode-display
 net z-index-enable  joint.2.index-enable      <=> a6home.2.index-enable
 setp a6home.2.joint-no 2
 setp a6home.2.done-timeout [JOINT_2]DRIVE_HOME_TIMEOUT
+# R7 (optional, only after D0/D3 show Er47.0 during the stop push AND 0x6065 is RxPDO-mappable):
+# map 6065 (32-bit, halPin ferr-window) in ethercat-conf.xml, drop its sdoConfig, then:
+#   setp a6home.2.ferr-normal 6554
+#   setp a6home.2.ferr-homing 131072
+#   net z-ferr-window a6home.2.ferr-window => lcec.0.2.ferr-window
 setp lcec.0.2.home-method      [JOINT_2]DRIVE_HOME_METHOD
 setp lcec.0.2.home-speed-fast  [JOINT_2]DRIVE_HOME_SPEED_FAST
 setp lcec.0.2.home-speed-slow  [JOINT_2]DRIVE_HOME_SPEED_SLOW
@@ -293,7 +308,7 @@ net a-status-word   lcec.0.3.status-word  => cia402.3.statusword a6home.3.status
 # REVERT: net a-ctrl-word cia402.3.controlword => lcec.0.3.ctrl-word
 net a-ctrl-word-cia cia402.3.controlword => a6home.3.cw-in
 net a-ctrl-word     a6home.3.cw-out      => lcec.0.3.ctrl-word
-net a-amp-enable    joint.3.amp-enable-out => cia402.3.enable
+net a-amp-enable    joint.3.amp-enable-out => cia402.3.enable a6home.3.amp-enable
 # DRIVE-HOMING: amp fault = drive fault OR failed/aborted drive homing
 # REVERT: net a-amp-fault cia402.3.drv-fault => joint.3.amp-fault-in
 net a-drv-fault     cia402.3.drv-fault => a6home.3.drv-fault
@@ -304,6 +319,11 @@ net a-opmode-disp   lcec.0.3.opmode-display    => a6home.3.opmode-display
 net a-index-enable  joint.3.index-enable      <=> a6home.3.index-enable
 setp a6home.3.joint-no 3
 setp a6home.3.done-timeout [JOINT_3]DRIVE_HOME_TIMEOUT
+# R7 (optional, only after D0/D3 show Er47.0 during the stop push AND 0x6065 is RxPDO-mappable):
+# map 6065 (32-bit, halPin ferr-window) in ethercat-conf.xml, drop its sdoConfig, then:
+#   setp a6home.3.ferr-normal 182
+#   setp a6home.3.ferr-homing 3641
+#   net a-ferr-window a6home.3.ferr-window => lcec.0.3.ferr-window
 setp lcec.0.3.home-method      [JOINT_3]DRIVE_HOME_METHOD
 setp lcec.0.3.home-speed-fast  [JOINT_3]DRIVE_HOME_SPEED_FAST
 setp lcec.0.3.home-speed-slow  [JOINT_3]DRIVE_HOME_SPEED_SLOW
