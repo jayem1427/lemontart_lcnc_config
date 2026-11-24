@@ -13,81 +13,77 @@ limit switches.
 
 ## How it works (what's in this branch)
 
+This uses upstream code, not a component of our own:
+- **[`cia402_homecomp`](https://github.com/linuxcnc-ethercat/cia402_homecomp)**
+  is a LinuxCNC homing module (`[EMCMOT]HOMEMOD`) by Luca Toniolo and the
+  linuxcnc-ethercat contributors, forked from Rod Webster's prototype. This
+  config pins commit `b13bf72`.
+- **`cia402` from linuxcnc-ethercat v1.49.0** drives the CiA 402 side. It
+  replaces the old halcompile'd `cia402` this mill ran with lcec v1.41.
+
+An earlier version of this branch used our own `components/a6home.comp`. It is
+kept on branch `dev-drive-homing-a6home` as a fallback; see Rollback.
+
 | File | Change |
 |---|---|
-| `components/a6home.comp` | New realtime component, one instance per drive. Runs the homing handshake with the drive (details below) |
-| `components/test/` | Bench test of the component's state machine against a simulated A6 and LinuxCNC's index homing. Needs only gcc: `sh components/test/test_a6home.sh` |
-| `scripts/build-a6home.sh` | Builds and installs `a6home` for **both** LinuxCNC builds (stock 2.9.8 needs `sudo`; the tpnext RIP doesn't) |
+| `scripts/install-drive-homing.sh` | Test D1: upgrades `~/linuxcnc-ethercat` to v1.49.0 and builds lcec + `cia402` + `cia402_homecomp` for stock 2.9.8 (`sudo`) and/or the tpnext RIP. Backs up the old modules first |
 | `scripts/drive_homing_d0.sh` | Test D0: read-only survey of each drive's homing objects, saved to `logs/drive_homing/` |
-| `ethercat-conf.xml` | Maps `0x6060`/`0x6061` (modes of operation) and the homing objects `6098`, `6099:01/02`, `609A`, `607C`, `60E6` into the PDOs. The fixed `6060 = 08` SDO is gone |
-| `ethercat_mill.hal` | Loads `a6home`, routes each joint's feedback, command, controlword, amp fault and `index-enable` through it, and sets the homing objects from the INI. The command scaling (`mult2.0–3`, `conv-real-sint.0–3`) now runs after `cia402.N.write-all` and `a6home.N.write-all` |
-| `ethercat_mill.ini` | Per joint: `DRIVE_HOME_*` keys, and LinuxCNC set to index-only homing (`HOME_SEARCH_VEL = 0`, small `HOME_LATCH_VEL`, `HOME_USE_INDEX = YES`) |
+| `ethercat-conf.xml` | Maps `0x6060`/`0x6061` (modes of operation) and the homing objects `6098`, `6099:01/02`, `609A`, `607C`, `60E6` into the PDOs. The fixed `6060 = 08` SDO is gone, because `cia402` now switches between mode 8 (CSP) and mode 6 (homing) |
+| `ethercat_mill.hal` | Per joint: `cia402` scales position (`pos-scale = SCALE`) and owns controlword and opmode. Enable, command and feedback pass through `joint.N.cia-*` pins, and `joint.N.request-custom-homing = 1`. The homing objects come from the INI. `mult2.0–3`, `div2.0–3` and `conv-*.0–3` stay loaded but are no longer in the thread, so the instance numbers used elsewhere don't shift |
+| `ethercat_mill.ini` | `[EMCMOT]HOMEMOD = cia402_homecomp`. Per joint: `DRIVE_HOME_*` keys, with `HOME_SEARCH_VEL = HOME_LATCH_VEL = 0` (upstream requirement) |
 
-Every change is fenced with `DRIVE-HOMING START/END` comments, and each
-changed line carries its `REVERT:` value.
+Every change is fenced with `DRIVE-HOMING START/END` comments, with `REVERT:`
+notes.
 
-**Why a component instead of a custom HOMEMOD.** LinuxCNC's stock *index-only*
-homing already does the right thing if something plays "encoder that resets to
-zero at the index". `a6home` plays that part with the drive. This means:
-- no `homing.c` rebuild and no HOMEMOD, so one module works under 2.9.8 and tpnext;
-- no dependence on which `cia402` component is installed (this mill runs lcec v1.41 + an older `cia402`);
-- LinuxCNC's own abort and E-stop handling stay in charge.
-
-**The sequence, per joint:**
-1. REF starts index-only homing. LinuxCNC sets `joint.N.index-enable` and creeps at `HOME_LATCH_VEL` (0.01 mm/s, cosmetic).
-2. `a6home` requests modes of operation 6 and waits until the drive reports 6 in `0x6061` with operation enabled (1 s limit).
-3. It then adds controlword bit 4 on top of `cia402`'s controlword. The drive homes.
-   While the drive moves, `motor-pos-fb` follows `motor-pos-cmd`, so LinuxCNC sees no following error.
+**The sequence, per joint** (upstream README, checked against the source):
+1. REF starts homing for the joint. `cia402_homecomp` waits for the drive to
+   report operation enabled, then sets `cia402.N.home`.
+2. `cia402` requests mode 6 and, once the drive reports 6 in `0x6061`, sends
+   the homing-start edge (controlword bit 4). The drive runs its method (hard
+   stop, then Z pulse).
+3. While the drive moves, LinuxCNC's feedback (`joint.N.motor-pos-fb`) follows
+   its command, so LinuxCNC doesn't raise a following error. The real position
+   is still on `joint.N.cia-pos-fb-in`. **During this time only the drive's own
+   protections apply:** its following-error window, torque limit and C10.08
+   timeout, plus `DRIVE_HOME_TIMEOUT_MS`.
 4. Done = statusword bits 10 and 12, but only after the drive was seen busy
-   (bit 10 or 12 low) since the start. Stale "homed" bits from an earlier run
-   can't end a new one; other A6 users saw "homing only works once per power
-   cycle".
-5. `a6home` requests CSP (8) again. Until `0x6061` reports 8, the drive gets its own actual position as target.
-6. Once the drive is back in CSP, `a6home` clears `index-enable`. With
-   `607C = 0` and `60E6 = 0` the drive's position is 0 at the Z pulse, which is
-   what LinuxCNC's index homing expects. LinuxCNC re-bases its command onto
-   that in the same servo cycle, then moves to `HOME` at `HOME_FINAL_VEL`.
+   since the start. Stale "homed" bits from an earlier run can't end a new one;
+   other A6 users saw "homing only works once per power cycle".
+5. `cia402` returns the drive to mode 8. `cia402_homecomp` lines LinuxCNC's
+   command up with the drive's actual position, so CSP never gets a stale
+   target (the Er87.1 jump other A6 users hit). With `607C = 0` and `60E6 = 0`,
+   the drive's position at the Z pulse is 0. LinuxCNC sets that point to
+   `HOME_OFFSET`, then makes its normal final move to `HOME` at `HOME_FINAL_VEL`.
 
-**Failure handling.** A drive fault, a homing error (statusword bit 13), a
-missing mode acknowledge, `DRIVE_HOME_TIMEOUT`, or an ESC abort never clear
-`index-enable`; that would read as "index found".
-- `a6home.N.amp-fault` goes true **only until LinuxCNC has disabled the joint**
-  (`joint.N.amp-enable-out` low), then it's released. LinuxCNC releases
-  `index-enable` only when its homing state machine runs, which needs the
-  machine on, and it refuses to turn on while an amp fault is present.
-  Holding amp-fault until `index-enable` dropped would leave a machine that
-  can never be turned on again. The bench test checks for this.
-- Machine off or E-stop during drive homing: `a6home` goes straight to
-  holding, without waiting for its timeout.
-- While holding, the drive keeps its own actual position, and LinuxCNC's
-  feedback is the real position, so its command re-syncs while it's off. Once
-  the machine is on, `index-enable` is released, and the command matches the
-  drive within 0.01 mm, `a6home` is idle again. CSP never gets a stale target,
-  which is the Er87.1 jump other A6 users hit.
-- The reason is printed on the terminal: `a6home: joint N drive homing failed: ...`. LinuxCNC shows "joint N amplifier fault"; turn the machine on and home again.
+**Failure handling.** A drive fault, a homing error (statusword bit 13), or
+`DRIVE_HOME_TIMEOUT_MS` aborts the homing.
+- The home request is withdrawn, and LinuxCNC's command is synced to the
+  drive's actual position.
+- LinuxCNC's normal abort runs, and the joint stays **unhomed**.
+- The terminal shows `cia402_homecomp: joint N homing aborted: <reason>`.
+- A real drive fault also reaches `joint.N.amp-fault-in` through
+  `cia402.N.drv-fault`, so the machine turns off as before.
 
-**Bench test** (`sh components/test/test_a6home.sh`): 16/16 pass. It covers 8
-scenarios, each run under both ways LinuxCNC writes `index-enable` (2.9 every
-cycle, tpnext on edges):
-- normal hard stop + Z;
-- stale homed bits at start;
-- two homes in a row;
-- drive fault during homing;
-- homing error (bit 13);
-- drive never acknowledges mode 6;
-- ESC abort with the machine on;
-- E-stop or machine off mid-homing.
+Enable always follows `joint.N.amp-enable-out`, so E-stop and machine off work
+as normal. `cia402.N.auto-fault-reset` is set to 0, so a drive fault is not
+cleared by the next Machine On. That matches the old `cia402`; lcec's default
+is 1.
 
-After every failure, a simulated operator turns the machine back on and jogs
-1 mm, proving the joint is usable and nothing is stuck. A negative control
-proves that passing LinuxCNC's command straight through trips Er87.1 in the
-simulated drive. The motion model follows `homing.c`/`control.c` (2.9 and
-tpnext): homing only runs while enabled, amp faults refuse enable, and the
-command follows the feedback while disabled.
+**The one silent trap.** If `joint.N.request-custom-homing` isn't 1,
+`cia402_homecomp` hands the joint to LinuxCNC's own homing. With search and
+latch velocity 0, that marks the joint **homed where it stands**, without moving.
+Check `joint.N.is-custom-homing` = 1 on every joint before the first REF (D1).
 
-**Useful pins:** `a6home.N.hstate` (0 idle, 1 request, 2 start, 3 running, 4
-handback, 5 error, 6 aborted), `.homing`, `.homed`, `.failed`, `.cw-out`,
-`.opmode`, plus `lcec.0.N.opmode-display` and `lcec.0.N.status-word`.
+**Upstream's own testing:** headless simulation with real `motmod` and `cia402`
+against simulated drives, on LinuxCNC 2.9.10 and 2.10.0-pre2. It hasn't been
+validated on real EtherCAT hardware. We compiled it against 2.9.8 (its
+`homing.c` is identical to 2.9.10's) and against tpnext-ma: no errors.
+
+**Useful pins:**
+- `joint.N.cia-state`: 0 idle, 1 mode wait, 2 running, 3 base finalization, 4 enable wait, 5 unlock wait.
+- `joint.N.is-custom-homing`.
+- `cia402.N.stat-homing`, `.stat-homed`, `.stat-homing-error`, `.opmode`.
+- `lcec.0.N.opmode-display`, `lcec.0.N.status-word`.
 
 ---
 
@@ -151,32 +147,29 @@ handback, 5 error, 6 aborted), `.homing`, `.homed`, `.failed`, `.cw-out`,
   (364.0889 counts/° = 131 072/360), so one Z pulse per table revolution.
 - Before this branch: CSP mode with `0x6060 = 8` set by SDO and not mapped in the
   PDOs. This branch maps `6060`/`6061` so modes can change while running.
-- Position scaling is in HAL (`mult2`/`conv-real-sint` on the command,
-  `conv-sint-real`/`div2` on the feedback). The `cia402` component only handles
-  enable and fault.
+- Before this branch, position scaling was in HAL (`mult2`/`conv-real-sint` on
+  the command, `conv-sint-real`/`div2` on the feedback), and the old `cia402`
+  only handled enable and fault. Now `cia402.N.pos-scale` does the scaling.
 - The drives' DI functions are cleared (`0x2004 = 0`). Hard-stop homing doesn't
   use switches, so keep it that way. The Y/Z shared home bus no longer matters
   for homing.
 
 **LinuxCNC (`homing.c` in 2.9 and tpnext-ma, `control.c`):**
-- Index-only homing (`HOME_SEARCH_VEL = 0`, `HOME_LATCH_VEL ≠ 0`,
-  `HOME_USE_INDEX = YES`) sets `joint.N.index-enable`, then creeps at
-  `HOME_LATCH_VEL` until something clears index-enable. It then sets
-  `motor_offset = −HOME_OFFSET` and `pos_cmd = pos_fb`, assuming the feedback
-  reads ~0 at the index. After that it does the final move to `HOME`.
+- `[EMCMOT]HOMEMOD` swaps in a homing module. `cia402_homecomp` `#include`s the
+  `homing.c` of the LinuxCNC it is built for, so it is built once per LinuxCNC
+  build. `homing.c` is identical in 2.9.8 and 2.9.10. tpnext-ma adds only
+  negative-sequence gantry sync and the `HOME_SEARCH_DIST`/`LATCH_DIST`
+  fields, which the module detects at build time.
 - Each servo cycle: read homing pins → read `motor-pos-fb` → homing → compute `motor-pos-cmd` → write.
-- `HOME_SEARCH_DIST` / `HOME_LATCH_DIST` exist in master and tpnext only. 2.9 ignores them.
 
 **lcec (`linuxcnc-ethercat`):**
-- This mill runs lcec **v1.41** with an older `cia402` component (enable and fault only).
-- lcec ≥ 1.49.0 (2026-11-17) ships a `cia402` with a homing handshake (mode 6
-  acknowledged before bit 4, bits 10 + 12, stale status rejected). It still
-  doesn't (a) report the command as feedback while the drive moves on its own,
-  (b) wait for the drive to be back in CSP before releasing `index-enable`, or
-  (c) keep `index-enable` set on a drive fault; it clears it, which LinuxCNC
-  can read as "index found".
-- So this branch doesn't depend on any `cia402` homing. `a6home` does the
-  handshake and (a)–(c) itself, and works with the `cia402` already installed.
+- Before this branch the mill ran lcec **v1.41** with an older `cia402` component (enable and fault only).
+- lcec ≥ 1.49.0 (2026-11-17) ships a `cia402` with a homing handshake: mode 6
+  acknowledged before bit 4, bits 10 + 12, stale status rejected. It also does
+  64-bit unwrapped position scaling.
+- `cia402_homecomp` adds the LinuxCNC side on top of it: command-as-feedback
+  while the drive moves, re-sync at the end or on abort, timeout, fault
+  handling. That's what this branch uses (`scripts/install-drive-homing.sh`).
 
 ---
 
@@ -212,11 +205,11 @@ The pieces have all been proven separately, though:
 
 | # | What people saw | Likely cause | This plan |
 |---|---|---|---|
-| F1 | After homing, the drive jumps or "rushes back to where homing started", with Er87.1 or "position deviation too large" (Jugo2 thread 54965 p.12; Konstantin thread 58325 p.6) | CSP resumes with LinuxCNC's stale target from before homing | `a6home` returns the drive to CSP holding its own position, then releases index-enable so LinuxCNC re-bases. Bench-tested; D2 checks the step |
-| F2 | "Homing only works once per power cycle" (andrax, Jugo2) | The drive's homed bits (12/15) stay set, so the next request is seen as already done | `a6home` only accepts "done" after it saw the drive busy. Bench-tested; **D2: home 5 times in a row with no power cycle** |
-| F3 | A custom homecomp can't be stopped once started (thread 54965 p.8) | The homecomp has no abort path | Stock `homing.c` keeps abort working. T6c |
+| F1 | After homing, the drive jumps or "rushes back to where homing started", with Er87.1 or "position deviation too large" (Jugo2 thread 54965 p.12; Konstantin thread 58325 p.6) | CSP resumes with LinuxCNC's stale target from before homing | `cia402_homecomp` syncs LinuxCNC's command to the drive's actual position before CSP resumes (upstream sim-tested). D2 checks the step |
+| F2 | "Homing only works once per power cycle" (andrax, Jugo2) | The drive's homed bits (12/15) stay set, so the next request is seen as already done | `cia402` and `cia402_homecomp` only accept "done" after the drive was seen busy since the start. Upstream sim-tested; **D2: home 5 times in a row with no power cycle** |
+| F3 | A custom homecomp can't be stopped once started (thread 54965 p.8) | The homecomp has no abort path | `cia402_homecomp` has an abort path ("cancelled") built on `homing.c`'s own. T6c |
 | F4 | Jumps when the MPG/handwheel is live during homing (andrax) | Jog input reaching the joint during the hand-back | LinuxCNC already drops wheel counts while homing is active (`control.c`, checked in 2.9 and master), so no HAL gate was added. T6g proves it on the machine |
-| F5 | One axis doesn't start homing and nobody notices (gantry users) | No supervision | C10.08 drive timeout (30 s) + `stat-homing` must rise within 0.5 s of `home` (log it in D2). LinuxCNC aborts at the end of its latch move |
+| F5 | One axis doesn't start homing and nobody notices (gantry users) | No supervision | C10.08 drive timeout (default 60 s) + `stat-homing` must rise within 0.5 s of `home` (log it in D2). `DRIVE_HOME_TIMEOUT_MS` aborts if it never finishes |
 | F6 | Values written with `sdoConfig` **stay in the drive after being removed from the XML** (fer662) | The A6 saves SDO writes | **D0 must record every original value** (`6098`, `6099`, `609A`, `607C`, `60E6`, `2010:09`, `2010:31/32`, stall time). Rollback writes them back explicitly |
 | F7 | andrax recommends `sync0Shift="0"` | Timing | Observation only. This mill runs `300000` with M2R and is stable. **Don't change it** unless D2 shows timing problems |
 
@@ -255,10 +248,9 @@ The code is done (see "How it works"). These values are placeholders until the t
 | `HOME_OFFSET` | INI | 0 (= machine zero at the Z pulse) | D4 |
 | `HOME` | INI | X/Y +15, Z −15 (park 15 mm off the Z pulse) | D4. Must be clear of the limit switch: LinuxCNC ignores limits only while homing, so a joint that ends homing on its limit switch faults |
 | `MIN_LIMIT` / `MAX_LIMIT` | INI | unchanged (still the wide values for unhomed jogging) | D4/T8. With zero at the stop end, the old wide limits **let G-code reach the hard stop**. Tighten them once travel is measured |
-| `DRIVE_HOME_TIMEOUT` | INI | 120 s (A 60 s) | D3, once the real homing time is known. The drive's own limit is C10.08 (`0x2010:09`, default 60 s) |
+| `DRIVE_HOME_TIMEOUT_MS` | INI → `joint.N.cia-timeout-ms` | 120000 (A 60000) | D3, once the real homing time is known. Keep it above the drive's own limit C10.08 (`0x2010:09`, default 60 s) so the drive reports its own error first |
 
-The `HOME_LATCH_DIST` keys only take effect on tpnext. LinuxCNC's creep is
-0.01 mm/s, so 5 mm covers 500 s.
+The A slow speed is 10 °/s, so its Z search (at most one revolution) takes up to 36 s.
 
 ## 5. Test plan
 
@@ -282,42 +274,54 @@ all three linear drives, and 33/34 on A. **If it's rejected on this firmware,
 stop and report to Jon** with the `60E3` list and the firmware version; don't
 improvise another method.
 
-### D1: Build and load `a6home`
-1. `sh components/test/test_a6home.sh` → 7/7 + control OK.
-2. `scripts/build-a6home.sh` (asks for sudo for the stock build).
-3. Start LinuxCNC (both launchers) with the machine **off**. Check `halcmd show pin a6home.0`,
-   `halcmd show thread servo-thread` (order: `div2.N` → `a6home.N.read-all` → motion →
-   `cia402.N.write-all` → `a6home.N.write-all` → `mult2.N` → `conv-real-sint.N` → `lcec.write-all`),
-   and that `lcec.0.N.opmode-display` reads 8 once the drives are enabled.
-4. Machine on, jog every axis: must behave exactly as before (`a6home.N.hstate` = 0).
+### D1: Install, load and jog (no homing yet)
+1. Close LinuxCNC. Run `scripts/install-drive-homing.sh` (asks for sudo for
+   the stock build; `... tpnext` does only the RIP). It refuses to run if
+   `~/linuxcnc-ethercat` has local changes. It backs up the old `lcec.so`,
+   `cia402.so` and `lcec_conf` to `~/drive-homing-backup/<time>/`.
+2. **lcec 1.41 → 1.49 is a big jump on its own:** 1.44 changed M2R DC resync,
+   and 1.46 added Sync Units. Before testing homing, start LinuxCNC, turn the
+   machine on, jog every axis, and run a short G61 test program. It must
+   behave exactly as before: no vibration at enable (CLAUDE.md rule 7), no
+   Er47.0, and no "Failed to get reference clock time" beyond the usual one at
+   startup.
+3. With the machine **off**, check:
+   - `halcmd show pin joint.0.is-custom-homing` (and 1, 2, 3) = TRUE on all four joints;
+   - `halcmd show pin joint.0.cia-state` = 0;
+   - `halcmd show param cia402.0.pos-scale` = 13107.2 (A 364.0889);
+   - `halcmd show param cia402.0.auto-fault-reset` = FALSE;
+   - `halcmd show thread servo-thread` order: `lcec.read-all` →
+     `cia402.N.read-all` → `motion-command-handler` → `motion-controller` →
+     `cia402.N.write-all` → `lcec.write-all`.
+4. Machine on: `lcec.0.N.opmode-display` = 8 on all drives. Jog each axis and
+   compare the DRO with the old scaling: 10 mm jogged must read 10 mm (and
+   10° on A).
 
 ### D2: Bench run of drive homing, A axis (mechanically disconnected = safe)
-1. All four drives are wired through `a6home` in this branch. Home A on its own first (button or `halui.joint.3.home`).
-2. Start LinuxCNC. Check that the machine enables and jogs as before, and that
-   `lcec.0.3.opmode-display` = 8 and `a6home.3.hstate` = 0.
-3. Run `halscope` or `halsampler` at the servo rate on:
-   `lcec.0.3.status-word`, `lcec.0.3.opmode-display`, `a6home.3.hstate`,
-   `a6home.3.index-enable`, `a6home.3.homed`, `a6home.3.failed`, `a6home.3.cw-out`,
+1. Home A on its own first: its home button, or `halcmd setp halui.joint.3.home 1` then `0`.
+2. Run `halscope` or `halsampler` at the servo rate on:
+   `lcec.0.3.status-word`, `lcec.0.3.opmode-display`, `joint.3.cia-state`,
+   `cia402.3.home`, `cia402.3.stat-homing`, `cia402.3.stat-homed`,
    `lcec.0.3.pos-fb`, `lcec.0.3.pos-cmd`, `joint.3.motor-pos-fb`, `joint.3.homed`.
-4. Home A.
+3. Home A.
 
 **Pass:**
 - The drive goes to mode 6 and moves to its Z pulse.
 - `pos-fb` ends at 0 (= `607C`).
-- The mode returns to 8 **before** `index-enable` clears, and `lcec.0.3.pos-cmd` never steps by more than one count at the hand-back.
+- The mode returns to 8, and `lcec.0.3.pos-cmd` never steps by more than one count at the hand-back.
 - `joint.3.homed` = 1, and the final move goes to `HOME`.
 
 **R1 check:** from the statusword log, record which bits the A6 sets when
 homing finishes (10, 12, 15). If bit 12 never sets, `stat-homed` never fires
-and homing times out. In that case add a small patch to the `cia402`
-component (or a wrapper comp) that also accepts bit 15, and document it.
+and homing times out (`homing aborted: timeout`). In that case report it
+upstream (linuxcnc-ethercat) with the log, rather than patching locally.
 
 **F2 check:** home A **5 times in a row without power-cycling the drive**.
 Every run must actually move to the Z pulse, not finish instantly on stale
 bits. If a run finishes instantly, log the statusword at the request, check the
-lcec version (D1), and stop.
+lcec version (`git -C ~/linuxcnc-ethercat describe --tags` = v1.49.0), and stop.
 
-**F5 check:** `a6home.3.hstate` must reach 3 (running) within 0.5 s of the REF. Record the delay.
+**F5 check:** `joint.3.cia-state` must reach 2 (running) within 0.5 s of the REF. Record the delay.
 
 Then 20 homes from random start angles. **Pass (A2):** `lcec.0.3.pos-fb` read
 at the moment of homing equals the Z position each time, and the table mark
@@ -332,7 +336,9 @@ Use drive homing only, started from LinuxCNC as in D2. Do it on X first.
    - Stay at the lowest torque that detects the stop reliably, 10 out of 10.
 3. Watch the drive's following-error window (`0x6065` = 0.5 mm / 250 ms). Find
    out whether it trips Er47.0 while pushing against the stop in homing mode. If
-   it does, raise the window only during homing and record how.
+   it does, stop and decide with Jon how to widen it only during homing (e.g.
+   map `0x6065` into the RxPDO and switch it on `cia402.N.stat-homing`). Don't
+   widen it permanently.
 4. **Stop-to-Z clearance (important):** log `lcec.0.0.pos-fb` at the stall and
    at the Z pulse (before the drive zeroes it). Clearance = travel from the stop
    to the Z pulse, 0 … 10 mm.
@@ -362,12 +368,12 @@ limit wiring is gagged, so watch the first runs closely.
 
 ### T6: Fault paths (A5), on each axis
 a. Software E-stop (slave 3 DI1) while the drive homes → machine off, joint unhomed. On reset, nothing moves.
-b. **Force a drive fault during homing** (expect: machine off, "a6home: joint N drive homing failed: drive fault", joint unhomed). For example, set C10.30 so low the
+b. **Force a drive fault during homing** (expect: machine off, "cia402_homecomp: joint N homing aborted: drive fault", joint unhomed). For example, set C10.30 so low the
    drive times out (C10.08), or pull a drive's enable. The joint must be
-   **unhomed** afterwards. If it shows homed, stop and report; `a6home` must never clear `index-enable` on a fault.
-c. ESC / abort in LinuxCNC during drive homing. Expect: machine off (amp fault
-   held until the command catches up), joint unhomed, `0x6061` back to 8, no jump
-   when you turn the machine on again.
+   **unhomed** afterwards. If it shows homed, stop and report.
+c. ESC / abort in LinuxCNC during drive homing. Expect: "homing aborted:
+   cancelled", the drive stops, joint unhomed, `0x6061` back to 8, no jump on the
+   next jog or Machine On.
 d. Turn the machine off and back on after homing, then jog: no jump.
 e. Re-power the drives' logic while LinuxCNC runs, with the machine homed. Find
    out whether the joints unhome. The raw feedback changes after re-power. If
@@ -399,21 +405,37 @@ Machine zero moves on every axis. With **CLAUDE.md rules 1 and 2** in force:
 
 | # | Risk | Where it's caught |
 |---|------|-------------------|
-| R1 | The A6 flags homing complete on bit 15 instead of bit 12, so `a6home` never sees "done" (times out safely) | D2 statusword log |
+| R1 | The A6 flags homing complete on bit 15 instead of bit 12, so `cia402` never sees "done" (times out safely) | D2 statusword log |
 | R2 | This firmware rejects method −1/−2 (StepperOnline's forum claim) | D0 |
-| R3 | Stale target at the switch back to CSP → Er87.1 | `a6home` handback + bench test; D2 step size |
-| R4 | A fault read as "index found" → false "homed" | `a6home` never clears index-enable on failure; T6b |
+| R3 | Stale target at the switch back to CSP → Er87.1 | `cia402_homecomp` re-sync (upstream sim test); D2 step size |
+| R4 | `request-custom-homing` not set → LinuxCNC homes the joint in place, no motion, wrong zero | D1 `is-custom-homing` check on every joint |
 | R5 | Stop-to-Z clearance near 0 or 10 mm → home jumps 10 mm | D3 step 4 |
 | R6 | Too much homing torque damages screw bearings or the coupling | Start at 20 %, step up 5 % at a time, dedicated rigid stop |
-| R7 | Drive following-error window (0.5 mm / 250 ms here; fer662 likely ran the much wider default) trips Er47.0 while pushing against the stop | D3 step 3. If it does: check `0x6065` can be mapped into the RxPDO, then use the prepared `a6home.N.ferr-window` (commented block in `ethercat_mill.hal`) to widen it only while the drive homes |
+| R7 | Drive following-error window (0.5 mm / 250 ms here; fer662 likely ran the much wider default) trips Er47.0 while pushing against the stop | D3 step 3. If it does: map `0x6065` into the RxPDO and widen it only while `cia402.N.stat-homing` is true |
 | R8 | Machine zero moves → stored positions crash | T8 |
+| R10 | lcec 1.41 → 1.49 changes DC sync behaviour (1.44 M2R resync, 1.46 Sync Units) and breaks something unrelated to homing | D1 step 2 smoke test, before any homing |
+| R11 | LinuxCNC feedback is suppressed while the drive homes, so only drive-side protections are active | Drive following-error window, hard-stop torque, C10.08, `DRIVE_HOME_TIMEOUT_MS`; hand on E-stop |
 | R9 | The joint parks on its limit switch after homing → "joint N on limit switch error" | `HOME` 15 mm off the Z pulse; D4 checks the switch is clear at `HOME` |
 
 ## 7. Rollback
-Check out `dev-jerk-testing` (or revert this branch's commits). That restores the `6060 = 08` SDO and the switch-homing `HOME_*` values; the unused `a6home` module can stay installed.
-**Then explicitly write back the original drive values recorded in D0** with
-`ethercat download`. The A6 keeps SDO writes after they're removed from the XML (F6). Keep
-the stored positions from before T8 in the log.
+- **Config:** check out `dev-jerk-testing` (or revert this branch's commits).
+  That restores the `6060 = 08` SDO, the old scaling and the switch-homing
+  `HOME_*` values, and removes `HOMEMOD`.
+  - lcec 1.49 can stay: its `cia402` keeps the same pin names as the old one
+    (`pos-scale` defaults to 1, `csp-mode` to CSP).
+  - Its `auto-fault-reset` defaults to **1**, though. On the old config, add
+    `setp cia402.N.auto-fault-reset 0` or restore the backed-up modules.
+- **Modules:** `scripts/install-drive-homing.sh` saved the old `lcec.so`,
+  `cia402.so` and `lcec_conf`, plus the previous lcec commit, in
+  `~/drive-homing-backup/<time>/`. Copy them back (sudo for
+  `/usr/lib/linuxcnc/modules`, `/usr/bin`), or check out that commit and
+  rebuild lcec.
+- **Drive values:** explicitly write back the original drive values recorded
+  in D0 with `ethercat download`. The A6 keeps SDO writes after they're removed
+  from the XML (F6). Keep the stored positions from before T8 in the log.
+- **Our own component** (`a6home`, bench-tested 16/16) is on branch
+  `dev-drive-homing-a6home`. It needs no lcec upgrade or HOMEMOD. Use it if
+  upstream's module fails on this machine.
 
 ## 8. Questions for Jon
 - Hard-stop blocks: where on each axis, and are they already there? (Z's current top stop vs the switch; X and Y negative ends.)
@@ -433,4 +455,5 @@ the stored positions from before T8 in the log.
 - StepperOnline forum statement on torque homing: https://forum.linuxcnc.org/ethercat/58323-ethercat-a6-servo-homing-problem
 - Er87.1 after drive homing on the A6: https://forum.linuxcnc.org/ethercat/54965-stepperonline-a6-servo?start=80
 - lcec `cia402` component, docs, 1.49.0 changelog, DeASDA homing for comparison: https://github.com/linuxcnc-ethercat/linuxcnc-ethercat
+- `cia402_homecomp` (HOMEMOD used here; README, TESTING.md, headless sim tests): https://github.com/linuxcnc-ethercat/cia402_homecomp
 - LinuxCNC `homing.c` / `control.c`: https://github.com/LinuxCNC/linuxcnc (branches `2.9`, `master`), https://github.com/grandixximo/linuxcnc/tree/tpnext-ma

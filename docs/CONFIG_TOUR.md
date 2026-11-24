@@ -94,9 +94,10 @@ is enough.
 ## Homing
 
 > **Branch `dev-drive-homing`:** the drives home themselves (hard stop, then Z pulse;
-> A to its Z pulse) and LinuxCNC runs index-only homing through the `a6home`
-> component. The table below is the switch homing on `dev-jerk-testing`. See
-> [DRIVE_HOMING.md](DRIVE_HOMING.md).
+> A to its Z pulse). LinuxCNC starts and supervises it through the upstream
+> `cia402_homecomp` homing module (`[EMCMOT]HOMEMOD`) and lcec ≥ 1.49 `cia402`,
+> which also takes over position scaling. The table below is the switch homing on
+> `dev-jerk-testing`. See [DRIVE_HOMING.md](DRIVE_HOMING.md).
 
 | Setting | Value | Why |
 |---------|-------|-----|

@@ -61,11 +61,11 @@ errors.
 | Y "homes" without moving | The shared Y/Z home switch was already closed. HAL's ignore-until-open logic handles this. Don't add `HOME_IS_SHARED` |
 | Y runs away on REF ALL | `HOME_ABSOLUTE_ENCODER = 1`. Never use it here |
 | Tool setter only works after pressing Z home | It's on a different input than HAL expects. Trip each sensor and watch `halcmd` |
-| `a6home: joint N drive homing failed: drive did not confirm the mode change` (branch `dev-drive-homing`) | `0x6060`/`0x6061` not mapped or not netted (`lcec.0.N.opmode`, `opmode-display`), or the drive isn't operation-enabled. Check `halcmd getp lcec.0.N.opmode-display` |
-| `a6home: ... homing error (statusword bit 13)` | The drive rejected or aborted homing: unsupported method (panel ALF4.2), C10.08 timeout, or no stop found. Run `scripts/drive_homing_d0.sh` |
-| `a6home: ... timeout` | Drive homing took longer than `DRIVE_HOME_TIMEOUT`, or the A6 never set statusword bit 12. Log `lcec.0.N.status-word` during a home ([DRIVE_HOMING.md](DRIVE_HOMING.md), D2) |
-| `a6home: ... aborted by LinuxCNC` and the machine turns off | Expected after ESC/E-stop during drive homing: amp-fault is held until LinuxCNC's command catches up, so the drive never gets a stale target. Turn the machine on and home again |
-| `cannot load a6home` / `a6home: not found` | Not built for the LinuxCNC you launched. Run `scripts/build-a6home.sh` (it builds both stock and tpnext) |
+| `cia402_homecomp: joint N homing aborted: drive fault` (branch `dev-drive-homing`) | The drive alarmed during homing; read the panel code. Often Er47.0 against the hard stop (D3 step 3) or a C10.08 homing timeout |
+| `cia402_homecomp: joint N homing aborted: drive reported homing error` | Statusword bit 13: unsupported method (panel ALF4.2), C10.08 timeout, or no stop found. Run `scripts/drive_homing_d0.sh` |
+| `cia402_homecomp: joint N homing aborted: timeout` | Took longer than `DRIVE_HOME_TIMEOUT_MS`. If `joint.N.cia-state` sat at 1, the drive never reported mode 6 in `0x6061` (check `lcec.0.N.opmode-display`). If it sat at 2, the A6 may never set statusword bit 12: log `lcec.0.N.status-word` ([DRIVE_HOMING.md](DRIVE_HOMING.md), D2) |
+| A joint shows homed instantly, without moving (branch `dev-drive-homing`) | `joint.N.request-custom-homing` isn't 1, so LinuxCNC's own homing (search/latch velocity 0) homed it in place. Check `halcmd show pin joint.N.is-custom-homing`. **Don't run anything; unhome and fix the HAL** |
+| `HOMEMOD cia402_homecomp not found` / `cannot load cia402_homecomp`, or `cia402.N.pos-scale` / `stat-homing` not found | Module not built for the LinuxCNC you launched, or lcec is older than 1.49. Run `scripts/install-drive-homing.sh` (stock and tpnext) |
 
 ## Probing and tool changes
 

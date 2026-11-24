@@ -76,7 +76,7 @@ their own machine: plain language, short sections, real values from the config.
 | LinuxCNC | stock apt **2.9.8** (`launch.sh`, Desktop "Launch_Mill") **and** experimental **tpnext-ma** run-in-place build at `~/src/linuxcnc-tpnext` (`launch-tpnext.sh`, Desktop "EtherCAT Mill (tpnext / jerk)") |
 | OS / RT | Debian, PREEMPT_RT kernel 6.12.x-rt |
 | UI | Probe Basic 0.6.6 / QtPyVCP 5.1.0 (Debian pkg). Log: `~/qtpyvcp.log` |
-| EtherCAT | IgH master 1.6.8 + linuxcnc-ethercat **v1.41.0** built from source in `~/linuxcnc-ethercat`. **Native `ec_e1000e` driver** on the onboard I219-LM since 2026-11-28 (was `generic`; backup `/etc/ethercat.conf.bak-generic`). Switch drivers with stop → rmmod → edit → start, never `restart`. CPU governor `performance` via `cpu-performance.service`. Details: `docs/SETUP.md#ethercat-driver-and-timing` |
+| EtherCAT | IgH master 1.6.8 + linuxcnc-ethercat **v1.41.0** built from source in `~/linuxcnc-ethercat` (`dev-drive-homing` needs a newer lcec, see `docs/DRIVE_HOMING.md`). **Native `ec_e1000e` driver** on the onboard I219-LM since 2026-11-28 (was `generic`; backup `/etc/ethercat.conf.bak-generic`). Switch drivers with stop → rmmod → edit → start, never `restart`. CPU governor `performance` via `cpu-performance.service`. Details: `docs/SETUP.md#ethercat-driver-and-timing` |
 | Scripts vs tpnext | With the tpnext build running, any terminal `halcmd` / `import linuxcnc` needs `source ~/src/linuxcnc-tpnext/scripts/rip-environment` first (else "HAL version code mismatch", stat all zeros) |
 | Drives | 4× StepperOnline **A6-EC** (CiA402 CSP, `6060=8`), firmware `AS715N_sAxis_V0.10`, 17-bit encoders. **Every SDO write is stored to drive EEPROM** (C13.10 `0x2013:11` = 1 on all four): APPLY/one-click persist across power cycles; undo = LOAD backup preset + APPLY |
 | Spindle | H100 VFD over Modbus (`h100.mb2hal`), max 24 000 RPM. Own **CH340** USB-RS485 adapter, 38400 8N1 slave 1 |
@@ -125,7 +125,9 @@ their own machine: plain language, short sections, real values from the config.
   | Software E-stop (NC) | `lcec.0.3.di-1` | gates `emc-enable-in` |
 
 - **Homing:** REF ALL runs Z(seq 0) → X(1) → Y(2) → A(3, in place). Branch `dev-drive-homing`
-  switches to drive-internal homing (hard stop + Z pulse) via `components/a6home.comp`;
+  switches to drive-internal homing (hard stop + Z pulse) via upstream `cia402_homecomp`
+  (`[EMCMOT]HOMEMOD`) + lcec **1.49** `cia402`, which also does position scaling there
+  (`scripts/install-drive-homing.sh`; own-component fallback on `dev-drive-homing-a6home`);
   see `docs/DRIVE_HOMING.md` and don't home with it before test D0 has passed.
   `NO_FORCE_HOMING = 1` (Jon wants to be able to jog unhomed). Same-sign latch,
   `HOME_IGNORE_LIMITS=YES`, and HAL ignores a shared bus that's already closed when

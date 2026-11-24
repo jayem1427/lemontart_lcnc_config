@@ -21,7 +21,7 @@ This is what the mill runs today. Matching it closely saves a lot of grief.
 | Kernel | 6.12 PREEMPT_RT (`linux-image-rt-amd64`) | Debian |
 | LinuxCNC | 2.9.8, `linuxcnc-uspace` | LinuxCNC apt repo (`trixie base 2.9-uspace`) |
 | EtherCAT master | IgH 1.6.8 (`ethercat-master`, `ethercat-dkms`) | EtherLab repo on openSUSE Build Service |
-| LinuxCNC EtherCAT driver | linuxcnc-ethercat v1.41+ | Built from source ([GitHub](https://github.com/linuxcnc-ethercat/linuxcnc-ethercat)) |
+| LinuxCNC EtherCAT driver | linuxcnc-ethercat v1.41+ (**v1.49.0+ on branch `dev-drive-homing`**) | Built from source ([GitHub](https://github.com/linuxcnc-ethercat/linuxcnc-ethercat)) |
 | UI | Probe Basic 0.6.6, QtPyVCP 5.1.0 | QtPyVCP apt repo |
 | Extras | `python3-pyqtgraph`, `python3-numpy`, `mpg123` | Debian |
 
@@ -59,6 +59,10 @@ This is what the mill runs today. Matching it closely saves a lot of grief.
 5. **linuxcnc-ethercat.** Clone it and build it as its README describes
    (`make && sudo make install`). This mill runs v1.41 or newer, and the DC
    clock settings in `ethercat-conf.xml` were written against it.
+   Drive homing (branch `dev-drive-homing`) needs v1.49.0 and the
+   `cia402_homecomp` module. `scripts/install-drive-homing.sh` installs both,
+   for stock LinuxCNC and the tpnext build; see
+   [DRIVE_HOMING.md](DRIVE_HOMING.md) test D1.
 6. **Probe Basic.** Add the QtPyVCP apt repo and `sudo apt install python3-probe-basic`.
    The [Probe Basic docs](https://github.com/kcjengr/probe_basic) cover this.
 7. **Extras.** `sudo apt install python3-pyqtgraph python3-numpy mpg123`.
