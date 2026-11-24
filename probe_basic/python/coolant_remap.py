@@ -62,8 +62,10 @@ def apply_tool_coolant(self, **words):
         self.set_errormsg("M202: M68 failed (%s)" % exc)
         return INTERP_ERROR
 
-    MESSAGE(
-        "coolant T%d: %.0f Hz, %.1f %% duty, %.1f psi"
-        % (tool, recipe.freq, recipe.duty, recipe.pressure)
-    )
+    # Silent on success (Jon 2026-11-24: no popup on every tool load).
+    # REVERT: uncomment to show the recipe again.
+    # MESSAGE(
+    #     "coolant T%d: %.0f Hz, %.1f %% duty, %.1f psi"
+    #     % (tool, recipe.freq, recipe.duty, recipe.pressure)
+    # )
     return INTERP_OK
