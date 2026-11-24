@@ -378,6 +378,10 @@ f. Homing error, e.g. block the move so the drive raises the homing-error bit or
    times out → `stat-homing-error`, LinuxCNC aborts, unhomed.
 
 ### T7: Both launchers (A4)
+> **Blocked by issue #68:** stock 2.9.8 (`launch.sh`) can't load this config at all today (`TPMOD = tpnextmod`, and `initf` isn't a 2.9 halcmd command). Until #68 is fixed, run T7 on tpnext only and record that the stock path is untested.
+>
+> Also fix issue #65 (EtherCAT bus loss doesn't E-stop LinuxCNC) before long unattended homing tests.
+
 Repeat a reduced D2/D4/D5 (5 homes per axis) under `launch.sh` (2.9.8) and
 `launch-tpnext.sh`. Check `halcmd show thread servo-thread` order on both.
 
