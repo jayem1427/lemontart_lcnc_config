@@ -93,6 +93,11 @@ is enough.
 
 ## Homing
 
+> **Branch `dev-drive-homing`:** the drives home themselves (hard stop, then Z pulse;
+> A to its Z pulse) and LinuxCNC runs index-only homing through the `a6home`
+> component. The table below is the switch homing on `dev-jerk-testing`. See
+> [DRIVE_HOMING.md](DRIVE_HOMING.md).
+
 | Setting | Value | Why |
 |---------|-------|-----|
 | Order | Z → X → Y → A (`HOME_SEQUENCE` 0/1/2/3) | Z clears first. Y and Z share a switch, so they can't home together |

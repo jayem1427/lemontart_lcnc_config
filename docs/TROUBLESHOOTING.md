@@ -61,6 +61,11 @@ errors.
 | Y "homes" without moving | The shared Y/Z home switch was already closed. HAL's ignore-until-open logic handles this. Don't add `HOME_IS_SHARED` |
 | Y runs away on REF ALL | `HOME_ABSOLUTE_ENCODER = 1`. Never use it here |
 | Tool setter only works after pressing Z home | It's on a different input than HAL expects. Trip each sensor and watch `halcmd` |
+| `a6home: joint N drive homing failed: drive did not confirm the mode change` (branch `dev-drive-homing`) | `0x6060`/`0x6061` not mapped or not netted (`lcec.0.N.opmode`, `opmode-display`), or the drive isn't operation-enabled. Check `halcmd getp lcec.0.N.opmode-display` |
+| `a6home: ... homing error (statusword bit 13)` | The drive rejected or aborted homing: unsupported method (panel ALF4.2), C10.08 timeout, or no stop found. Run `scripts/drive_homing_d0.sh` |
+| `a6home: ... timeout` | Drive homing took longer than `DRIVE_HOME_TIMEOUT`, or the A6 never set statusword bit 12. Log `lcec.0.N.status-word` during a home ([DRIVE_HOMING.md](DRIVE_HOMING.md), D2) |
+| `a6home: ... aborted by LinuxCNC` and the machine turns off | Expected after ESC/E-stop during drive homing: amp-fault is held until LinuxCNC's command catches up, so the drive never gets a stale target. Turn the machine on and home again |
+| `cannot load a6home` / `a6home: not found` | Not built for the LinuxCNC you launched. Run `scripts/build-a6home.sh` (it builds both stock and tpnext) |
 
 ## Probing and tool changes
 

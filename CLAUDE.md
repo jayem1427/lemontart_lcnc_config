@@ -124,7 +124,9 @@ their own machine: plain language, short sections, real values from the config.
   | Laser DS-5V-M beam | `lcec.0.2.di-5` | TRUE = blocked |
   | Software E-stop (NC) | `lcec.0.3.di-1` | gates `emc-enable-in` |
 
-- **Homing:** REF ALL runs Z(seq 0) → X(1) → Y(2) → A(3, in place).
+- **Homing:** REF ALL runs Z(seq 0) → X(1) → Y(2) → A(3, in place). Branch `dev-drive-homing`
+  switches to drive-internal homing (hard stop + Z pulse) via `components/a6home.comp`;
+  see `docs/DRIVE_HOMING.md` and don't home with it before test D0 has passed.
   `NO_FORCE_HOMING = 1` (Jon wants to be able to jog unhomed). Same-sign latch,
   `HOME_IGNORE_LIMITS=YES`, and HAL ignores a shared bus that's already closed when
   a home starts. The pendant MPG is wired to both joint and axis jog pins.
