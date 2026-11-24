@@ -10,6 +10,6 @@ T15  P0   D+6.350000 Z+35.593502 ; 1/4" 3fl endmill
 T16  P0   Z+35.940944 ; New Tool
 T17  P0   Z+22.809230 ; 3mm thread mill
 T18  P0   Z+25.443508 ; 6mm pcd endmill
-T99  P5   D+2.000000 ; touch probe
+T99  P5   D+2.000000 Z+45.042200 ; touch probe
 T2   P0   Z+17.436534 ; New Tool
 T101 P0   ; New Tool
