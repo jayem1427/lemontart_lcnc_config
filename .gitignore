@@ -74,3 +74,7 @@ logs/laser_hits/**/*.csv
 !logs/metrology/
 !logs/metrology/**/
 !logs/metrology/**/*.csv
+
+# Signal logs picked for offline analysis are committed compressed
+!logs/signals/*.csv.gz
+!logs/signals/*.summary.txt

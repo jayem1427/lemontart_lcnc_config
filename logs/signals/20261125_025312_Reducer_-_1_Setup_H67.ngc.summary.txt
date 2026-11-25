@@ -1,0 +1,49 @@
+config: signals
+session: Reducer_-_1_Setup_H67.ngc
+duration_s: 454.36
+samples: 45424
+csv: /home/jon/linuxcnc/configs/ethercat_mill/logs/signals/20261125_025312_Reducer_-_1_Setup_H67.ngc.csv
+
+x_ferr: max=0.343137 mm rms=0.037649 mm pin=joint.0.f-error
+  vs_limit: 0.0% of 1270.0
+y_ferr: max=0.410012 mm rms=0.040189 mm pin=joint.1.f-error
+  vs_limit: 0.0% of 1270.0
+z_ferr: max=0.291442 mm rms=0.010446 mm pin=joint.2.f-error
+  vs_limit: 0.0% of 1270.0
+a_ferr: max=0.013733 deg rms=0.002993 deg pin=joint.3.f-error
+  vs_limit: 0.0% of 1270.0
+x_ferr_drive: max=0.087357 mm rms=0.001575 mm pin=tune-drive-ferr.0.out
+  vs_limit: 0.0% of 1270.0
+y_ferr_drive: max=0.124741 mm rms=0.005697 mm pin=tune-drive-ferr.1.out
+  vs_limit: 0.0% of 1270.0
+z_ferr_drive: max=0.104523 mm rms=0.002624 mm pin=tune-drive-ferr.2.out
+  vs_limit: 0.0% of 1270.0
+a_ferr_drive: max=0.013733 deg rms=0.003004 deg pin=tune-drive-ferr.3.out
+  vs_limit: 0.0% of 1270.0
+x_torque: max=201.100000 % rms=7.560531 % pin=tune-torque.0.out
+y_torque: max=133.400000 % rms=12.640925 % pin=tune-torque.1.out
+z_torque: max=43.100000 % rms=8.904547 % pin=tune-torque.2.out
+a_torque: max=2.800000 % rms=1.212104 % pin=tune-torque.3.out
+x_vel: max=11660.000610 mm/min rms=1285.736217 mm/min pin=tune-velocity.0.out
+y_vel: max=13630.000305 mm/min rms=1349.958103 mm/min pin=tune-velocity.1.out
+z_vel: max=9978.231812 mm/min rms=349.758526 mm/min pin=tune-velocity.2.out
+a_vel: max=638.250732 deg/min rms=120.938216 deg/min pin=tune-velocity.3.out
+x_pos: max=127.025452 mm rms=97.479419 mm pin=joint.0.pos-fb
+y_pos: max=171.905487 mm rms=141.707974 mm pin=joint.1.pos-fb
+z_pos: max=54.346741 mm rms=39.636350 mm pin=joint.2.pos-fb
+a_pos: max=0.013733 deg rms=0.003001 deg pin=joint.3.pos-fb
+spindle_rpm_cmd: max=24000.000000 rpm rms=21847.432813 rpm pin=spindle.0.speed-out-abs
+spindle_rpm_fb: max=23994.000000 rpm rms=21730.181955 rpm pin=spindle.0.speed-in
+spindle_amps: max=4.690000 A rms=1.969217 A pin=mult2.6.out
+spindle_at_speed: max=1.000000 0/1 rms=0.971854 0/1 pin=spindle.0.at-speed
+spindle_vfd_fault: max=0.000000 code rms=0.000000 code pin=mb2hal.vfd_fault.00.float
+spindle_freq_cmd: max=3999.984000 0.1Hz rms=3641.251108 0.1Hz pin=mb2hal.freq_set.00.float
+spindle_freq_fb: max=3999.000000 0.1Hz rms=3621.699831 0.1Hz pin=mb2hal.freq_fb.00.float
+coolant_freq_cmd: max=1.000000 Hz rms=1.000000 Hz pin=motion.analog-out-04
+coolant_duty_cmd: max=0.600000 % rms=0.600000 % pin=motion.analog-out-05
+coolant_psi_cmd: max=0.000000 psi rms=0.000000 psi pin=motion.analog-out-06
+coolant_run: max=1.000000 0/1 rms=0.999945 0/1 pin=microject.coolant_run.00.bit
+coolant_pulse: max=6.000000 ms rms=5.999670 ms pin=microject.coolant_pulse.00.float
+coolant_period: max=1000.000000 ms rms=1000.000000 ms pin=microject.coolant_period.00.float
+tool_vel: max=17804.823729 mm/min rms=1897.286064 mm/min pin=motion.current-vel
+tool_vel_req: max=39733.639328 mm/min rms=8364.528805 mm/min pin=motion.requested-vel
