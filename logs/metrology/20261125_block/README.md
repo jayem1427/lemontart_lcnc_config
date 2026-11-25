@@ -41,3 +41,31 @@ Next: home at two very different latch speeds and see if the center moves, and/o
 reference that's independent of the block.
 
 The X width changes 4.5 µm with orientation, a little direction-dependent triggering (case D, mild).
+
+## Latch-speed test (slow latch 0.208 mm/s, 3× each, probe still at 180°)
+
+| | Normal latch (180° set) | Slow latch | Change |
+|---|---|---|---|
+| X center | +63.5 µm | +54.7 µm | −8.8 µm (delay direction, about 14 ms) |
+| Y center | +47.5 µm | +63.8 µm | +16.3 µm (opposite to a delay) |
+| X width | 50.7440 | 50.7549 | +10.9 µm (homing can't do this) |
+| Y width | 50.8118 | 50.8119 | 0 |
+
+Latch delay accounts for about 12 µm on X at most. It isn't the main cause.
+Files: `ridge_{x,y}_latch_slow.csv`. The normal-latch repeat after a restart is still pending.
+
+## Probe reversal check (`scripts/probe_backlash.py`, same slow-latch session)
+
+Touch a face at F20 with G38.2, then back off at F20 with G38.4 until the probe releases. Gap = axis reversal + probe hysteresis.
+
+| Check | Gap mean | sd | Note |
+|---|---|---|---|
+| X face (−X side, touched moving +X) | 27.1 µm | 2.3 | |
+| Y face (−Y side, touched moving +Y) | 22.7 µm | 2.8 | |
+| Z top (gravity-loaded baseline) | 9.2 µm | 1.0 | |
+
+Touches repeat to about 0.5 µm, while releases scatter about ±3 µm, so the probe's release is noisy.
+X and Y look similar, so there's no large X-only backlash. That leaves at most a few µm more on X than Y. The
+lateral probe hysteresis can't be separated from axis reversal without a dial indicator.
+Side note: the Z top at the center touched at −17.3346, about 16 µm higher than on 11-23 (−17.3502).
+Files: `backlash_1.csv` (X only, the Y pass aborted on a positioning bug), `backlash_2.csv`.
