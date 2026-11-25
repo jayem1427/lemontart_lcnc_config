@@ -11,7 +11,7 @@ or capture anything else you can name as a HAL pin.
 
 | Control | Does |
 |---------|------|
-| **LOG NEXT PROGRAM** | Starts logging when the next program runs in AUTO, stops when it ends |
+| **LOG NEXT PROGRAM** | Starts logging when the next program runs in AUTO, stops when it ends. **On this machine it re-arms itself after every program** (`AUTO_LOG_EVERY_PROGRAM = True` in `signal_monitor.py`), so every G-code run is logged with no popup. Set it to `False` to go back to arming by hand |
 | **START LIVE / STOP** | Logs continuously, e.g. while jogging |
 | **AXIS** (X Y Z A) | Which axes to plot (any combination) |
 | **SIGNAL** | What to plot: DRIVE (following error, 60F4), TORQUE (6077, % rated), VEL (606C), POS, or SPINDLE |

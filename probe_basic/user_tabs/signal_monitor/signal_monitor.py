@@ -89,6 +89,8 @@ RATE_HZ_OPTIONS = (25, 50, 100, 200, 500, 1000)
 POLL_MS_LOGGING = 10
 POLL_MS_ARMED = 100
 PLOT_REFRESH_MS = 100
+# REVERT: auto-log every program run in AUTO (Jon 2026-11-25). False = manual LOG NEXT PROGRAM.
+AUTO_LOG_EVERY_PROGRAM = True
 
 
 class UserTab(QWidget):
@@ -121,6 +123,10 @@ class UserTab(QWidget):
 
         self._build_controls()
         self._rebuild_plot()
+        # REVERT: START auto-log every program (Jon 2026-11-25). Set False to go back to manual arming.
+        if AUTO_LOG_EVERY_PROGRAM:
+            self.logger.arm_for_next_program()
+        # REVERT: END
         self._sync_controls()
         self._apply_plot_view()
         self._sync_timer()
@@ -599,6 +605,13 @@ class UserTab(QWidget):
 
     def _on_session_saved(self, csv_path: str, _summary_path: str) -> None:
         self.message_label.setText(f"Log saved: {csv_path}")
+        # REVERT: START auto-log every program — re-arm quietly, no popup per program.
+        if AUTO_LOG_EVERY_PROGRAM:
+            self.logger.arm_for_next_program()
+            self._last_status = None
+            self._sync_controls()
+            return
+        # REVERT: END
         QMessageBox.information(
             self,
             "Signal log saved",
