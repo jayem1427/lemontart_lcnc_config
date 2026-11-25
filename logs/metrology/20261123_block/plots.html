@@ -34,6 +34,8 @@ td.num,th.num{text-align:right}
 svg{display:block;width:100%;height:auto}
 svg text{fill:var(--muted);font-family:var(--mono);font-size:10px}
 .note{color:var(--muted);font-size:13px;margin:0;max-width:70ch}
+.findings ul{margin:0;padding-left:20px;display:grid;gap:6px;max-width:72ch}
+.findings h3{font-size:14px;font-weight:600;margin:4px 0 0}
 .key{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
 .key span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px;background:var(--c)}
 </style>
@@ -43,6 +45,38 @@ svg text{fill:var(--muted);font-family:var(--mono);font-size:10px}
   <h1>Block Probe Repeatability</h1>
   <p class="lede">Probe Basic ridge probe, touch probe T99, 10 runs per axis on the same block, measure-only mode. Plots show each run's difference from the 10-run mean in micrometres.</p>
 </header>
+
+<section class="panel findings">
+  <h2>Findings, 11-18 to 11-25 (open, parked)</h2>
+  <p class="note">Within a session the machine and probe are excellent. Between power-ups, the block center moves by tens of µm. The cause wasn't found, so the investigation is parked.</p>
+  <h3>What the data shows</h3>
+  <ul>
+    <li><b>Within a session:</b> centers repeat to about 0.5 µm and widths to about 1.5 µm. Re-homing X repeats to about 2 µm. Five Z touches repeat to 0.3 µm.</li>
+    <li><b>Between sessions, centers jump:</b> X 0 → +34 → +59 → +56…64 µm, Y 0 → −5 → +44 → +45…64 µm, and the Z top is about 16 µm higher than on 11-23. The jumps line up with power-ups and restarts, not with run time.</li>
+    <li><b>X width wanders</b> about 13 µm between sessions (50.742–50.755). Y width stays within about 1 µm, apart from 11-24.</li>
+  </ul>
+  <h3>Tested and too small to explain it</h3>
+  <ul>
+    <li><b>Probe tip runout:</b> about 4 µm from the 0°/180° rotation test (X split 7.5 µm, Y 2.8 µm). The average didn't move.</li>
+    <li><b>Home input delay:</b> a 4× slower latch moved X −9 µm and Y +16 µm (the wrong direction for a delay). The test also spanned a restart, so it's inconclusive, and at most about 12 µm on X.</li>
+    <li><b>Backlash:</b> touch-to-release gap is X 27 µm, Y 23 µm and Z 9 µm (probe hysteresis included). There's no big slop, and X is only about 4 µm worse than Y.</li>
+    <li><b>Temperature:</b> 14.9–17.1 °C. Frame growth could account for 15–20 µm at most.</li>
+  </ul>
+  <h3>Leading hypotheses</h3>
+  <ul>
+    <li><b>The home reference shifts between power-ups.</b> This is the favourite. If the home sensors are inductive or optical, their switch point drifts with sensor warm-up (10–30 min after power-on) and supply voltage. That fits "stable within a session, different each power-up" and the jumps around the input-board repair. Y re-home repeatability was never tested.</li>
+    <li><b>The block or vise moved between sessions</b> (clamp relaxation, overnight temperature, handling during repairs). Nothing measured so far rules it out.</li>
+    <li><b>A separate X effect</b> behind the width wander: direction-dependent probe triggering (4.5 µm 0°/180° width split in X) or lost motion.</li>
+  </ul>
+  <h3>Tests that would settle it</h3>
+  <ul>
+    <li>Probe a <b>fixed reference</b> (fixed vise jaw, or a pin or ring bolted to the table) every session. If it moves with the block, it's homing. If it doesn't, the block moved.</li>
+    <li><b>Warm-up test:</b> power up, home, probe; wait 45–60 min powered, re-home without restarting, probe again.</li>
+    <li><b>Restart vs power-cycle:</b> re-home only, then a LinuxCNC restart, then a full power cycle, probing after each step.</li>
+    <li>Likely fix if it's homing: <b>index homing</b>, where the encoder's index pulse sets the position and the switch only picks the revolution.</li>
+  </ul>
+  <p class="note">Data and scripts: <code>logs/metrology/2026111*_block</code>, <code>scripts/block_ridge_repeat.py</code>, <code>scripts/block_z_grid.py</code>, <code>scripts/probe_backlash.py</code>. T99 length 45.0422 from 11-24 is still to be verified.</p>
+</section>
 
 <section class="panel">
   <h2>Summary</h2>

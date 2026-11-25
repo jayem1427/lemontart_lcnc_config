@@ -176,9 +176,12 @@ their own machine: plain language, short sections, real values from the config.
   Keep C00.06 ≈ 100–120 % (manual). Drive-internal ID (C07/F30) isn't reachable over EtherCAT.
 - **"Must re-home to jog after a job":** after M30 the machine is still in Auto with a stuck jog. A HAL plan was drafted but never built.
 - **Conversational tab** hard-codes `M6`. The fix lives in the system package `qtpyvcp_conversational_gcode`.
-- **X shifted +33 µm between 11-18 and 11-23** on the same block and G54 (`logs/metrology/`).
-  Re-homing repeats to about 2 µm, cleaning the switch changed nothing, and Y barely moved. Thermal
-  frame growth could explain at most about 15–20 µm. A warm-up test (probe every 15 min from cold, no
-  re-home, log the chiller temperature) is planned but deferred.
+- **The probed block center shifts tens of µm between power-ups (parked, unsolved, 2026-11-25).**
+  It's stable to under 1 µm within a session. Between 11-18 and 11-25 the shifts reached X +60, Y +45…64
+  and Z +16 µm. Ruled out as the main cause: probe runout (~4 µm), home latch delay (≤12 µm), backlash
+  and temperature. The leading suspect is the home sensors' switch point shifting between power-ups (if
+  they're prox sensors, warm-up or supply voltage). Next tests: a fixed reference every session, a warm-up
+  re-home with no restart, and restart vs power-cycle. The likely fix is index homing. Write-up:
+  `logs/metrology/20261123_block/plots.html`. The T99 length (45.0422) is still unverified.
 - **The INI on `dev-jerk-testing` uses tpnext-only keys** (`TPMOD=tpnextmod`,
   `PLANNER_TYPE`, `MAX_JERK`). Check that the stock `launch.sh` still starts before relying on it.
