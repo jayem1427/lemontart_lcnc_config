@@ -106,6 +106,40 @@ def smooth_normals(tris, crease_deg=35.0):
     return corner.reshape(-1, 3, 3), fn_u
 
 
+def feature_edges(tris, angle_deg=30.0):
+    """Edges whose two faces meet at more than angle_deg, plus open edges. Returns (E, 2, 3)."""
+    fn = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
+    fn = fn / np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
+    verts = tris.reshape(-1, 3)
+    key = np.round(verts * 1e3).astype(np.int64)
+    _, vid = np.unique(key, axis=0, return_inverse=True)
+    vid = vid.reshape(-1, 3)
+    e = np.concatenate([vid[:, [0, 1]], vid[:, [1, 2]], vid[:, [2, 0]]])
+    face = np.tile(np.arange(len(tris)), 3)
+    e.sort(axis=1)
+    order = np.lexsort((e[:, 1], e[:, 0]))
+    e, face = e[order], face[order]
+    same = np.all(e[1:] == e[:-1], axis=1)
+    keep = []
+    # pairs of faces sharing an edge
+    i_pair = np.nonzero(same)[0]
+    cosang = (fn[face[i_pair]] * fn[face[i_pair + 1]]).sum(1)
+    sharp = i_pair[cosang < np.cos(np.radians(angle_deg))]
+    keep.append(sharp)
+    # open edges: not part of any pair
+    in_pair = np.zeros(len(e), bool)
+    in_pair[i_pair] = True
+    in_pair[i_pair + 1] = True
+    keep.append(np.nonzero(~in_pair)[0])
+    idx = np.concatenate(keep)
+    # look up coordinates: first occurrence of each vertex id
+    first = np.zeros(vid.max() + 1, np.int64)
+    first[vid.reshape(-1)[::-1]] = np.arange(verts.shape[0])[::-1]
+    p0 = verts[first[e[idx, 0]]]
+    p1 = verts[first[e[idx, 1]]]
+    return np.stack([p0, p1], 1)
+
+
 # ----------------------------------------------------------------------------- camera
 
 class Ortho:
@@ -213,7 +247,8 @@ def _env(r):
 
 
 def render(objects, cam, size=(760, 440), ss=3, light_dir=(-0.45, -0.35, 0.82),
-           outline=0.35, ao_strength=0.45, shadow=True, fit=None, margin=0.06, ground=None):
+           outline=0.35, ao_strength=0.45, shadow=True, fit=None, margin=0.06, ground=None,
+           lines=True, line_px=1.4, line_angle=30.0):
     """objects: list of (tris, Material). Returns the supersampled RGBA image and the camera.
 
     fit: list of tris arrays the camera frames (default: everything)."""
@@ -298,20 +333,39 @@ def render(objects, cam, size=(760, 440), ss=3, light_dir=(-0.45, -0.35, 0.82),
     col = col * ao[..., None] + (spec * shadow_f)[..., None]
     col = col * (1 - emis[..., None]) + base * emis[..., None]
 
-    # CAD-style soft outlines on depth / normal / object breaks
-    if outline > 0:
-        dz = np.where(mask, depth, depth[mask].max() + 50)
-        gx = ndimage.sobel(dz, 1)
-        gy = ndimage.sobel(dz, 0)
-        dg = np.hypot(gx, gy)
-        edge_d = dg > 3.5 / cam.scale * 8
-        nx = [ndimage.sobel(n[..., k], 1) ** 2 + ndimage.sobel(n[..., k], 0) ** 2 for k in range(3)]
-        edge_n = np.sqrt(sum(nx)) > 2.2
-        edge_i = (ndimage.maximum_filter(ibuf, 3) != ndimage.minimum_filter(ibuf, 3))
-        edge = (edge_d | edge_n | edge_i).astype(float)
-        edge = ndimage.gaussian_filter(edge, 0.5 * ss)
-        col = col * (1 - outline * np.clip(edge, 0, 1)[..., None] * 0.6)
-
+    # Fusion-style black lines: visible sharp mesh edges + silhouettes / object breaks
+    if lines:
+        line = np.zeros((H, W), bool)
+        E = feature_edges(all_tris, line_angle)
+        if len(E):
+            Ps = cam.project(E)
+            seg_len = np.linalg.norm(Ps[:, 1, :2] - Ps[:, 0, :2], axis=1)
+            nsamp = np.maximum(2, np.ceil(seg_len)).astype(int)
+            tot = nsamp.sum()
+            rep = np.repeat(np.arange(len(E)), nsamp)
+            start = np.repeat(np.cumsum(nsamp) - nsamp, nsamp)
+            t = (np.arange(tot) - start) / np.maximum(np.repeat(nsamp, nsamp) - 1, 1)
+            pts = Ps[rep, 0] + (Ps[rep, 1] - Ps[rep, 0]) * t[:, None]
+            xi = np.clip(pts[:, 0].astype(int), 0, W - 1)
+            yi = np.clip(pts[:, 1].astype(int), 0, H - 1)
+            # visible if not behind the surface there (check a small neighbourhood)
+            dmin = ndimage.minimum_filter(np.where(mask, depth, np.inf), size=3)
+            dmax = ndimage.maximum_filter(np.where(mask, depth, -np.inf), size=3)
+            bias = 0.25
+            vis = (pts[:, 2] <= dmax[yi, xi] + bias) & (pts[:, 2] <= dmin[yi, xi] + 1.5) \
+                | ~np.isfinite(dmin[yi, xi])
+            line[yi[vis], xi[vis]] = True
+        # silhouettes and object-to-object breaks from the buffers
+        sil = ndimage.binary_dilation(mask) & ~ndimage.binary_erosion(mask)
+        brk = (ndimage.maximum_filter(ibuf, 2) != ndimage.minimum_filter(ibuf, 2)) & mask
+        dz = np.where(mask, depth, 1e6)
+        jump = (ndimage.maximum_filter(dz, 2) - ndimage.minimum_filter(dz, 2)) > 3.0
+        line |= sil | brk | (jump & mask)
+        r_ = max(1, int(round(line_px * ss / 2)))
+        line = ndimage.binary_dilation(line, iterations=r_ - 1) if r_ > 1 else line
+        line_f = line.astype(float)
+        col = col * (1 - 0.92 * line_f[..., None]) + 0.03 * line_f[..., None]
+        mask = mask | line
     col = np.clip(col, 0, 1)
     rgba_extra = None
     if ground is not None and shadow:
