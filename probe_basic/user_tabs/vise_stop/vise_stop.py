@@ -13,13 +13,14 @@ GO TO STOP and CAPTURE STOP, so LinuxCNC keeps them on exit.
 Docs: docs/VISE_STOP.md
 """
 
+import json
 import os
 
 import linuxcnc
 
 from qtpy import uic
-from qtpy.QtCore import QPointF, QRectF, Qt, QTimer, Signal
-from qtpy.QtGui import QBrush, QColor, QFont, QFontDatabase, QPainter, QPen, QTransform
+from qtpy.QtCore import QRectF, Qt, QTimer, Signal
+from qtpy.QtGui import QColor, QFont, QFontDatabase, QPainter, QPen, QPixmap
 from qtpy.QtWidgets import (
     QAbstractSpinBox,
     QButtonGroup,
@@ -58,20 +59,10 @@ RETRACT_MDI = "o<vise_stop_retract> call"
 
 
 # ---------------------------------------------------------------- graphics
-# Schematic of the H67 self-centering vise seen from above, plus a side view.
-# Sizes are rough (mm) and only set proportions; the pin is drawn at its real
-# diameter so the user sees which side of it the part goes.
-BODY_U, BODY_V = 67.0, 110.0          # u = along the jaws (free axis), v = clamp axis
-JAW_IN, JAW_OUT = 16.0, 38.0          # jaw inner / outer face, from the vise center
-NOMINAL_PART = 40.0                   # drawn part length when none is given
+# Rendered images of the H67 (tools/vise_render/make_images.py), one per
+# free axis / part side / origin mode.  The live numbers are painted on top.
+IMG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
 
-C_BG = QColor("#23282a")
-C_BODY = QColor("#4a4f51")
-C_SLOT = QColor("#2e3436")
-C_JAW = QColor("#8a8e90")
-C_EDGE = QColor("#1b1f20")
-C_PART = QColor(94, 200, 255, 150)
-C_PART_EDGE = QColor("#5ec8ff")
 C_PIN = QColor("#fcaf3e")
 C_BAD = QColor("#ef2929")
 C_ORIGIN = QColor("#73d216")
@@ -85,235 +76,104 @@ def _font(pt):
     return f
 
 
-def _arrow(p, a, b, head=9.0):
-    """Line a->b with a filled head at b (screen coords)."""
-    p.drawLine(a, b)
-    dx, dy = b.x() - a.x(), b.y() - a.y()
-    n = max((dx * dx + dy * dy) ** 0.5, 1e-6)
-    ux, uy = dx / n, dy / n
-    left = QPointF(b.x() - head * ux + head * 0.5 * uy, b.y() - head * uy - head * 0.5 * ux)
-    right = QPointF(b.x() - head * ux - head * 0.5 * uy, b.y() - head * uy + head * 0.5 * ux)
-    p.save()
-    p.setBrush(p.pen().color())
-    p.drawPolygon(b, left, right)
-    p.restore()
+class ViseRenderView(QWidget):
+    """Shows the render matching the settings. Tap a side of the vise to put the part there."""
+    sideClicked = Signal(int)
 
-
-class _ViewBase(QWidget):
     def __init__(self, parent=None):
-        super(_ViewBase, self).__init__(parent)
+        super(ViseRenderView, self).__init__(parent)
         self.st = {}
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setMinimumSize(420, 300)
+        self.setCursor(Qt.PointingHandCursor)
+        self._cache = {}
+        self._img_rect = QRectF()
+        try:
+            with open(os.path.join(IMG_DIR, "meta.json"), "r", encoding="utf-8") as fh:
+                self._meta = json.load(fh)
+        except (OSError, ValueError) as exc:
+            LOG.warning("vise_stop: no image meta: %s", exc)
+            self._meta = {"size": [720, 400], "images": {}}
 
     def set_state(self, **st):
         if st != self.st:
             self.st = st
             self.update()
 
-    def _geometry(self):
-        """Pin radius, part length, pin u, origin u - all in the vise frame."""
+    def _name(self):
         st = self.st
-        side = st.get("side", 1)
-        dia = st.get("dia", 0.0)
-        r = dia / 2.0 if dia > 0 else 3.0
-        length = st.get("length", 0.0)
-        if not (st.get("mode") == 1 and length > 0):
-            length = NOMINAL_PART
-        u_pin = -side * (length / 2.0 + r)          # part centered in the vise
-        u_org = 0.0 if st.get("mode") == 1 else -side * length / 2.0
-        return side, r, length, u_pin, u_org
+        return "vise_{}_{}_{}.png".format("Y" if st.get("axis") == 1 else "X",
+                                          "neg" if st.get("side", 1) < 0 else "pos",
+                                          "center" if st.get("mode") == 1 else "edge")
 
-    def _bg(self, p):
-        p.setRenderHint(QPainter.Antialiasing, True)
-        p.setPen(Qt.NoPen)
-        p.setBrush(C_BG)
-        p.drawRoundedRect(QRectF(self.rect()).adjusted(1, 1, -1, -1), 6, 6)
-
-
-class ViseTopView(_ViewBase):
-    """Top-down view in machine orientation (+X right, +Y up). Click a side to put the part there."""
-    sideClicked = Signal(int)
-
-    def __init__(self, parent=None):
-        super(ViseTopView, self).__init__(parent)
-        self.setMinimumSize(360, 200)
-        self.setCursor(Qt.PointingHandCursor)
-        self._xf = QTransform()
-
-    def _transform(self, half_u, half_v):
-        axis_y = self.st.get("axis", 0) == 1
-        w, h = self.width(), self.height() - 26          # bottom strip for the axis legend
-        span_x, span_y = (half_v, half_u) if axis_y else (half_u, half_v)
-        s = min((w - 40) / (2 * span_x), (h - 44) / (2 * span_y))
-        cx, cy = w / 2.0, h / 2.0 + 14
-        if axis_y:   # u -> screen up, v -> screen right
-            return QTransform(0, -s, s, 0, cx, cy), s
-        return QTransform(s, 0, 0, -s, cx, cy), s      # u -> right, v -> up
+    def _pixmap(self, name):
+        if name not in self._cache:
+            self._cache[name] = QPixmap(os.path.join(IMG_DIR, name))
+        return self._cache[name]
 
     def mousePressEvent(self, ev):
-        inv, ok = self._xf.inverted()
-        if ok:
-            u = inv.map(QPointF(ev.pos())).x()
-            self.sideClicked.emit(1 if u > 0 else -1)
+        info = self._meta["images"].get(self._name())
+        r = self._img_rect
+        if not info or r.width() <= 0:
+            return
+        k = r.width() / float(self._meta["size"][0])
+        cx = r.left() + info["center"][0] * k
+        cy = r.top() + info["center"][1] * k
+        du, dv = info["u_dir"]
+        along = (ev.pos().x() - cx) * du + (ev.pos().y() - cy) * dv
+        self.sideClicked.emit(1 if along > 0 else -1)
 
     def paintEvent(self, _ev):
         p = QPainter(self)
-        self._bg(p)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setRenderHint(QPainter.SmoothPixmapTransform, True)
         st = self.st
-        side, r, length, u_pin, u_org = self._geometry()
-        half_u = max(BODY_U / 2.0, length / 2.0 + 2 * r) + 10
-        half_v = BODY_V / 2.0 + 10
-        xf, s = self._transform(half_u, half_v)
-        self._xf = xf
-        axis = "Y" if st.get("axis", 0) == 1 else "X"
-        clamp = "X" if axis == "Y" else "Y"
-        m = xf.map
+        w, h = self.width(), self.height()
+        bad_tool = st.get("bad_tool", False) or st.get("dia", 0) <= 0
+        low_z = st.get("stop_z", 5.0) <= 0.5
+        bad = bad_tool or low_z
 
-        def rect(u0, v0, u1, v1, fill, edge=C_EDGE, width=1.5, style=Qt.SolidLine):
-            p.setPen(QPen(edge, width, style) if edge is not None else Qt.NoPen)
-            p.setBrush(fill if fill is not None else Qt.NoBrush)
-            p.drawPolygon(m(QPointF(u0, v0)), m(QPointF(u1, v0)), m(QPointF(u1, v1)), m(QPointF(u0, v1)))
+        pm = self._pixmap(self._name())
+        top, bottom = 30, 30
+        if not pm.isNull():
+            avail_h = h - top - bottom
+            k = min(w / float(pm.width()), avail_h / float(pm.height()))
+            iw, ih = pm.width() * k, pm.height() * k
+            self._img_rect = QRectF((w - iw) / 2.0, top + (avail_h - ih) / 2.0, iw, ih)
+            p.drawPixmap(self._img_rect, pm, QRectF(pm.rect()))
+        else:
+            self._img_rect = QRectF()
+            p.setPen(C_DIM)
+            p.setFont(_font(14))
+            p.drawText(QRectF(0, 0, w, h), Qt.AlignCenter, "IMAGES MISSING: " + IMG_DIR)
 
-        def circle(u, v, rad, fill, edge=C_EDGE, width=1.5, style=Qt.SolidLine):
-            p.setPen(QPen(edge, width, style) if edge is not None else Qt.NoPen)
-            p.setBrush(fill if fill is not None else Qt.NoBrush)
-            p.drawEllipse(m(QPointF(u, v)), rad * s, rad * s)
-
-        bu, bv = BODY_U / 2.0, BODY_V / 2.0
-        # body, center slot, screw end
-        rect(-bu, -bv, bu, bv, C_BODY)
-        rect(-bu * 0.45, -JAW_OUT, bu * 0.45, JAW_OUT, C_SLOT, None)
-        rect(-6, -bv - 7, 6, -bv, C_JAW)
-        # jaws with serrations and two bolts each
-        for sgn in (1, -1):
-            rect(-bu, sgn * JAW_IN, bu, sgn * JAW_OUT, C_JAW)
-            p.setPen(QPen(C_EDGE, 1, Qt.DotLine))
-            p.drawLine(m(QPointF(-bu, sgn * (JAW_IN + 2.5))), m(QPointF(bu, sgn * (JAW_IN + 2.5))))
-            for bu_ in (-20.0, 20.0):
-                circle(bu_, sgn * (JAW_OUT - 9), 4.5, C_SLOT)
-        # part
-        rect(-length / 2.0, -JAW_IN, length / 2.0, JAW_IN, C_PART, C_PART_EDGE, 2)
-        # spindle nose (generic) and the stop pin
-        circle(u_pin, 0, 18, None, C_DIM, 1.2, Qt.DashLine)
-        bad = st.get("bad_tool", False) or st.get("dia", 0) <= 0
-        circle(u_pin, 0, r, C_BAD if bad else C_PIN, C_EDGE, 1.5)
-        c = m(QPointF(u_pin, 0))
-        p.setPen(QPen(C_BAD if bad else C_PIN, 2))
-        p.setBrush(Qt.NoBrush)
-        halo = max(r * s + 6, 12)
-        p.drawEllipse(c, halo, halo)
-        p.setPen(QPen(C_EDGE, 1.2))
-        p.drawLine(QPointF(c.x() - r * s, c.y()), QPointF(c.x() + r * s, c.y()))
-        p.drawLine(QPointF(c.x(), c.y() - r * s), QPointF(c.x(), c.y() + r * s))
-        # origin target
-        o = m(QPointF(u_org, 0))
-        p.setPen(QPen(C_ORIGIN, 2.5))
-        p.setBrush(Qt.NoBrush)
-        p.drawEllipse(o, 9, 9)
-        p.drawLine(QPointF(o.x() - 15, o.y()), QPointF(o.x() + 15, o.y()))
-        p.drawLine(QPointF(o.x(), o.y() - 15), QPointF(o.x(), o.y() + 15))
-
-        # ---- screen-space text and arrows
-        p.setFont(_font(12))
-        far = m(QPointF(side * (length / 2.0 + 12), 0))
-        near = m(QPointF(side * (length / 2.0 + 1), 0))
-        p.setPen(QPen(C_PART_EDGE, 3))
-        _arrow(p, far, near)                                   # push toward the pin
-        p.setPen(C_TEXT)
-        pc = m(QPointF(0, 0))
-        p.drawText(QRectF(pc.x() - 60, pc.y() - 32, 120, 20), Qt.AlignCenter, "PART")
-        wcs = st.get("wcs", "G55")
         tool = st.get("tool", 0)
         if st.get("bad_tool"):
             pin_txt = "STOP PIN: PROBE LOADED"
         elif tool <= 0:
-            pin_txt = "STOP PIN: NO TOOL"
+            pin_txt = "STOP PIN: NO TOOL LOADED"
         elif st.get("dia", 0) <= 0:
             pin_txt = "STOP PIN: T{} HAS NO DIAMETER".format(tool)
         else:
             pin_txt = "STOP PIN: T{}  DIA {:.3f}".format(tool, st.get("dia", 0))
-        p.setFont(_font(13))
-        p.setPen(C_BAD if bad else C_PIN)
-        p.drawText(QRectF(12, 8, self.width() / 2.0, 22), Qt.AlignLeft, pin_txt)
+        p.setFont(_font(14))
+        p.setPen(C_BAD if bad_tool else C_PIN)
+        p.drawText(QRectF(8, 2, w / 2.0, 26), Qt.AlignLeft | Qt.AlignVCenter, pin_txt)
         p.setPen(C_ORIGIN)
-        p.drawText(QRectF(self.width() / 2.0, 8, self.width() / 2.0 - 12, 22), Qt.AlignRight,
-                   "ORIGIN: {} {}0 {}0".format(wcs, axis, clamp))
-        p.setFont(_font(11))
-        p.setPen(C_EDGE)
-        for sgn in (1, -1):
-            jc = m(QPointF(0, sgn * (JAW_IN + JAW_OUT) / 2.0))
-            p.drawText(QRectF(jc.x() - 30, jc.y() - 10, 60, 20), Qt.AlignCenter, "JAW")
-        # machine axis legend
-        y0 = self.height() - 14
-        p.setPen(QPen(C_TEXT, 2))
-        _arrow(p, QPointF(16, y0), QPointF(50, y0), 7)
-        _arrow(p, QPointF(16, y0), QPointF(16, y0 - 30), 7)
-        p.setFont(_font(11))
-        p.drawText(QPointF(55, y0 + 4), "+X")
-        p.drawText(QPointF(22, y0 - 26), "+Y")
+        p.drawText(QRectF(w / 2.0, 2, w / 2.0 - 8, 26), Qt.AlignRight | Qt.AlignVCenter,
+                   "ORIGIN {}  X0 Y0 Z0".format(st.get("wcs", "G55")))
+        p.setFont(_font(12))
+        p.setPen(C_BAD if low_z else C_TEXT)
+        z_txt = ("PIN TIP Z {:.3f} - AT OR BELOW Z0, WILL HIT THE PARALLELS".format(st.get("stop_z", 0))
+                 if low_z else "PIN TIP Z {:.3f} ABOVE Z0 (PARALLEL TOP)".format(st.get("stop_z", 0)))
+        p.drawText(QRectF(8, h - 28, w * 0.62, 26), Qt.AlignLeft | Qt.AlignVCenter, z_txt)
         p.setPen(C_DIM)
-        p.drawText(QRectF(70, y0 - 10, self.width() - 80, 20), Qt.AlignRight | Qt.AlignVCenter,
-                   "TOP VIEW - LOOKING DOWN - TAP A SIDE TO PUT THE PART THERE")
-        p.end()
-
-
-class ViseSideView(_ViewBase):
-    """Side view along the jaws: where the pin tip ends up relative to Z0."""
-
-    def __init__(self, parent=None):
-        super(ViseSideView, self).__init__(parent)
-        self.setMinimumSize(360, 120)
-
-    def paintEvent(self, _ev):
-        p = QPainter(self)
-        self._bg(p)
-        st = self.st
-        side, r, length, u_pin, _u_org = self._geometry()
-        stop_z = st.get("stop_z", 5.0)
-        part_h = 15.0
-        z_lo, z_hi = -22.0, max(part_h, stop_z) + 40.0
-        half_u = max(BODY_U / 2.0, length / 2.0 + 2 * r) + 10
-        w, h = self.width(), self.height()
-        s = min((w - 40) / (2 * half_u), (h - 24) / (z_hi - z_lo))
-        cx = w / 2.0
-        zy = lambda z: h - 10 - (z - z_lo) * s   # noqa: E731
-        ux = lambda u: cx + u * s                 # noqa: E731
-        axis = "Y" if st.get("axis", 0) == 1 else "X"
-
-        def box(u0, z0, u1, z1, fill, edge=C_EDGE):
-            p.setPen(QPen(edge, 1.5) if edge is not None else Qt.NoPen)
-            p.setBrush(fill)
-            p.drawRect(QRectF(QPointF(ux(u0), zy(z1)), QPointF(ux(u1), zy(z0))))
-
-        bu = BODY_U / 2.0
-        box(-bu, -22, bu, -8, C_BODY)                     # vise body
-        box(-bu, -8, bu, 10, QColor(138, 142, 144, 110))  # back jaw (behind the part)
-        box(-length / 2.0 + 2, -8, length / 2.0 - 2, 0, QColor("#6b7072"))   # parallels
-        box(-length / 2.0, 0, length / 2.0, part_h, C_PART, C_PART_EDGE)     # part
-        bad = st.get("bad_tool", False) or st.get("dia", 0) <= 0 or stop_z <= 0.5
-        pin_col = C_BAD if bad else C_PIN
-        box(u_pin - r, stop_z, u_pin + r, stop_z + 22, pin_col)              # pin
-        box(u_pin - 9, stop_z + 22, u_pin + 9, stop_z + 30, QColor("#9a9e9f"))   # collet nut
-        box(u_pin - 18, stop_z + 30, u_pin + 18, z_hi + 5, QColor("#5a5f61"))    # spindle nose
-
-        p.setFont(_font(11))
-        dash = QPen(C_DIM, 1.2, Qt.DashLine)
-        p.setPen(dash)
-        p.drawLine(QPointF(8, zy(0)), QPointF(w - 8, zy(0)))
-        p.setPen(QPen(pin_col, 1.2, Qt.DashLine))
-        p.drawLine(QPointF(8, zy(stop_z)), QPointF(w - 8, zy(stop_z)))
-        p.setPen(C_DIM)
-        p.drawText(QRectF(10, zy(0) + 1, 260, 16), Qt.AlignLeft, "Z0 = PARALLEL TOP")
-        p.setPen(pin_col)
-        p.drawText(QRectF(w - 270, zy(stop_z) - 17, 260, 16), Qt.AlignRight,
-                   "PIN TIP  Z {:.3f}".format(stop_z))
-        p.setPen(C_DIM)
-        p.drawText(QRectF(10, 4, w - 20, 16), Qt.AlignRight,
-                   "SIDE VIEW - +{} TO THE RIGHT".format(axis))
-        if stop_z <= 0.5:
-            p.setPen(C_BAD)
-            p.setFont(_font(13))
-            p.drawText(QRectF(10, 4, w - 20, 18), Qt.AlignLeft, "PIN TIP AT OR BELOW Z0 - CHECK STOP Z")
+        p.drawText(QRectF(w * 0.55, h - 28, w * 0.45 - 8, 26), Qt.AlignRight | Qt.AlignVCenter,
+                   "TAP A SIDE TO MOVE THE PART")
+        if bad:
+            p.setPen(QPen(C_BAD, 3))
+            p.setBrush(Qt.NoBrush)
+            p.drawRoundedRect(QRectF(1.5, 1.5, w - 3, h - 3), 6, 6)
         p.end()
 
 
@@ -474,10 +334,8 @@ class UserTab(QWidget):
 
         # --- PREVIEW: what GO TO STOP will do
         preview, pl = self._card("originCard", "WHAT GO TO STOP DOES")
-        self.viewTop = ViseTopView()
-        self.viewSide = ViseSideView()
-        pl.addWidget(self.viewTop, 3)
-        pl.addWidget(self.viewSide, 2)
+        self.viewTop = ViseRenderView()
+        pl.addWidget(self.viewTop, 1)
         org_row = QHBoxLayout()
         self.lblOrigin = QLabel("-")
         self.lblOrigin.setObjectName("bigValue")
@@ -609,7 +467,6 @@ class UserTab(QWidget):
                     length=v[P_LENGTH], stop_z=v[P_STOP_Z], wcs=wcs, tool=tn,
                     bad_tool=probe)
         self.viewTop.set_state(**view)
-        self.viewSide.set_state(**view)
         if abs(v[P_STOP]) < 1e-4:
             self.lblStop.setText("NOT CAPTURED")
         else:

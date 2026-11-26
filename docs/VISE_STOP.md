@@ -29,19 +29,31 @@ CENTER mode origin = part edge + side x (part length / 2)
 the - side. The pin diameter comes from the tool table for the tool in the
 spindle.
 
-The middle of the tab shows what GO TO STOP will do, drawn live from the
-current settings:
-- **Top view** (looking down, +X right, +Y up): the vise in the chosen
-  orientation, the part, the stop pin at its real diameter with the spindle
-  nose dashed around it, an arrow showing which way to push the part, and the
-  green target where the WCS origin lands. Tap either side of the vise to put
-  the part on that side.
-- **Side view:** the pin tip height (STOP Z) against Z0 at the parallel top.
-  It turns red if the tip is at or below Z0, or if the loaded tool is the probe
-  or has no diameter.
+The middle of the tab shows what GO TO STOP will do, as a rendered picture of
+the H67 that matches the settings: the vise turned the way it sits on the
+table (jaws along X or Y), the part on the chosen side, the stop pin in the
+spindle, a blue arrow for which way to push the part, and an X/Y/Z triad
+(red/green/blue) where the WCS origin lands. The camera always looks from the
+front, swung toward the pin. The pin's tool number and diameter, the origin's
+WCS, and the pin tip height are painted on top live. The frame turns red if the
+probe is loaded, the tool has no diameter, or STOP Z is at or below Z0. Tap
+either side of the vise to put the part there.
 
-The computed origin is shown under the drawings. The drawing is a schematic
-of the H67 and is not to scale, except for the pin.
+### Regenerating the pictures
+
+The 8 images in `probe_basic/user_tabs/vise_stop/images/` come from
+`tools/vise_render/` (a small numpy renderer: needs numpy, scipy, Pillow).
+For a different vise, export the vise body and jaws from Fusion with right-click
+→ **Save As Mesh**, STL (Binary), mm. The clamp must run along the mesh's X and
+the jaws along its Y. Then run:
+
+```
+cd tools/vise_render
+python3 make_images.py vise.stl jaws.stl ../../probe_basic/user_tabs/vise_stop/images
+```
+
+Scene numbers (jaw face position, parallel height, part size) are at the top
+of `make_images.py`.
 
 ## Setup (once per vise mount)
 
