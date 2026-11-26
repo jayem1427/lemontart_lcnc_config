@@ -122,7 +122,7 @@ o<vise_stop_retract> call
 
 `tools/vise_render/` is a small numpy renderer with Fusion-style black edge
 lines (sharp mesh edges and silhouettes). It needs numpy, scipy and
-Pillow). For a different vise, export the vise body and the jaws from Fusion:
+Pillow. For a different vise, export the vise body and the jaws from Fusion:
 right-click the component → **Save As Mesh** → STL (Binary), mm. The clamp
 must run along the mesh's X and the jaws along its Y. Fusion writes each
 component in its own coordinates, so `make_images.py` centers the jaws on the
