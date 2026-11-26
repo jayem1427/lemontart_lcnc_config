@@ -1,0 +1,8 @@
+(Vise stop: lift the stop tool straight up off the clamped part.)
+(Z only - never move XY while the pin is beside the part.  See docs/VISE_STOP.md)
+
+o<vise_stop_retract> sub
+  G53 G0 Z0
+o<vise_stop_retract> endsub
+
+M2

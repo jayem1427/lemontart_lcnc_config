@@ -1,0 +1,135 @@
+(Vise stop: use the tool in the spindle as a hard stop for a self-centering vise.)
+(Writes the free-axis origin of the vise WCS from the stored stop position and the)
+(tool diameter, then parks the tool at the stop so the part can be slid against it.)
+(Retract with o<vise_stop_retract> call after clamping.  See docs/VISE_STOP.md)
+(Set by the VISE STOP tab - persistent in linuxcnc.var:)
+(  #5580 free axis along the jaws: 0 = X, 1 = Y)
+(  #5581 part side of the stop: +1 = part toward +, -1 = part toward -)
+(  #5582 stop position, machine coord on the free axis - spindle centerline)
+(  #5583 stop Z - tool tip height in the vise WCS)
+(  #5584 origin mode: 0 = part edge at the stop, 1 = part center)
+(  #5585 part length along the free axis - center mode only)
+(  #5586 vise WCS: 1 = G54 ... 6 = G59)
+(  #5587 last free-axis origin written, machine coord - read back by the tab)
+
+o<vise_stop_go> sub
+  #<axis> = #5580
+  #<side> = #5581
+  #<stop> = #5582
+  #<stop_z> = #5583
+  #<mode> = #5584
+  #<length> = #5585
+  #<wcs> = #5586
+
+  (--- refuse anything we cannot trust - never guess a position ---)
+  o100 if [#5400 LE 0]
+    (ABORT, Vise stop: no tool in the spindle - load the stop pin with M600 first)
+  o100 endif
+  o101 if [#5400 EQ #3014]
+    (ABORT, Vise stop: touch probe is loaded - use a pin or tool as the stop)
+  o101 endif
+  #<dia> = #5410
+  o102 if [#<dia> LE 0]
+    (ABORT, Vise stop: loaded tool has no diameter in the tool table)
+  o102 endif
+  o103 if [[#<wcs> LT 1] OR [#<wcs> GT 6]]
+    (ABORT, Vise stop: vise WCS must be G54 to G59)
+  o103 endif
+  o104 if [[#<axis> NE 0] AND [#<axis> NE 1]]
+    (ABORT, Vise stop: free axis must be X or Y)
+  o104 endif
+  o105 if [[#<side> NE 1] AND [#<side> NE -1]]
+    (ABORT, Vise stop: part side must be + or -)
+  o105 endif
+  o106 if [ABS[#<stop>] LT 0.0001]
+    (ABORT, Vise stop: stop position not captured - jog to the stop and press CAPTURE STOP)
+  o106 endif
+
+  #<base> = [5201 + 20 * #<wcs>]
+  (Clamp axis = the other one; the self-centering vise holds it at the calibrated WCS value)
+  #<clamp> = #[#<base> + 1 - #<axis>]
+  #<wcs_z> = #[#<base> + 2]
+  o107 if [ABS[#<clamp>] LT 0.0001]
+    (ABORT, Vise stop: vise WCS clamp axis is zero - probe the vise center into it once)
+  o107 endif
+  o108 if [ABS[#<wcs_z>] LT 0.0001]
+    (ABORT, Vise stop: vise WCS Z is zero - set Z on the parallels or vise once)
+  o108 endif
+
+  G21 G90 G94 G40
+  G43 H#5400
+  (WCS Z + tool length + active G92 = machine Z of the tip at vise Z0)
+  #<z_to_mach> = [#<wcs_z> + #5403 + [#5210 * #5213]]
+  o115 if [[#<stop_z> + #<z_to_mach>] GT -1]
+    (ABORT, Vise stop: stop Z lands above machine Z0 - check STOP Z and the tool length)
+  o115 endif
+
+  (--- free-axis origin: stop centerline plus tool radius toward the part ---)
+  #<origin> = [#<stop> + #<side> * #<dia> / 2]
+  o110 if [#<mode> GT 0.5]
+    o111 if [#<length> LE 0]
+      (ABORT, Vise stop: center mode needs the part length)
+    o111 endif
+    #<origin> = [#<origin> + #<side> * #<length> / 2]
+  o110 endif
+
+  o112 if [#<axis> EQ 0]
+    G10 L2 P#<wcs> X#<origin>
+  o112 else
+    G10 L2 P#<wcs> Y#<origin>
+  o112 endif
+  #5587 = #<origin>
+
+  (--- park the tool at the stop: retract first, then XY, then down in the vise WCS ---)
+  #<old_wcs> = #5220
+  M5
+  G53 G0 Z0
+  o120 if [#<axis> EQ 0]
+    G53 G0 X#<stop> Y#<clamp>
+  o120 else
+    G53 G0 X#<clamp> Y#<stop>
+  o120 endif
+
+  o130 if [#<wcs> EQ 1]
+    G54
+  o130 elseif [#<wcs> EQ 2]
+    G55
+  o130 elseif [#<wcs> EQ 3]
+    G56
+  o130 elseif [#<wcs> EQ 4]
+    G57
+  o130 elseif [#<wcs> EQ 5]
+    G58
+  o130 else
+    G59
+  o130 endif
+
+  (rapid to 25 mm above the stop only if that stays below machine Z0, then feed)
+  o135 if [[#<stop_z> + 25 + #<z_to_mach>] LT -1]
+    G0 Z[#<stop_z> + 25]
+  o135 endif
+  G1 Z#<stop_z> F600
+
+  (restore the coordinate system that was active before)
+  o140 if [#<old_wcs> EQ 1]
+    G54
+  o140 elseif [#<old_wcs> EQ 2]
+    G55
+  o140 elseif [#<old_wcs> EQ 3]
+    G56
+  o140 elseif [#<old_wcs> EQ 4]
+    G57
+  o140 elseif [#<old_wcs> EQ 5]
+    G58
+  o140 elseif [#<old_wcs> EQ 6]
+    G59
+  o140 elseif [#<old_wcs> EQ 7]
+    G59.1
+  o140 elseif [#<old_wcs> EQ 8]
+    G59.2
+  o140 else
+    G59.3
+  o140 endif
+o<vise_stop_go> endsub
+
+M2

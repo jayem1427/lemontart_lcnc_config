@@ -1,0 +1,497 @@
+"""
+VISE STOP - self-centering vise with the spindle tool as a hard stop.
+
+The self-centering vise holds the clamp axis and Z (calibrated once into the
+vise WCS with normal Probe Basic probing). The only loose axis is along the
+jaws. GO TO STOP writes that axis of the vise WCS from the stored stop
+position and the loaded tool's diameter, then parks the tool at the stop.
+Slide the part against it, clamp, RETRACT, run.
+
+Settings live in #5580-#5587 (see probe_basic/subroutines/vise_stop_go.ngc).
+They are pushed to the interpreter by MDI and merged into linuxcnc.var on
+GO TO STOP and CAPTURE STOP, so LinuxCNC keeps them on exit.
+Docs: docs/VISE_STOP.md
+"""
+
+import os
+
+import linuxcnc
+
+from qtpy import uic
+from qtpy.QtCore import Qt, QTimer
+from qtpy.QtGui import QFontDatabase
+from qtpy.QtWidgets import (
+    QAbstractSpinBox,
+    QButtonGroup,
+    QComboBox,
+    QDoubleSpinBox,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
+from qtpyvcp.utilities import logger
+
+LOG = logger.getLogger(__name__)
+
+PB_FONT_PATH = "/usr/share/fonts/truetype/BebasKai.ttf"
+CONFIG_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, os.pardir, os.pardir)
+)
+VAR_FILE = os.path.join(CONFIG_DIR, "linuxcnc.var")
+
+P_AXIS, P_SIDE, P_STOP, P_STOP_Z, P_MODE, P_LENGTH, P_WCS, P_LAST = range(5580, 5588)
+VISE_PARAMS = (P_AXIS, P_SIDE, P_STOP, P_STOP_Z, P_MODE, P_LENGTH, P_WCS, P_LAST)
+DEFAULTS = {P_AXIS: 0.0, P_SIDE: 1.0, P_STOP: 0.0, P_STOP_Z: 5.0,
+            P_MODE: 0.0, P_LENGTH: 0.0, P_WCS: 2.0, P_LAST: 0.0}
+WCS_NAMES = ["G54", "G55", "G56", "G57", "G58", "G59"]
+POLL_MS = 250
+
+GO_MDI = "o<vise_stop_go> call"
+RETRACT_MDI = "o<vise_stop_retract> call"
+
+
+class UserTab(QWidget):
+    def __init__(self, parent=None):
+        super(UserTab, self).__init__(parent)
+        here = os.path.dirname(os.path.abspath(__file__))
+        uic.loadUi(os.path.join(here, "vise_stop.ui"), self)
+        self.setObjectName("VISE")
+        if os.path.exists(PB_FONT_PATH):
+            QFontDatabase.addApplicationFont(PB_FONT_PATH)
+        try:
+            with open(os.path.join(here, "vise_stop.qss"), "r", encoding="utf-8") as fh:
+                self.setStyleSheet(fh.read())
+        except OSError as exc:
+            LOG.warning("vise_stop: no stylesheet: %s", exc)
+        self.setAttribute(Qt.WA_StyledBackground, True)
+
+        try:
+            self._cmd = linuxcnc.command()
+            self._stat = linuxcnc.stat()
+        except Exception as exc:
+            LOG.error("vise_stop: linuxcnc init failed: %s", exc)
+            self._cmd = None
+            self._stat = None
+
+        self._vals = dict(DEFAULTS)
+        self._vals.update({k: v for k, v in self._read_var().items() if k in VISE_PARAMS})
+        self._pending = None  # "go" / "retract" while an MDI is running
+        self._loading = True
+
+        self._build_ui()
+        self._load_widgets()
+        self._loading = False
+        self._refresh_readout()
+
+        self._timer = QTimer(self)
+        self._timer.setInterval(POLL_MS)
+        self._timer.timeout.connect(self._poll)
+        self._timer.start()
+
+    # ------------------------------------------------------------------ UI
+    def _card(self, name, title):
+        card = QFrame()
+        card.setObjectName(name)
+        card.setProperty("card", True)
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(16, 10, 16, 14)
+        lay.setSpacing(10)
+        lbl = QLabel(title)
+        lbl.setObjectName("cardTitle")
+        lbl.setAlignment(Qt.AlignCenter)
+        lay.addWidget(lbl)
+        return card, lay
+
+    def _toggle_pair(self, texts):
+        group = QButtonGroup(self)
+        group.setExclusive(True)
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        buttons = []
+        for i, text in enumerate(texts):
+            btn = QPushButton(text)
+            btn.setCheckable(True)
+            btn.setObjectName("toggle")
+            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            group.addButton(btn, i)
+            row.addWidget(btn)
+            buttons.append(btn)
+        return group, row, buttons
+
+    def _spin(self, lo, hi, decimals=3):
+        spin = QDoubleSpinBox()
+        spin.setRange(lo, hi)
+        spin.setDecimals(decimals)
+        spin.setButtonSymbols(QAbstractSpinBox.NoButtons)
+        spin.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        spin.setKeyboardTracking(False)
+        spin.setFixedHeight(44)
+        spin.setMinimumWidth(150)
+        return spin
+
+    def _field_label(self, text):
+        lbl = QLabel(text)
+        lbl.setObjectName("fieldLabel")
+        return lbl
+
+    def _build_ui(self):
+        root = self.layout()
+
+        # header
+        header = QFrame()
+        header.setObjectName("headerBar")
+        hl = QHBoxLayout(header)
+        hl.setContentsMargins(14, 4, 14, 4)
+        title = QLabel("VISE STOP")
+        title.setObjectName("lblTitle")
+        sub = QLabel("SPINDLE TOOL AS A HARD STOP - SAME WCS EVERY PART")
+        sub.setObjectName("lblSubtitle")
+        hl.addWidget(title)
+        hl.addSpacing(14)
+        hl.addWidget(sub)
+        hl.addStretch(1)
+        self.pillTool = QLabel("NO TOOL")
+        self.pillTool.setObjectName("pill")
+        self.pillHomed = QLabel("NOT HOMED")
+        self.pillHomed.setObjectName("pill")
+        hl.addWidget(self.pillTool)
+        hl.addWidget(self.pillHomed)
+        root.addWidget(header)
+
+        cards = QHBoxLayout()
+        cards.setSpacing(8)
+
+        # --- SETUP (once per vise mount)
+        setup, sl = self._card("setupCard", "SETUP - ONCE PER VISE MOUNT")
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(10)
+
+        self.grpAxis, axis_row, _ = self._toggle_pair(["X", "Y"])
+        grid.addWidget(self._field_label("ALONG THE JAWS"), 0, 0)
+        grid.addLayout(axis_row, 0, 1)
+
+        self.grpSide, side_row, self.sideButtons = self._toggle_pair(["PART +X", "PART -X"])
+        grid.addWidget(self._field_label("PART SIDE OF STOP"), 1, 0)
+        grid.addLayout(side_row, 1, 1)
+
+        self.cmbWcs = QComboBox()
+        self.cmbWcs.addItems(WCS_NAMES)
+        self.cmbWcs.setFixedHeight(44)
+        grid.addWidget(self._field_label("VISE WCS"), 2, 0)
+        grid.addWidget(self.cmbWcs, 2, 1)
+
+        self.spnStopZ = self._spin(-200.0, 200.0)
+        grid.addWidget(self._field_label("STOP Z (TIP, VISE WCS)"), 3, 0)
+        grid.addWidget(self.spnStopZ, 3, 1)
+
+        self.lblStop = QLabel("NOT CAPTURED")
+        self.lblStop.setObjectName("value")
+        self.btnCapture = QPushButton("CAPTURE STOP")
+        self.btnCapture.setObjectName("btnCapture")
+        cap_row = QHBoxLayout()
+        cap_row.addWidget(self.lblStop, 1)
+        cap_row.addWidget(self.btnCapture)
+        grid.addWidget(self._field_label("STOP POSITION (G53)"), 4, 0)
+        grid.addLayout(cap_row, 4, 1)
+        grid.setColumnStretch(1, 1)
+        sl.addLayout(grid)
+        sl.addStretch(1)
+        cards.addWidget(setup, 5)
+
+        # --- ORIGIN
+        origin, ol = self._card("originCard", "FREE-AXIS ORIGIN")
+        self.grpMode, mode_row, _ = self._toggle_pair(["PART EDGE", "PART CENTER"])
+        ol.addLayout(mode_row)
+        len_row = QHBoxLayout()
+        len_row.addWidget(self._field_label("PART LENGTH ALONG JAWS"))
+        self.spnLength = self._spin(0.0, 1000.0)
+        len_row.addWidget(self.spnLength)
+        ol.addLayout(len_row)
+        self.lblOrigin = QLabel("-")
+        self.lblOrigin.setObjectName("bigValue")
+        self.lblOrigin.setAlignment(Qt.AlignCenter)
+        ol.addWidget(self.lblOrigin)
+        self.lblFormula = QLabel("")
+        self.lblFormula.setObjectName("hint")
+        self.lblFormula.setAlignment(Qt.AlignCenter)
+        self.lblFormula.setWordWrap(True)
+        ol.addWidget(self.lblFormula)
+        ol.addStretch(1)
+        cards.addWidget(origin, 4)
+
+        # --- RUN (every part)
+        run, rl = self._card("runCard", "EVERY PART")
+        steps = QLabel(
+            "1  LOAD THE STOP PIN (M600)\n"
+            "2  GO TO STOP\n"
+            "3  SLIDE PART AGAINST PIN - CLAMP\n"
+            "4  RETRACT - LOAD TOOL - RUN"
+        )
+        steps.setObjectName("steps")
+        rl.addWidget(steps)
+        self.btnGo = QPushButton("GO TO STOP")
+        self.btnGo.setObjectName("btnGo")
+        self.btnGo.setMinimumHeight(70)
+        rl.addWidget(self.btnGo)
+        self.btnRetract = QPushButton("RETRACT")
+        self.btnRetract.setObjectName("btnRetract")
+        self.btnRetract.setMinimumHeight(56)
+        rl.addWidget(self.btnRetract)
+        rl.addStretch(1)
+        cards.addWidget(run, 4)
+
+        root.addLayout(cards, 1)
+
+        self.lblStatus = QLabel("")
+        self.lblStatus.setObjectName("lblStatus")
+        root.addWidget(self.lblStatus)
+
+        self.grpAxis.buttonClicked.connect(self._on_axis)
+        self.grpSide.buttonClicked.connect(self._on_edit)
+        self.grpMode.buttonClicked.connect(self._on_edit)
+        self.cmbWcs.currentIndexChanged.connect(self._on_edit)
+        self.spnStopZ.valueChanged.connect(self._on_edit)
+        self.spnLength.valueChanged.connect(self._on_edit)
+        self.btnCapture.clicked.connect(self._capture_stop)
+        self.btnGo.clicked.connect(self._go)
+        self.btnRetract.clicked.connect(self._retract)
+
+    def _load_widgets(self):
+        v = self._vals
+        self.grpAxis.button(1 if v[P_AXIS] >= 0.5 else 0).setChecked(True)
+        self.grpSide.button(1 if v[P_SIDE] < 0 else 0).setChecked(True)
+        self.grpMode.button(1 if v[P_MODE] >= 0.5 else 0).setChecked(True)
+        wcs = int(round(v[P_WCS]))
+        self.cmbWcs.setCurrentIndex(min(max(wcs, 1), 6) - 1)
+        self.spnStopZ.setValue(v[P_STOP_Z])
+        self.spnLength.setValue(v[P_LENGTH])
+        self._relabel_side()
+
+    # ------------------------------------------------------------ values
+    def _axis_name(self):
+        return "Y" if self.grpAxis.checkedId() == 1 else "X"
+
+    def _relabel_side(self):
+        axis = self._axis_name()
+        self.sideButtons[0].setText("PART +" + axis)
+        self.sideButtons[1].setText("PART -" + axis)
+
+    def _collect(self):
+        v = self._vals
+        v[P_AXIS] = float(max(self.grpAxis.checkedId(), 0))
+        v[P_SIDE] = -1.0 if self.grpSide.checkedId() == 1 else 1.0
+        v[P_MODE] = float(max(self.grpMode.checkedId(), 0))
+        v[P_WCS] = float(self.cmbWcs.currentIndex() + 1)
+        v[P_STOP_Z] = float(self.spnStopZ.value())
+        v[P_LENGTH] = float(self.spnLength.value())
+        return v
+
+    def _on_axis(self, *_):
+        self._relabel_side()
+        self._on_edit()
+
+    def _on_edit(self, *_):
+        if self._loading:
+            return
+        self._collect()
+        self.spnLength.setEnabled(self._vals[P_MODE] >= 0.5)
+        self._write_var(self._vals)
+        self._refresh_readout()
+
+    def _tool(self):
+        """(tool number, diameter) of the tool in the spindle, or (0, 0)."""
+        if self._stat is None:
+            return 0, 0.0
+        tn = int(self._stat.tool_in_spindle)
+        if tn <= 0:
+            return 0, 0.0
+        for entry in self._stat.tool_table:
+            if int(entry.id) == tn:
+                return tn, float(entry.diameter)
+        return tn, 0.0
+
+    def _origin(self, dia):
+        v = self._vals
+        if abs(v[P_STOP]) < 1e-4 or dia <= 0:
+            return None
+        origin = v[P_STOP] + v[P_SIDE] * dia / 2.0
+        if v[P_MODE] >= 0.5:
+            if v[P_LENGTH] <= 0:
+                return None
+            origin += v[P_SIDE] * v[P_LENGTH] / 2.0
+        return origin
+
+    def _refresh_readout(self):
+        v = self._vals
+        axis = self._axis_name()
+        wcs = WCS_NAMES[int(v[P_WCS]) - 1]
+        self.spnLength.setEnabled(v[P_MODE] >= 0.5)
+        if abs(v[P_STOP]) < 1e-4:
+            self.lblStop.setText("NOT CAPTURED")
+        else:
+            self.lblStop.setText("{} {:.4f}".format(axis, v[P_STOP]))
+        _, dia = self._tool()
+        origin = self._origin(dia)
+        if origin is None:
+            self.lblOrigin.setText("{} {}  -".format(wcs, axis))
+            if abs(v[P_STOP]) < 1e-4:
+                self.lblFormula.setText("CAPTURE THE STOP POSITION FIRST")
+            elif dia <= 0:
+                self.lblFormula.setText("LOAD THE STOP PIN - NEEDS A DIAMETER IN THE TOOL TABLE")
+            else:
+                self.lblFormula.setText("ENTER THE PART LENGTH")
+            return
+        self.lblOrigin.setText("{} {}  {:.4f}".format(wcs, axis, origin))
+        sign = "+" if v[P_SIDE] > 0 else "-"
+        text = "STOP {:.4f} {} PIN R {:.4f}".format(v[P_STOP], sign, dia / 2.0)
+        if v[P_MODE] >= 0.5:
+            text += " {} HALF LENGTH {:.4f}".format(sign, v[P_LENGTH] / 2.0)
+        self.lblFormula.setText(text + "  (MACHINE)")
+
+    # ---------------------------------------------------------- linuxcnc
+    def _ready(self, need_homed=True):
+        if self._cmd is None or self._stat is None:
+            self._set_status("ERROR: LINUXCNC UNAVAILABLE")
+            return False
+        self._stat.poll()
+        if self._stat.estop:
+            self._set_status("BLOCKED: E-STOP")
+            return False
+        if not self._stat.enabled:
+            self._set_status("BLOCKED: MACHINE OFF")
+            return False
+        if self._stat.interp_state != linuxcnc.INTERP_IDLE:
+            self._set_status("BLOCKED: MACHINE BUSY")
+            return False
+        if need_homed and not all(self._stat.homed[:3]):
+            self._set_status("BLOCKED: HOME X Y Z FIRST")
+            return False
+        return True
+
+    def _push_params(self):
+        """Write #5580-#5587 to the interpreter and linuxcnc.var."""
+        self._collect()
+        try:
+            self._cmd.mode(linuxcnc.MODE_MDI)
+            self._cmd.wait_complete()
+            for num in VISE_PARAMS:
+                self._cmd.mdi("#{}={:.6f}".format(num, self._vals[num]))
+                self._cmd.wait_complete()
+        except Exception as exc:
+            LOG.error("vise_stop: param push failed: %s", exc)
+            self._set_status("ERROR: " + str(exc))
+            return False
+        return self._write_var(self._vals)
+
+    def _capture_stop(self, *_):
+        if not self._ready():
+            return
+        axis = 1 if self._vals[P_AXIS] >= 0.5 else 0
+        self._vals[P_STOP] = float(self._stat.actual_position[axis])
+        if self._push_params():
+            self._refresh_readout()
+            self._set_status("STOP CAPTURED: {} {:.4f}".format(self._axis_name(), self._vals[P_STOP]))
+
+    def _go(self, *_):
+        if not self._ready():
+            return
+        tn, dia = self._tool()
+        if self._origin(dia) is None:
+            self._refresh_readout()
+            self._set_status("BLOCKED: " + self.lblFormula.text())
+            return
+        if not self._push_params():
+            return
+        self._issue(GO_MDI, "go", "MOVING TO STOP...")
+
+    def _retract(self, *_):
+        if not self._ready(need_homed=False):
+            return
+        self._issue(RETRACT_MDI, "retract", "RETRACTING...")
+
+    def _issue(self, mdi, tag, text):
+        try:
+            self._cmd.mode(linuxcnc.MODE_MDI)
+            self._cmd.wait_complete()
+            self._cmd.mdi(mdi)
+            self._pending = tag
+            self._set_status(text)
+        except Exception as exc:
+            LOG.error("vise_stop: %s failed: %s", mdi, exc)
+            self._set_status("ERROR: " + str(exc))
+
+    def _poll(self):
+        if self._stat is None or not self.isVisible() and self._pending is None:
+            return
+        try:
+            self._stat.poll()
+        except Exception:
+            return
+        tn, dia = self._tool()
+        self.pillTool.setText("T{}  DIA {:.4f}".format(tn, dia) if tn > 0 else "NO TOOL")
+        homed = all(self._stat.homed[:3])
+        self.pillHomed.setText("HOMED" if homed else "NOT HOMED")
+        self.pillHomed.setProperty("state", "on" if homed else "warn")
+        self.pillHomed.style().unpolish(self.pillHomed)
+        self.pillHomed.style().polish(self.pillHomed)
+        self._refresh_readout()
+
+        if self._pending and self._stat.interp_state == linuxcnc.INTERP_IDLE:
+            tag, self._pending = self._pending, None
+            z_mach = float(self._stat.actual_position[2])
+            if tag == "go":
+                if z_mach > -1.0:
+                    self._set_status("STOPPED BEFORE THE STOP - SEE THE ERROR MESSAGE")
+                else:
+                    self._set_status(
+                        "AT STOP - SLIDE THE PART AGAINST THE PIN, CLAMP, THEN RETRACT")
+            else:
+                self._set_status("RETRACTED - LOAD YOUR TOOL AND RUN")
+
+    def _set_status(self, text):
+        self.lblStatus.setText(text)
+
+    # ---------------------------------------------------------- var file
+    def _read_var(self):
+        values = {}
+        try:
+            with open(VAR_FILE, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    parts = line.split()
+                    if len(parts) >= 2 and not parts[0].startswith(";"):
+                        try:
+                            values[int(parts[0])] = float(parts[1])
+                        except ValueError:
+                            pass
+        except OSError as exc:
+            LOG.warning("vise_stop: cannot read %s: %s", VAR_FILE, exc)
+        return values
+
+    def _write_var(self, updates):
+        """Merge into linuxcnc.var, sorted ascending (LinuxCNC refuses unsorted files)."""
+        values = self._read_var()
+        values.update({k: updates[k] for k in VISE_PARAMS if k in updates})
+        comments = []
+        try:
+            with open(VAR_FILE, "r", encoding="utf-8") as fh:
+                comments = [l if l.endswith("\n") else l + "\n"
+                            for l in fh if l.strip().startswith(";")]
+        except OSError:
+            pass
+        try:
+            with open(VAR_FILE, "w", encoding="utf-8") as fh:
+                fh.writelines(comments)
+                for num in sorted(values):
+                    fh.write("{}\t{:.6f}\n".format(num, values[num]))
+            return True
+        except OSError as exc:
+            LOG.error("vise_stop: cannot write %s: %s", VAR_FILE, exc)
+            self._set_status("ERROR: CANNOT WRITE LINUXCNC.VAR")
+            return False
