@@ -35,7 +35,7 @@ M_PIN = r.Material((236, 238, 242), metal=0.95, rough=0.15, spec=0.8)
 M_NUT = r.Material((190, 193, 198), metal=0.85, rough=0.28, spec=0.6)
 M_SPIN = r.Material((150, 155, 162), metal=0.35, rough=0.45, spec=0.35)
 
-C_PUSH = (94, 200, 255, 235)
+C_PUSH = (226, 32, 32, 240)
 C_X, C_Y, C_Z = (239, 41, 41, 255), (115, 210, 22, 255), (52, 101, 255, 255)
 
 
@@ -148,15 +148,6 @@ def main(vise_stl, jaws_stl, out_dir):
             far = side * (PART_L / 2 - 6)
             near = -side * (PART_L / 2 - 3)
             draw_arrow(d, cam, R, (far, 0, z_top), (near, 0, z_top), 7.0, C_PUSH)
-            # WCS origin: vise center at Z0 (under the part) - dotted riser to the top face
-            top = cam.project(np.array([0, 0, z_top]) @ R.T)[:2]
-            bot = cam.project(np.array([0, 0, Z0]) @ R.T)[:2]
-            n = 14
-            for i in range(0, n, 2):
-                a_ = bot + (top - bot) * i / n
-                b_ = bot + (top - bot) * (i + 1) / n
-                d.line([tuple(a_), tuple(b_)], fill=(255, 255, 255, 220), width=2 * SS)
-            draw_triad(d, cam, R, (0, 0, Z0))
             out = r.downsample(img, SS)
             name = "vise_{}_{}.png".format(axis, sname)
             out.save(os.path.join(out_dir, name), optimize=True)

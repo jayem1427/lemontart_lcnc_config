@@ -65,7 +65,6 @@ IMG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
 
 C_PIN = QColor("#fcaf3e")
 C_BAD = QColor("#ef2929")
-C_ORIGIN = QColor("#73d216")
 C_TEXT = QColor(238, 238, 236)
 C_DIM = QColor("#9a9e9f")
 
@@ -158,17 +157,15 @@ class ViseRenderView(QWidget):
         p.setFont(_font(14))
         p.setPen(C_BAD if bad_tool else C_PIN)
         p.drawText(QRectF(8, 2, w / 2.0, 26), Qt.AlignLeft | Qt.AlignVCenter, pin_txt)
-        p.setPen(C_ORIGIN)
-        p.drawText(QRectF(w / 2.0, 2, w / 2.0 - 8, 26), Qt.AlignRight | Qt.AlignVCenter,
-                   "ORIGIN {}  X0 Y0 Z0".format(st.get("wcs", "G55")))
         p.setFont(_font(12))
         p.setPen(C_BAD if low_z else C_TEXT)
         z_txt = ("PIN TIP Z {:.3f} - AT OR BELOW Z0, WILL HIT THE PARALLELS".format(st.get("stop_z", 0))
                  if low_z else "PIN TIP Z {:.3f} ABOVE Z0 (PARALLEL TOP)".format(st.get("stop_z", 0)))
-        p.drawText(QRectF(8, h - 28, w * 0.62, 26), Qt.AlignLeft | Qt.AlignVCenter, z_txt)
-        p.setPen(C_DIM)
-        p.drawText(QRectF(w * 0.55, h - 28, w * 0.45 - 8, 26), Qt.AlignRight | Qt.AlignVCenter,
-                   "TAP A SIDE TO PUT THE PIN THERE")
+        p.drawText(QRectF(8, h - 28, w - 16, 26), Qt.AlignLeft | Qt.AlignVCenter, z_txt)
+        if not low_z:
+            p.setPen(C_DIM)
+            p.drawText(QRectF(w * 0.55, h - 28, w * 0.45 - 8, 26), Qt.AlignRight | Qt.AlignVCenter,
+                       "TAP A SIDE TO PUT THE PIN THERE")
         if bad:
             p.setPen(QPen(C_BAD, 3))
             p.setBrush(Qt.NoBrush)

@@ -35,12 +35,10 @@ bottom (parallel top) in Z.**
 
 The middle of the tab shows the H67 the way it sits on the table (jaws along X
 or Y), with the part centered, the stop pin in the spindle on the chosen side,
-a blue arrow for which way to push the part, and the WCS triad
-(X red, Y green, Z blue) at the vise center on Z0, under the part. The camera
-always looks from the front, swung toward the pin.
+and a red arrow for which way to push the part. The camera always looks from
+the front, swung toward the pin.
 
-The tool number and diameter, the WCS, and the pin tip height are painted on
-top live. The frame turns red if the probe is loaded, the tool has no
+The tool number and diameter and the pin tip height are painted on top live. The frame turns red if the probe is loaded, the tool has no
 diameter, or the pin tip is at or below Z0. The picture is drawn with a 6 mm
 pin and a fixed part size. The numbers are the real ones.
 
