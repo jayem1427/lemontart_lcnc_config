@@ -141,7 +141,7 @@ their own machine: plain language, short sections, real values from the config.
   is the per-tool recipe, `M8`/`M9` turn it on/off. There's a Probe Basic tab in `user_tabs/mql_control/`.
 - **Key params:** `#3004–3039` are probe/toolsetter settings (`#3014=99` is the probe tool),
   `#5181–5183` is the setter position, `#5501/5502` beam XY, `#5503` probe RPM, `#5516` beam
-  width cal, `#5517` master pin, `#5518` reverse-spindle flag, `#5580–5587` vise stop (docs/VISE_STOP.md). Max user param is **5599**.
+  width cal, `#5517` master pin, `#5518` reverse-spindle flag, `#5580–5586` vise stop (docs/VISE_STOP.md). Max user param is **5599**.
   `linuxcnc.var` is **tracked in git** and must stay sorted ascending.
 
 ## LinuxCNC rules that bit us (details in the skills)

@@ -213,7 +213,7 @@ def _env(r):
 
 
 def render(objects, cam, size=(760, 440), ss=3, light_dir=(-0.45, -0.35, 0.82),
-           outline=0.55, ao_strength=0.55, shadow=True, fit=None, margin=0.06):
+           outline=0.35, ao_strength=0.45, shadow=True, fit=None, margin=0.06, ground=None):
     """objects: list of (tris, Material). Returns the supersampled RGBA image and the camera.
 
     fit: list of tris arrays the camera frames (default: everything)."""
@@ -313,11 +313,28 @@ def render(objects, cam, size=(760, 440), ss=3, light_dir=(-0.45, -0.35, 0.82),
         col = col * (1 - outline * np.clip(edge, 0, 1)[..., None] * 0.6)
 
     col = np.clip(col, 0, 1)
+    rgba_extra = None
+    if ground is not None and shadow:
+        # soft contact shadow of the whole scene on a floor at z = ground, seen by the camera
+        floor_pts = all_tris.reshape(-1, 3).copy()
+        floor_pts = floor_pts - np.outer((floor_pts[:, 2] - ground) / L[2], L) * 0.15
+        floor_pts[:, 2] = ground
+        fp = cam.project(floor_pts)
+        smask = np.zeros((H, W))
+        xs_ = np.clip(fp[:, 0].astype(int), 0, W - 1)
+        ys_ = np.clip(fp[:, 1].astype(int), 0, H - 1)
+        smask[ys_, xs_] = 1.0
+        smask = ndimage.binary_closing(smask > 0, iterations=6 * ss).astype(float)
+        smask = ndimage.gaussian_filter(smask, 10 * ss) * 0.55
+        rgba_extra = smask
     # gentle tone curve
     col = col ** (1 / 1.12)
     rgba = np.zeros((H, W, 4))
     rgba[..., :3] = col
     rgba[..., 3] = mask
+    if rgba_extra is not None:
+        sh = rgba_extra * (~mask)
+        rgba[..., 3] = np.maximum(rgba[..., 3], sh)
     img = Image.fromarray((rgba * 255).astype(np.uint8), "RGBA")
     return img, cam
 

@@ -4,80 +4,40 @@
   400
  ],
  "images": {
-  "vise_X_pos_edge.png": {
+  "vise_X_pos.png": {
    "center": [
     360.0,
-    223.0
+    191.8
    ],
    "u_dir": [
     0.901,
     -0.433
    ]
   },
-  "vise_X_pos_center.png": {
+  "vise_X_neg.png": {
    "center": [
     360.0,
-    223.0
-   ],
-   "u_dir": [
-    0.901,
-    -0.433
-   ]
-  },
-  "vise_X_neg_edge.png": {
-   "center": [
-    360.0,
-    223.0
+    191.8
    ],
    "u_dir": [
     0.901,
     0.433
    ]
   },
-  "vise_X_neg_center.png": {
+  "vise_Y_pos.png": {
    "center": [
     360.0,
-    223.0
-   ],
-   "u_dir": [
-    0.901,
-    0.433
-   ]
-  },
-  "vise_Y_pos_edge.png": {
-   "center": [
-    360.0,
-    224.1
+    189.7
    ],
    "u_dir": [
     0.684,
     -0.729
    ]
   },
-  "vise_Y_pos_center.png": {
+  "vise_Y_neg.png": {
    "center": [
     360.0,
-    224.1
-   ],
-   "u_dir": [
-    0.684,
-    -0.729
-   ]
-  },
-  "vise_Y_neg_edge.png": {
-   "center": [
-    360.0,
-    238.0
-   ],
-   "u_dir": [
-    0.602,
-    -0.799
-   ]
-  },
-  "vise_Y_neg_center.png": {
-   "center": [
-    360.0,
-    238.0
+    221.0
    ],
    "u_dir": [
     0.602,

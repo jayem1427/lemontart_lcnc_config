@@ -46,10 +46,10 @@ CONFIG_DIR = os.path.abspath(
 )
 VAR_FILE = os.path.join(CONFIG_DIR, "linuxcnc.var")
 
-P_AXIS, P_SIDE, P_STOP, P_STOP_Z, P_MODE, P_LENGTH, P_WCS, P_LAST = range(5580, 5588)
-VISE_PARAMS = (P_AXIS, P_SIDE, P_STOP, P_STOP_Z, P_MODE, P_LENGTH, P_WCS, P_LAST)
-DEFAULTS = {P_AXIS: 0.0, P_SIDE: 1.0, P_STOP: 0.0, P_STOP_Z: 5.0,
-            P_MODE: 0.0, P_LENGTH: 0.0, P_WCS: 2.0, P_LAST: 0.0}
+# 5582, 5584 and 5587 belonged to the old "captured stop" design and are unused.
+P_AXIS, P_SIDE, P_STOP_Z, P_LENGTH, P_WCS = 5580, 5581, 5583, 5585, 5586
+VISE_PARAMS = (P_AXIS, P_SIDE, P_STOP_Z, P_LENGTH, P_WCS)
+DEFAULTS = {P_AXIS: 0.0, P_SIDE: 1.0, P_STOP_Z: 5.0, P_LENGTH: 0.0, P_WCS: 2.0}
 PROBE_TOOL = 99  # #3014
 WCS_NAMES = ["G54", "G55", "G56", "G57", "G58", "G59"]
 POLL_MS = 250
@@ -60,7 +60,7 @@ RETRACT_MDI = "o<vise_stop_retract> call"
 
 # ---------------------------------------------------------------- graphics
 # Rendered images of the H67 (tools/vise_render/make_images.py), one per
-# free axis / part side / origin mode.  The live numbers are painted on top.
+# jaw axis / pin side.  The live numbers are painted on top.
 IMG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
 
 C_PIN = QColor("#fcaf3e")
@@ -77,7 +77,7 @@ def _font(pt):
 
 
 class ViseRenderView(QWidget):
-    """Shows the render matching the settings. Tap a side of the vise to put the part there."""
+    """Shows the render matching the settings. Tap a side of the vise to put the pin there."""
     sideClicked = Signal(int)
 
     def __init__(self, parent=None):
@@ -102,9 +102,8 @@ class ViseRenderView(QWidget):
 
     def _name(self):
         st = self.st
-        return "vise_{}_{}_{}.png".format("Y" if st.get("axis") == 1 else "X",
-                                          "neg" if st.get("side", 1) < 0 else "pos",
-                                          "center" if st.get("mode") == 1 else "edge")
+        return "vise_{}_{}.png".format("Y" if st.get("axis") == 1 else "X",
+                                       "neg" if st.get("side", 1) < 0 else "pos")
 
     def _pixmap(self, name):
         if name not in self._cache:
@@ -169,7 +168,7 @@ class ViseRenderView(QWidget):
         p.drawText(QRectF(8, h - 28, w * 0.62, 26), Qt.AlignLeft | Qt.AlignVCenter, z_txt)
         p.setPen(C_DIM)
         p.drawText(QRectF(w * 0.55, h - 28, w * 0.45 - 8, 26), Qt.AlignRight | Qt.AlignVCenter,
-                   "TAP A SIDE TO MOVE THE PART")
+                   "TAP A SIDE TO PUT THE PIN THERE")
         if bad:
             p.setPen(QPen(C_BAD, 3))
             p.setBrush(Qt.NoBrush)
@@ -289,44 +288,42 @@ class UserTab(QWidget):
         cards.setSpacing(8)
 
         # --- SETUP (once per vise mount)
-        setup, sl = self._card("setupCard", "SETUP - ONCE PER VISE MOUNT")
+        setup, sl = self._card("setupCard", "VISE - SET ONCE")
         grid = QGridLayout()
         grid.setHorizontalSpacing(12)
         grid.setVerticalSpacing(10)
 
         self.grpAxis, axis_row, _ = self._toggle_pair(["X", "Y"])
-        grid.addWidget(self._field_label("ALONG THE JAWS"), 0, 0)
+        grid.addWidget(self._field_label("JAWS RUN ALONG"), 0, 0)
         grid.addLayout(axis_row, 0, 1)
-
-        self.grpSide, side_row, self.sideButtons = self._toggle_pair(["PART +X", "PART -X"])
-        grid.addWidget(self._field_label("PART SIDE OF STOP"), 1, 0)
-        grid.addLayout(side_row, 1, 1)
 
         self.cmbWcs = QComboBox()
         self.cmbWcs.addItems(WCS_NAMES)
         self.cmbWcs.setFixedHeight(44)
-        grid.addWidget(self._field_label("VISE WCS"), 2, 0)
-        grid.addWidget(self.cmbWcs, 2, 1)
+        grid.addWidget(self._field_label("VISE WCS (VISE CENTER)"), 1, 0)
+        grid.addWidget(self.cmbWcs, 1, 1)
 
         self.spnStopZ = self._spin(-200.0, 200.0)
-        grid.addWidget(self._field_label("STOP Z (TIP, VISE WCS)"), 3, 0)
-        grid.addWidget(self.spnStopZ, 3, 1)
+        grid.addWidget(self._field_label("PIN TIP Z (VISE WCS)"), 2, 0)
+        grid.addWidget(self.spnStopZ, 2, 1)
 
-        self.lblStop = QLabel("NOT CAPTURED")
-        self.lblStop.setObjectName("value")
-        self.btnCapture = QPushButton("CAPTURE STOP")
-        self.btnCapture.setObjectName("btnCapture")
-        cap_row = QHBoxLayout()
-        cap_row.addWidget(self.lblStop, 1)
-        cap_row.addWidget(self.btnCapture)
-        grid.addWidget(self._field_label("STOP POSITION (G53)"), 4, 0)
-        grid.addLayout(cap_row, 4, 1)
-        self.grpMode, mode_row, _ = self._toggle_pair(["PART EDGE", "PART CENTER"])
-        grid.addWidget(self._field_label("WCS ORIGIN AT"), 5, 0)
-        grid.addLayout(mode_row, 5, 1)
+        part_title = QLabel("THIS PART")
+        part_title.setObjectName("cardTitle")
+        part_title.setAlignment(Qt.AlignCenter)
+        grid.addWidget(part_title, 3, 0, 1, 2)
+
         self.spnLength = self._spin(0.0, 1000.0)
-        grid.addWidget(self._field_label("PART LENGTH (CENTER ONLY)"), 6, 0)
-        grid.addWidget(self.spnLength, 6, 1)
+        grid.addWidget(self._field_label("PART LENGTH ALONG JAWS"), 4, 0)
+        grid.addWidget(self.spnLength, 4, 1)
+
+        self.grpSide, side_row, self.sideButtons = self._toggle_pair(["PIN ON -X", "PIN ON +X"])
+        grid.addWidget(self._field_label("STOP PIN SIDE"), 5, 0)
+        grid.addLayout(side_row, 5, 1)
+
+        self.lblPin = QLabel("-")
+        self.lblPin.setObjectName("value")
+        grid.addWidget(self._field_label("PIN GOES TO"), 6, 0)
+        grid.addWidget(self.lblPin, 6, 1)
         grid.setColumnStretch(1, 1)
         sl.addLayout(grid)
         sl.addStretch(1)
@@ -336,16 +333,6 @@ class UserTab(QWidget):
         preview, pl = self._card("originCard", "WHAT GO TO STOP DOES")
         self.viewTop = ViseRenderView()
         pl.addWidget(self.viewTop, 1)
-        org_row = QHBoxLayout()
-        self.lblOrigin = QLabel("-")
-        self.lblOrigin.setObjectName("bigValue")
-        self.lblFormula = QLabel("")
-        self.lblFormula.setObjectName("hint")
-        self.lblFormula.setWordWrap(True)
-        org_row.addWidget(self.lblOrigin)
-        org_row.addSpacing(12)
-        org_row.addWidget(self.lblFormula, 1)
-        pl.addLayout(org_row)
         cards.addWidget(preview, 7)
 
         # --- RUN (every part)
@@ -353,7 +340,7 @@ class UserTab(QWidget):
         steps = QLabel(
             "1  LOAD THE STOP PIN (M600)\n"
             "2  GO TO STOP\n"
-            "3  SLIDE PART AGAINST PIN - CLAMP\n"
+            "3  PUSH PART AGAINST PIN - CLAMP\n"
             "4  RETRACT - LOAD TOOL - RUN"
         )
         steps.setObjectName("steps")
@@ -377,11 +364,9 @@ class UserTab(QWidget):
 
         self.grpAxis.buttonClicked.connect(self._on_axis)
         self.grpSide.buttonClicked.connect(self._on_edit)
-        self.grpMode.buttonClicked.connect(self._on_edit)
         self.cmbWcs.currentIndexChanged.connect(self._on_edit)
         self.spnStopZ.valueChanged.connect(self._on_edit)
         self.spnLength.valueChanged.connect(self._on_edit)
-        self.btnCapture.clicked.connect(self._capture_stop)
         self.btnGo.clicked.connect(self._go)
         self.btnRetract.clicked.connect(self._retract)
         self.viewTop.sideClicked.connect(self._on_view_side)
@@ -390,7 +375,6 @@ class UserTab(QWidget):
         v = self._vals
         self.grpAxis.button(1 if v[P_AXIS] >= 0.5 else 0).setChecked(True)
         self.grpSide.button(1 if v[P_SIDE] < 0 else 0).setChecked(True)
-        self.grpMode.button(1 if v[P_MODE] >= 0.5 else 0).setChecked(True)
         wcs = int(round(v[P_WCS]))
         self.cmbWcs.setCurrentIndex(min(max(wcs, 1), 6) - 1)
         self.spnStopZ.setValue(v[P_STOP_Z])
@@ -403,21 +387,21 @@ class UserTab(QWidget):
 
     def _relabel_side(self):
         axis = self._axis_name()
-        self.sideButtons[0].setText("PART +" + axis)
-        self.sideButtons[1].setText("PART -" + axis)
+        self.sideButtons[0].setText("PIN ON -" + axis)
+        self.sideButtons[1].setText("PIN ON +" + axis)
 
     def _collect(self):
         v = self._vals
         v[P_AXIS] = float(max(self.grpAxis.checkedId(), 0))
         v[P_SIDE] = -1.0 if self.grpSide.checkedId() == 1 else 1.0
-        v[P_MODE] = float(max(self.grpMode.checkedId(), 0))
         v[P_WCS] = float(self.cmbWcs.currentIndex() + 1)
         v[P_STOP_Z] = float(self.spnStopZ.value())
         v[P_LENGTH] = float(self.spnLength.value())
         return v
 
-    def _on_view_side(self, side):
-        self.grpSide.button(1 if side < 0 else 0).setChecked(True)
+    def _on_view_side(self, pin_side):
+        # pin on the + side means the part sits toward - (#5581 = -1)
+        self.grpSide.button(1 if pin_side > 0 else 0).setChecked(True)
         self._on_edit()
 
     def _on_axis(self, *_):
@@ -428,7 +412,6 @@ class UserTab(QWidget):
         if self._loading:
             return
         self._collect()
-        self.spnLength.setEnabled(self._vals[P_MODE] >= 0.5)
         self._write_var(self._vals)
         self._refresh_readout()
 
@@ -444,50 +427,40 @@ class UserTab(QWidget):
                 return tn, float(entry.diameter)
         return tn, 0.0
 
-    def _origin(self, dia):
+    def _pin_pos(self, dia):
+        """Pin center along the jaws in the vise WCS, or None if it can't be worked out."""
         v = self._vals
-        if abs(v[P_STOP]) < 1e-4 or dia <= 0:
+        if dia <= 0 or v[P_LENGTH] <= 0:
             return None
-        origin = v[P_STOP] + v[P_SIDE] * dia / 2.0
-        if v[P_MODE] >= 0.5:
-            if v[P_LENGTH] <= 0:
-                return None
-            origin += v[P_SIDE] * v[P_LENGTH] / 2.0
-        return origin
+        return -v[P_SIDE] * (v[P_LENGTH] / 2.0 + dia / 2.0)
+
+    def _why_not(self, tn, dia):
+        if tn == PROBE_TOOL:
+            return "TOUCH PROBE LOADED - LOAD THE STOP PIN"
+        if tn <= 0:
+            return "LOAD THE STOP PIN (M600)"
+        if dia <= 0:
+            return "T{} HAS NO DIAMETER IN THE TOOL TABLE".format(tn)
+        if self._vals[P_LENGTH] <= 0:
+            return "ENTER THE PART LENGTH"
+        return ""
 
     def _refresh_readout(self):
         v = self._vals
         axis = self._axis_name()
+        clamp = "X" if axis == "Y" else "Y"
         wcs = WCS_NAMES[int(v[P_WCS]) - 1]
-        self.spnLength.setEnabled(v[P_MODE] >= 0.5)
         tn, tdia = self._tool()
         probe = self._stat is not None and tn == PROBE_TOOL
         view = dict(axis=int(v[P_AXIS] >= 0.5), side=1 if v[P_SIDE] > 0 else -1,
-                    dia=0.0 if probe else tdia, mode=int(v[P_MODE] >= 0.5),
-                    length=v[P_LENGTH], stop_z=v[P_STOP_Z], wcs=wcs, tool=tn,
-                    bad_tool=probe)
+                    dia=0.0 if probe else tdia, length=v[P_LENGTH], stop_z=v[P_STOP_Z],
+                    wcs=wcs, tool=tn, bad_tool=probe)
         self.viewTop.set_state(**view)
-        if abs(v[P_STOP]) < 1e-4:
-            self.lblStop.setText("NOT CAPTURED")
+        pin = None if probe else self._pin_pos(tdia)
+        if pin is None:
+            self.lblPin.setText(self._why_not(tn, tdia))
         else:
-            self.lblStop.setText("{} {:.4f}".format(axis, v[P_STOP]))
-        _, dia = self._tool()
-        origin = self._origin(dia)
-        if origin is None:
-            self.lblOrigin.setText("{} {}  -".format(wcs, axis))
-            if abs(v[P_STOP]) < 1e-4:
-                self.lblFormula.setText("CAPTURE THE STOP POSITION FIRST")
-            elif dia <= 0:
-                self.lblFormula.setText("LOAD THE STOP PIN - NEEDS A DIAMETER IN THE TOOL TABLE")
-            else:
-                self.lblFormula.setText("ENTER THE PART LENGTH")
-            return
-        self.lblOrigin.setText("{} {}  {:.4f}".format(wcs, axis, origin))
-        sign = "+" if v[P_SIDE] > 0 else "-"
-        text = "STOP {:.4f} {} PIN R {:.4f}".format(v[P_STOP], sign, dia / 2.0)
-        if v[P_MODE] >= 0.5:
-            text += " {} HALF LENGTH {:.4f}".format(sign, v[P_LENGTH] / 2.0)
-        self.lblFormula.setText(text + "  (MACHINE)")
+            self.lblPin.setText("{} {}{:.3f} {}0".format(wcs, axis, pin, clamp))
 
     # ---------------------------------------------------------- linuxcnc
     def _ready(self, need_homed=True):
@@ -524,15 +497,6 @@ class UserTab(QWidget):
             return False
         return self._write_var(self._vals)
 
-    def _capture_stop(self, *_):
-        if not self._ready():
-            return
-        axis = 1 if self._vals[P_AXIS] >= 0.5 else 0
-        self._vals[P_STOP] = float(self._stat.actual_position[axis])
-        if self._push_params():
-            self._refresh_readout()
-            self._set_status("STOP CAPTURED: {} {:.4f}".format(self._axis_name(), self._vals[P_STOP]))
-
     def _go(self, *_):
         if not self._ready():
             return
@@ -540,9 +504,8 @@ class UserTab(QWidget):
         if tn == PROBE_TOOL:
             self._set_status("BLOCKED: TOUCH PROBE LOADED - LOAD THE STOP PIN")
             return
-        if self._origin(dia) is None:
-            self._refresh_readout()
-            self._set_status("BLOCKED: " + self.lblFormula.text())
+        if self._pin_pos(dia) is None:
+            self._set_status("BLOCKED: " + self._why_not(tn, dia))
             return
         if not self._push_params():
             return

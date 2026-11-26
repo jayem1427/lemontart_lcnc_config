@@ -2,8 +2,8 @@
 
     python3 make_images.py h67_vise.stl h67_jaws.stl OUT_DIR
 
-Writes vise_<X|Y>_<pos|neg>_<edge|center>.png and meta.json (pixel positions
-the tab uses to map a tap to a part side).  Meshes: Fusion "Save As Mesh",
+Writes vise_<X|Y>_<pos|neg>.png (jaw axis, part side of the pin) and meta.json
+(pixel positions the tab uses to map a tap to a side).  Meshes: Fusion "Save As Mesh",
 STL (Binary), mm.  Vise mesh: clamp along mesh X, jaws along mesh Y, z up.
 """
 import json
@@ -16,68 +16,77 @@ from PIL import Image, ImageDraw
 import render as r
 
 SIZE = (720, 400)
-SS = 3
+SS = 4
 
-# scene numbers (mm, vise frame: u = along the jaws, v = clamp axis, z up)
-BODY_TOP = 9.0          # jaws sit here
-PARALLEL_H = 8.0
-Z0 = BODY_TOP + PARALLEL_H          # vise WCS Z0 = parallel top
+# scene numbers (mm, vise frame: u along the jaws, v clamp axis, z up, z = 0 body top)
+JAW_SINK = 2.5          # jaw key sits this far into the body
+PARALLEL_H = 10.0
+Z0 = PARALLEL_H         # vise WCS Z0 = parallel top (part bottom)
 JAW_FACE = 22.0         # jaw faces at v = +-22 in the exported jaw position
-PART_L, PART_H = 40.0, 21.0
+PART_L, PART_H = 50.0, 30.0
 PIN_R = 3.0
 STOP_Z = 5.0            # pin tip above Z0 in the picture
 
-M_BODY = r.Material((74, 78, 84), metal=0.35, rough=0.45, spec=0.35)
-M_JAW = r.Material((168, 171, 176), metal=0.75, rough=0.32, spec=0.5)
-M_PART = r.Material((196, 203, 212), metal=0.55, rough=0.45, spec=0.35)
-M_PAR = r.Material((140, 146, 152), metal=0.8, rough=0.3, spec=0.5)
-M_PIN = r.Material((226, 228, 232), metal=0.95, rough=0.12, spec=0.9)
-M_NUT = r.Material((182, 185, 190), metal=0.85, rough=0.25, spec=0.7)
-M_SPIN = r.Material((112, 117, 124), metal=0.2, rough=0.5, spec=0.3)
+M_BODY = r.Material((92, 96, 102), metal=0.45, rough=0.5, spec=0.3)     # black oxide body
+M_JAW = r.Material((176, 180, 186), metal=0.8, rough=0.38, spec=0.45)     # ground steel jaws
+M_PART = r.Material((178, 190, 204), metal=0.65, rough=0.55, spec=0.25)   # aluminium stock
+M_PAR = r.Material((128, 134, 140), metal=0.8, rough=0.35, spec=0.4)
+M_PIN = r.Material((236, 238, 242), metal=0.95, rough=0.15, spec=0.8)
+M_NUT = r.Material((190, 193, 198), metal=0.85, rough=0.28, spec=0.6)
+M_SPIN = r.Material((150, 155, 162), metal=0.35, rough=0.45, spec=0.35)
 
 C_PUSH = (94, 200, 255, 235)
 C_X, C_Y, C_Z = (239, 41, 41, 255), (115, 210, 22, 255), (52, 101, 255, 255)
 
 
 def load(vise_stl, jaws_stl):
+    """Vise frame: u along the jaws, v clamp axis, z up, origin at the vise center on the body top.
+
+    Fusion's "Save As Mesh" writes each component in its own coordinates, so the
+    jaws are placed here: centered on the vise, turned right side up (the
+    exported jaw component is upside down: narrow upright with the grip teeth
+    goes on top), base sitting on the body top.
+    """
     v = r.load_stl(vise_stl)
     j = r.load_stl(jaws_stl)
     vp, jp = v.reshape(-1, 3), j.reshape(-1, 3)
     vc = (vp.min(0) + vp.max(0)) / 2
     jc = (jp.min(0) + jp.max(0)) / 2
-    v = v - [vc[0], vc[1], 0]
-    j = j - [jc[0], jc[1], 0]
-    # vise frame: u along the jaws = mesh Y, v clamp = -mesh X (a proper rotation)
+    v = v - [vc[0], vc[1], vp[:, 2].max()]
+    j = j - jc
+    # mesh X = clamp, mesh Y = along the jaws -> u = mesh Y, v = -mesh X (proper rotation)
     rot = np.array([[0, 1, 0], [-1, 0, 0], [0, 0, 1.0]])
     v = v @ rot.T
     j = j @ rot.T
+    # jaws right side up: 180 deg about the u axis
+    flip = np.diag([1.0, -1.0, -1.0])
+    j = j @ flip.T
+    j = j - [0, 0, j.reshape(-1, 3)[:, 2].min() + JAW_SINK]
     return v, j
 
 
-PIN_STICK = 40.0         # stop pin stickout below the collet nut
+PIN_STICK = 45.0         # stop pin stickout below the collet nut
 
 
 def spindle_parts(u_pin, z_tip):
     k = z_tip + PIN_STICK
-    pin = r.cylinder(u_pin, 0, z_tip, k, PIN_R, n=40)
-    chamfer = r.cylinder(u_pin, 0, z_tip - 0.5, z_tip, PIN_R - 0.5, n=40, r_top=PIN_R)
-    nut_cone = r.cylinder(u_pin, 0, k - 2, k, 6, n=48, r_top=15, cap=False)
-    nut = r.cylinder(u_pin, 0, k, k + 11, 15, n=64)
-    nose = r.cylinder(u_pin, 0, k + 11, k + 17, 19, n=64)
-    body = r.cylinder(u_pin, 0, k + 17, k + 110, 24, n=72)
-    return [(pin, M_PIN), (chamfer, M_PIN), (nut_cone, M_NUT), (nut, M_NUT), (nose, M_NUT),
-            (body, M_SPIN)]
+    pin = r.cylinder(u_pin, 0, z_tip, k, PIN_R, n=48)
+    nut_cone = r.cylinder(u_pin, 0, k - 3, k, 5, n=64, r_top=13, cap=False)
+    nut = r.cylinder(u_pin, 0, k, k + 10, 13.5, n=72)
+    nose = r.cylinder(u_pin, 0, k + 10, k + 16, 17, n=72, r_top=19)
+    body = r.cylinder(u_pin, 0, k + 16, k + 90, 21, n=72)
+    return [(pin, M_PIN), (nut_cone, M_NUT), (nut, M_NUT), (nose, M_NUT), (body, M_SPIN)]
 
 
 def scene(vise, jaws, side):
-    """All in the vise frame (u, v, z). side = +1 part on the + side of the pin."""
+    """All in the vise frame. side = +1: part toward + of the pin (pin on the - side)."""
     u_pin = -side * (PART_L / 2 + PIN_R)
     part = r.box(-PART_L / 2, -JAW_FACE, Z0, PART_L / 2, JAW_FACE, Z0 + PART_H)
-    pars = [r.box(-PART_L / 2 - 6, JAW_FACE - 6, BODY_TOP, PART_L / 2 + 6, JAW_FACE, Z0),
-            r.box(-PART_L / 2 - 6, -JAW_FACE, BODY_TOP, PART_L / 2 + 6, -JAW_FACE + 6, Z0)]
+    pars = [r.box(-PART_L / 2 - 4, JAW_FACE - 5, 0, PART_L / 2 + 4, JAW_FACE, Z0),
+            r.box(-PART_L / 2 - 4, -JAW_FACE, 0, PART_L / 2 + 4, -JAW_FACE + 5, Z0)]
     objs = [(vise, M_BODY), (jaws, M_JAW), (part, M_PART)] + [(p, M_PAR) for p in pars]
     objs += spindle_parts(u_pin, Z0 + STOP_Z)
-    fit = [vise, jaws, part, r.box(u_pin - 16, -16, Z0, u_pin + 16, 16, Z0 + STOP_Z + PIN_STICK + 24)]
+    fit = [vise, jaws, part, r.box(u_pin - 14, -14, Z0, u_pin + 14, 14, Z0 + STOP_Z + PIN_STICK + 14)]
     return objs, fit, u_pin
 
 
@@ -132,24 +141,30 @@ def main(vise_stl, jaws_stl, out_dir):
             objs, fit, u_pin = scene(vise, jaws, side)
             objs_m, fit_m, R = to_machine(objs, fit, axis)
             cam = camera(axis, side)
-            img, cam = r.render(objs_m, cam, size=SIZE, ss=SS, fit=fit_m, margin=0.05)
-            for mode in ("edge", "center"):
-                im = img.copy()
-                d = ImageDraw.Draw(im, "RGBA")
-                z_top = Z0 + PART_H + 0.2
-                far = side * (PART_L / 2 - 4)
-                near = -side * (PART_L / 2 - 2)
-                draw_arrow(d, cam, R, (far, 0, z_top), (near, 0, z_top), 6.0, C_PUSH)
-                u_org = 0.0 if mode == "center" else -side * PART_L / 2
-                draw_triad(d, cam, R, (u_org, 0, Z0))
-                out = r.downsample(im, SS)
-                name = "vise_{}_{}_{}.png".format(axis, sname, mode)
-                out.save(os.path.join(out_dir, name), optimize=True)
-                c = cam.project(np.zeros(3))[:2] / SS
-                pu = cam.project(np.array([10.0, 0, 0]) @ R.T)[:2] / SS - c
-                meta["images"][name] = {"center": [round(float(x), 1) for x in c],
-                                        "u_dir": [round(float(x), 3) for x in pu / np.linalg.norm(pu)]}
-                print("wrote", name, flush=True)
+            img, cam = r.render(objs_m, cam, size=SIZE, ss=SS, fit=fit_m, margin=0.04,
+                                ground=None)
+            d = ImageDraw.Draw(img, "RGBA")
+            z_top = Z0 + PART_H + 0.2
+            far = side * (PART_L / 2 - 6)
+            near = -side * (PART_L / 2 - 3)
+            draw_arrow(d, cam, R, (far, 0, z_top), (near, 0, z_top), 7.0, C_PUSH)
+            # WCS origin: vise center at Z0 (under the part) - dotted riser to the top face
+            top = cam.project(np.array([0, 0, z_top]) @ R.T)[:2]
+            bot = cam.project(np.array([0, 0, Z0]) @ R.T)[:2]
+            n = 14
+            for i in range(0, n, 2):
+                a_ = bot + (top - bot) * i / n
+                b_ = bot + (top - bot) * (i + 1) / n
+                d.line([tuple(a_), tuple(b_)], fill=(255, 255, 255, 220), width=2 * SS)
+            draw_triad(d, cam, R, (0, 0, Z0))
+            out = r.downsample(img, SS)
+            name = "vise_{}_{}.png".format(axis, sname)
+            out.save(os.path.join(out_dir, name), optimize=True)
+            c = cam.project(np.zeros(3))[:2] / SS
+            pu = cam.project(np.array([10.0, 0, 0]) @ R.T)[:2] / SS - c
+            meta["images"][name] = {"center": [round(float(x), 1) for x in c],
+                                    "u_dir": [round(float(x), 3) for x in pu / np.linalg.norm(pu)]}
+            print("wrote", name, flush=True)
     with open(os.path.join(out_dir, "meta.json"), "w") as fh:
         json.dump(meta, fh, indent=1)
 

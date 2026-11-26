@@ -1,23 +1,20 @@
 (Vise stop: use the tool in the spindle as a hard stop for a self-centering vise.)
-(Writes the free-axis origin of the vise WCS from the stored stop position and the)
-(tool diameter, then parks the tool at the stop so the part can be slid against it.)
+(The vise WCS is never changed: it stays at the vise center, probed once.)
+(The tool is parked so a part of the given length ends up centered on that WCS:)
+(  pin center = -side x [part length / 2 + tool radius] along the jaws, 0 across them.)
 (Retract with o<vise_stop_retract> call after clamping.  See docs/VISE_STOP.md)
 (Set by the VISE STOP tab - persistent in linuxcnc.var:)
-(  #5580 free axis along the jaws: 0 = X, 1 = Y)
-(  #5581 part side of the stop: +1 = part toward +, -1 = part toward -)
-(  #5582 stop position, machine coord on the free axis - spindle centerline)
+(  #5580 axis along the jaws: 0 = X, 1 = Y)
+(  #5581 part side of the pin: +1 = part toward +, -1 = part toward -)
 (  #5583 stop Z - tool tip height in the vise WCS)
-(  #5584 origin mode: 0 = part edge at the stop, 1 = part center)
-(  #5585 part length along the free axis - center mode only)
+(  #5585 part length along the jaws)
 (  #5586 vise WCS: 1 = G54 ... 6 = G59)
-(  #5587 last free-axis origin written, machine coord - read back by the tab)
+(  #5582, #5584, #5587 are no longer used)
 
 o<vise_stop_go> sub
   #<axis> = #5580
   #<side> = #5581
-  #<stop> = #5582
   #<stop_z> = #5583
-  #<mode> = #5584
   #<length> = #5585
   #<wcs> = #5586
 
@@ -36,24 +33,22 @@ o<vise_stop_go> sub
     (ABORT, Vise stop: vise WCS must be G54 to G59)
   o103 endif
   o104 if [[#<axis> NE 0] AND [#<axis> NE 1]]
-    (ABORT, Vise stop: free axis must be X or Y)
+    (ABORT, Vise stop: jaw axis must be X or Y)
   o104 endif
   o105 if [[#<side> NE 1] AND [#<side> NE -1]]
     (ABORT, Vise stop: part side must be + or -)
   o105 endif
-  o106 if [ABS[#<stop>] LT 0.0001]
-    (ABORT, Vise stop: stop position not captured - jog to the stop and press CAPTURE STOP)
+  o106 if [#<length> LE 0]
+    (ABORT, Vise stop: enter the part length along the jaws)
   o106 endif
 
   #<base> = [5201 + 20 * #<wcs>]
-  (Clamp axis = the other one; the self-centering vise holds it at the calibrated WCS value)
-  #<clamp> = #[#<base> + 1 - #<axis>]
-  #<wcs_z> = #[#<base> + 2]
-  o107 if [ABS[#<clamp>] LT 0.0001]
-    (ABORT, Vise stop: vise WCS clamp axis is zero - probe the vise center into it once)
+  o107 if [[ABS[#[#<base>]] LT 0.0001] OR [ABS[#[#<base> + 1]] LT 0.0001]]
+    (ABORT, Vise stop: vise WCS X or Y is zero - probe the vise center into it once)
   o107 endif
+  #<wcs_z> = #[#<base> + 2]
   o108 if [ABS[#<wcs_z>] LT 0.0001]
-    (ABORT, Vise stop: vise WCS Z is zero - set Z on the parallels or vise once)
+    (ABORT, Vise stop: vise WCS Z is zero - set Z on the parallels once)
   o108 endif
 
   G21 G90 G94 G40
@@ -64,31 +59,13 @@ o<vise_stop_go> sub
     (ABORT, Vise stop: stop Z lands above machine Z0 - check STOP Z and the tool length)
   o115 endif
 
-  (--- free-axis origin: stop centerline plus tool radius toward the part ---)
-  #<origin> = [#<stop> + #<side> * #<dia> / 2]
-  o110 if [#<mode> GT 0.5]
-    o111 if [#<length> LE 0]
-      (ABORT, Vise stop: center mode needs the part length)
-    o111 endif
-    #<origin> = [#<origin> + #<side> * #<length> / 2]
-  o110 endif
+  (--- pin position in the vise WCS ---)
+  #<pin> = [0 - #<side> * [#<length> / 2 + #<dia> / 2]]
 
-  o112 if [#<axis> EQ 0]
-    G10 L2 P#<wcs> X#<origin>
-  o112 else
-    G10 L2 P#<wcs> Y#<origin>
-  o112 endif
-  #5587 = #<origin>
-
-  (--- park the tool at the stop: retract first, then XY, then down in the vise WCS ---)
+  (--- retract, select the vise WCS, go over the pin spot, then down ---)
   #<old_wcs> = #5220
   M5
   G53 G0 Z0
-  o120 if [#<axis> EQ 0]
-    G53 G0 X#<stop> Y#<clamp>
-  o120 else
-    G53 G0 X#<clamp> Y#<stop>
-  o120 endif
 
   o130 if [#<wcs> EQ 1]
     G54
@@ -103,6 +80,12 @@ o<vise_stop_go> sub
   o130 else
     G59
   o130 endif
+
+  o120 if [#<axis> EQ 0]
+    G0 X#<pin> Y0
+  o120 else
+    G0 X0 Y#<pin>
+  o120 endif
 
   (rapid to 25 mm above the stop only if that stays below machine Z0, then feed)
   o135 if [[#<stop_z> + 25 + #<z_to_mach>] LT -1]
