@@ -103,6 +103,37 @@ def to_machine(objs, fit, axis):
     return [(o @ R.T, m) for o, m in objs], [f @ R.T for f in fit], R
 
 
+C_AXIS = (240, 240, 240, 255)
+
+
+def draw_axes(d, cam, size):
+    """Corner indicator: +X and +Y machine directions as the camera sees them."""
+    from PIL import ImageFont
+    font = ImageFont.load_default(size=int(22 * SS))
+    o2 = np.array([92.0, size[1] - 78.0]) * SS          # bottom-left corner
+    L = 62.0 * SS
+    zero = cam.project(np.zeros(3))[:2]
+    for vec, label in (((1.0, 0, 0), "+X"), ((0, 1.0, 0), "+Y")):
+        dv = cam.project(np.array(vec) * 10.0)[:2] - zero
+        dv = dv / np.linalg.norm(dv)
+        tip = o2 + dv * L
+        nrm = np.array([-dv[1], dv[0]])
+        w, hl, hw = 2.2 * SS, 13 * SS, 7 * SS
+        base = tip - dv * hl
+        shaft = [o2 + nrm * w, base + nrm * w, base - nrm * w, o2 - nrm * w]
+        head = [base + nrm * hw, tip, base - nrm * hw]
+        for poly in (shaft, head):
+            d.polygon([tuple(q) for q in poly], fill=C_AXIS, outline=(20, 20, 20, 255), width=SS)
+        lp = o2 + dv * (L + 20 * SS)
+        bb = d.textbbox((0, 0), label, font=font, stroke_width=SS)
+        tw, th = bb[2] - bb[0], bb[3] - bb[1]
+        d.text((lp[0] - tw / 2, lp[1] - th / 2 - bb[1]), label, fill=C_AXIS, font=font,
+               stroke_width=SS, stroke_fill=(20, 20, 20, 255))
+    r_ = 4 * SS
+    d.ellipse([o2[0] - r_, o2[1] - r_, o2[0] + r_, o2[1] + r_], fill=C_AXIS,
+              outline=(20, 20, 20, 255), width=SS)
+
+
 def draw_arrow(d, cam, R, a, b, width, col, head=None):
     """Flat arrow in the plane z = a[2], from a to b (vise frame), drawn over the image."""
     a, b = np.array(a, float), np.array(b, float)
@@ -144,6 +175,7 @@ def main(vise_stl, jaws_stl, out_dir):
             img, cam = r.render(objs_m, cam, size=SIZE, ss=SS, fit=fit_m, margin=0.04,
                                 ground=None)
             d = ImageDraw.Draw(img, "RGBA")
+            draw_axes(d, cam, SIZE)
             z_top = Z0 + PART_H + 0.2
             far = side * (PART_L / 2 - 6)
             near = -side * (PART_L / 2 - 3)

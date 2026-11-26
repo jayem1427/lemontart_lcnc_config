@@ -36,7 +36,9 @@ bottom (parallel top) in Z.**
 The middle of the tab shows the H67 the way it sits on the table (jaws along X
 or Y), with the part centered, the stop pin in the spindle on the chosen side,
 and a red arrow for which way to push the part. The camera always looks from
-the front, swung toward the pin.
+the front, swung toward the pin. The +X / +Y indicator in the bottom-left corner
+shows the machine axes as that camera sees them, so you can match the picture to
+the table.
 
 The tool number and diameter and the pin tip height are painted on top live. The frame turns red if the probe is loaded, the tool has no
 diameter, or the pin tip is at or below Z0. The picture is drawn with a 6 mm
