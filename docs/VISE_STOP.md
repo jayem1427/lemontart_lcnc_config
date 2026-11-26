@@ -27,7 +27,21 @@ CENTER mode origin = part edge + side x (part length / 2)
 
 `side` is +1 when the part sits on the + side of the pin, and -1 when it sits on
 the - side. The pin diameter comes from the tool table for the tool in the
-spindle. The tab shows the result live under FREE-AXIS ORIGIN.
+spindle.
+
+The middle of the tab shows what GO TO STOP will do, drawn live from the
+current settings:
+- **Top view** (looking down, +X right, +Y up): the vise in the chosen
+  orientation, the part, the stop pin at its real diameter with the spindle
+  nose dashed around it, an arrow showing which way to push the part, and the
+  green target where the WCS origin lands. Tap either side of the vise to put
+  the part on that side.
+- **Side view:** the pin tip height (STOP Z) against Z0 at the parallel top.
+  It turns red if the tip is at or below Z0, or if the loaded tool is the probe
+  or has no diameter.
+
+The computed origin is shown under the drawings. The drawing is a schematic
+of the H67 and is not to scale, except for the pin.
 
 ## Setup (once per vise mount)
 
@@ -37,7 +51,8 @@ spindle. The tab shows the result live under FREE-AXIS ORIGIN.
 2. Set the vise WCS **Z** where you want it. The parallel top or jaw step
    (= part bottom) means every op 2 has the same Z0. In CAM, put the op 2
    origin at the stock bottom.
-3. On the tab, pick **ALONG THE JAWS** (X or Y), **PART SIDE OF STOP**, **VISE WCS**
+3. On the tab, pick **ALONG THE JAWS** (X or Y) so the drawing matches how
+   the vise sits on the table, then **PART SIDE OF STOP**, **VISE WCS**
    and **STOP Z**. STOP Z is the pin tip height in the vise WCS: low enough to
    touch the side of your thinnest part, and above the parallels.
 4. Load the stop pin. Jog it to where the part's end should sit, then press
