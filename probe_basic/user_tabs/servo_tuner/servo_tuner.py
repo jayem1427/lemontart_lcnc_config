@@ -86,6 +86,15 @@ from resonance_analysis import (  # noqa: E402
     analyze_ferr_resonance,
     format_resonance_text,
 )
+# START REVERT: realtime ANALYZE (2026-11-27). The live strip is a polled
+# display; ANALYZE needs true-rate data, so it reads sampler.0 via RtStream.
+try:  # noqa: E402
+    from rt_capture import RtStream, sampler_available
+except Exception:  # pragma: no cover - module missing on a copied setup
+    RtStream = None  # type: ignore
+    sampler_available = None  # type: ignore
+ANALYZE_WINDOW_S = 10.0
+# END REVERT: realtime ANALYZE
 from a6_auto_tune import (  # noqa: E402
     HardwareTuneIO,
     OneClickConfig,
@@ -1075,6 +1084,8 @@ class UserTab(QWidget):
         # If True, next APPLY may write catalog defaults (unused — DEFAULT removed).
         self._allow_default_write = False
         self._logging_active = False  # live FERR plot only (no CSV / disk writes)
+        self._rt_stream = None  # realtime sampler.0 stream for ANALYZE
+        self._rt_stream_warned = False
         self._resonance_report = None
         self._oc_tuner: Optional[OneClickTuner] = None  # running one-click job
         self._gi_tuner: Optional[GraphicalInertiaTuner] = None
@@ -2339,8 +2350,62 @@ class UserTab(QWidget):
             "PEAK: " + (" ".join(bits) if bits else "—")
         )
 
+    def _sync_rt_stream(self) -> None:
+        """Realtime stream runs while plotting gains and no one-click job owns
+        sampler.0 (it has a single FIFO)."""
+        want = bool(
+            self._logging_active
+            and self._panel_mode == "gains"
+            and self._oc_tuner is None
+            and RtStream is not None
+        )
+        stream = self._rt_stream
+        if want and (stream is None or not stream.healthy()):
+            if stream is not None:
+                stream.stop()
+            self._rt_stream = None
+            try:
+                if sampler_available():
+                    new = RtStream(seconds=ANALYZE_WINDOW_S * 2)
+                    new.start()
+                    self._rt_stream = new
+            except Exception as exc:
+                LOG.warning("realtime stream unavailable: %s", exc)
+                if not self._rt_stream_warned:
+                    self._rt_stream_warned = True
+                    self._notify(
+                        f"Realtime capture unavailable ({exc}) — ANALYZE will "
+                        "use the polled plot buffer (approximate frequencies)."
+                    )
+        elif not want and stream is not None:
+            stream.stop()
+            self._rt_stream = None
+
+    def _analysis_samples(self, axis: str):
+        """(samples, fs_hz, source) for ANALYZE / COPY RESONANCE.
+
+        Realtime stream when running (true servo rate), else the polled plot
+        buffer, whose real rate is unknown (it was 250-750 Hz in July).
+        """
+        stream = self._rt_stream
+        if stream is not None:
+            try:
+                cap = stream.snapshot(axis, ANALYZE_WINDOW_S)
+                if cap.n >= 64:
+                    if self._ferr_unit_mode == "pulses":
+                        samples = list(cap.ferr_counts)
+                    else:
+                        samples = [counts_to_unit(axis, c) for c in cap.ferr_counts]
+                    return samples, cap.fs_hz, "realtime"
+            except Exception as exc:
+                LOG.warning("realtime snapshot failed: %s", exc)
+        samples = self.ferr_plot.get_samples(axis)
+        fs = 1000.0 / max(float(getattr(self.ferr_plot, "_sample_ms", 1.0)), 1e-6)
+        return samples, fs, "polled (approximate frequencies)"
+
     def _sync_ferr_timer(self) -> None:
         """Run the 1 kHz HAL poll only while plotting and this tab is visible."""
+        self._sync_rt_stream()
         want = bool(self._logging_active and self.isVisible())
         if want:
             if not self._ferr_timer.isActive():
@@ -2492,8 +2557,7 @@ class UserTab(QWidget):
             QMessageBox.warning(self, "Clipboard", str(exc))
 
     def _analyze_resonance(self) -> None:
-        samples = self.ferr_plot.get_samples(self._axis)
-        fs = 1000.0 / max(float(getattr(self.ferr_plot, "_sample_ms", 1.0)), 1e-6)
+        samples, fs, source = self._analysis_samples(self._axis)
         try:
             report = analyze_ferr_resonance(
                 samples, axis=self._axis, fs_hz=fs
@@ -2504,7 +2568,9 @@ class UserTab(QWidget):
             return
 
         self._resonance_report = report
-        self.resonance_label.setText(report.summary_line() + f" · {report.reason}")
+        self.resonance_label.setText(
+            report.summary_line() + f" · {report.reason} · {source} {fs:.0f} Hz"
+        )
         self.suggest_notch_button.setEnabled(bool(report.suggested_notch))
 
         if (
@@ -2564,7 +2630,7 @@ class UserTab(QWidget):
     def _copy_resonance(self) -> None:
         report = self._resonance_report
         if report is None:
-            samples = self.ferr_plot.get_samples(self._axis)
+            samples, fs, _source = self._analysis_samples(self._axis)
             if len(samples) < 64:
                 QMessageBox.information(
                     self,
@@ -2573,9 +2639,6 @@ class UserTab(QWidget):
                     "then ANALYZE (or COPY after ANALYZE).",
                 )
                 return
-            fs = 1000.0 / max(
-                float(getattr(self.ferr_plot, "_sample_ms", 1.0)), 1e-6
-            )
             try:
                 report = analyze_ferr_resonance(
                     samples, axis=self._axis, fs_hz=fs
@@ -2708,6 +2771,7 @@ class UserTab(QWidget):
     def _on_one_click_finished(self, result) -> None:
         self._oc_tuner = None
         self._set_one_click_running(False)
+        self._sync_ferr_timer()  # restart the realtime ANALYZE stream if plotting
 
         if isinstance(result, BaseException):
             self._set_status("ERROR", "error")
@@ -2726,7 +2790,7 @@ class UserTab(QWidget):
         self._refresh_preset_list()
 
         status = getattr(result, "status", "?")
-        ok = status in ("improved", "no-change", "dry-run")
+        ok = status in ("improved", "margin-limited", "no-change", "dry-run")
         self._set_status(f"TUNE {status.upper()}", "ok" if ok else "error")
         first_line = result.summary().splitlines()[0]
         self.oc_status_label.setText(first_line)

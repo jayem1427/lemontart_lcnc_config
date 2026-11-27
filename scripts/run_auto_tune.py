@@ -124,6 +124,25 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="baseline repeats used to measure noise (default 3)",
     )
+    parser.add_argument(
+        "--no-ff",
+        action="store_true",
+        help="skip the torque feedforward phase",
+    )
+    parser.add_argument(
+        "--ms-max",
+        type=float,
+        default=None,
+        help="fail steps whose measured sensitivity peak Ms exceeds this "
+        "(default 0 = report only; 2.0 is a common target)",
+    )
+    parser.add_argument(
+        "--verify-at",
+        type=str,
+        default=None,
+        help="extra verify points, comma list of offsets from the start "
+        "position (e.g. -100,100). Needs the axis homed; Z only accepts +",
+    )
     return parser.parse_args()
 
 
@@ -153,6 +172,13 @@ def main() -> int:
         allow_python_sampler=args.allow_python_sampler,
         **({"margin_ratio": args.margin} if args.margin is not None else {}),
         **({"baseline_repeats": args.repeats} if args.repeats is not None else {}),
+        ff_enabled=not args.no_ff,
+        **({"ms_max": args.ms_max} if args.ms_max is not None else {}),
+        **(
+            {"verify_offsets": tuple(float(v) for v in args.verify_at.split(","))}
+            if args.verify_at
+            else {}
+        ),
     )
 
     unit = axis_unit(args.axis)

@@ -27,6 +27,8 @@ sample-count vs elapsed-time check do that instead.
 
 from __future__ import annotations
 
+import atexit
+import collections
 import os
 import shutil
 import subprocess
@@ -135,6 +137,7 @@ class RtCapture:
                 "realtime sampler not available: sampler.0 is not loaded "
                 "(custom.hal REALTIME CAPTURE block) or halsampler is missing"
             )
+        _check_not_busy()
         _setp(f"{SAMPLER}.enable", "0")
         self._drain_stale()
         self._overruns0 = int(_getp(f"{SAMPLER}.overruns"))
@@ -237,6 +240,113 @@ class RtCapture:
             cap.vel_counts_s.append(row[b + 2])
             cap.pos_cmd.append(row[b + 3])
         return cap
+
+
+def _check_not_busy() -> None:
+    """sampler.0 has one FIFO: only one reader at a time."""
+    if _getp(f"{SAMPLER}.enable") >= 0.5:
+        raise CaptureError(
+            "sampler.0 is already capturing (Servo Tuning plot running, or a "
+            "tuner in another window). Stop it first. If nothing is running, "
+            "a crashed session left it on: halcmd setp sampler.0.enable 0"
+        )
+
+
+class RtStream:
+    """Continuous capture for the Servo Tuning tab: a ring buffer per axis.
+
+    Started with START PLOT, stopped with STOP PLOT (and before one-click,
+    which needs the sampler itself). ANALYZE takes ``snapshot()``: the last N
+    seconds at the true servo rate. No count check (it runs for minutes);
+    overruns are reported in the snapshot instead.
+    """
+
+    def __init__(self, seconds: float = 20.0, fs_hz: Optional[float] = None) -> None:
+        self.fs_hz = fs_hz if fs_hz else 1.0 / servo_period_s()
+        maxlen = max(int(seconds * self.fs_hz), 1000)
+        self._rows: "collections.deque[List[float]]" = collections.deque(maxlen=maxlen)
+        self._proc: Optional[subprocess.Popen] = None
+        self._reader: Optional[threading.Thread] = None
+        self._overruns0 = 0
+        self.running = False
+
+    def start(self) -> None:
+        if not sampler_available():
+            raise CaptureError("realtime sampler not available (sampler.0)")
+        _check_not_busy()
+        drain = RtCapture("X", fs_hz=self.fs_hz)
+        drain._drain_stale()
+        self._overruns0 = int(_getp(f"{SAMPLER}.overruns"))
+        cmd = ["halsampler", "-c", "0"]
+        if shutil.which("stdbuf"):
+            cmd = ["stdbuf", "-oL"] + cmd
+        self._proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True
+        )
+        self._reader = threading.Thread(target=self._read_loop, daemon=True)
+        self._reader.start()
+        _setp(f"{SAMPLER}.enable", "1")
+        self.running = True
+        atexit.register(self.stop)
+
+    def _read_loop(self) -> None:
+        assert self._proc is not None and self._proc.stdout is not None
+        for line in self._proc.stdout:
+            parts = line.split()
+            if len(parts) < N_CHANNELS:
+                continue
+            try:
+                self._rows.append([float(p) for p in parts[-N_CHANNELS:]])
+            except ValueError:
+                continue
+
+    def overruns(self) -> int:
+        try:
+            return int(_getp(f"{SAMPLER}.overruns")) - self._overruns0
+        except Exception:
+            return -1
+
+    def healthy(self) -> bool:
+        return bool(
+            self.running and self._proc is not None and self._proc.poll() is None
+        )
+
+    def snapshot(self, axis: str, seconds: float = 10.0) -> AxisCapture:
+        """Last ``seconds`` of one axis (counts / % / counts/s / pos-cmd)."""
+        if not self.healthy():
+            raise CaptureError("realtime stream stopped (halsampler exited)")
+        n = int(seconds * self.fs_hz)
+        rows = list(self._rows)[-n:]
+        b = AXIS_BASE[axis]
+        cap = AxisCapture(axis=axis, fs_hz=self.fs_hz)
+        for row in rows:
+            cap.ferr_counts.append(row[b])
+            cap.torque_pct.append(row[b + 1] * TORQUE_PCT_PER_COUNT)
+            cap.vel_counts_s.append(row[b + 2])
+            cap.pos_cmd.append(row[b + 3])
+        return cap
+
+    def stop(self) -> None:
+        if not self.running:
+            return
+        self.running = False
+        try:
+            _setp(f"{SAMPLER}.enable", "0")
+        except Exception:
+            pass
+        proc = self._proc
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        if self._reader is not None:
+            self._reader.join(timeout=2.0)
+        try:
+            atexit.unregister(self.stop)
+        except Exception:
+            pass
 
 
 def summarize(cap: AxisCapture, scale: float) -> Dict[str, float]:

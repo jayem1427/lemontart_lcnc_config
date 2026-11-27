@@ -95,25 +95,36 @@ Ctrl+C cancels the same way the CANCEL button does.
 ## What a run does
 
 ```
-PREFLIGHT → BASELINE → [RESCUE] → SPEED → [NOTCH] → POSITION → [INTEGRAL] → VERIFY → FINALIZE
+PREFLIGHT → BASELINE → [RESCUE] → SPEED → [NOTCH] → POSITION → [INTEGRAL] → [FEEDFORWARD] → VERIFY → [VERIFY AT OTHER POSITIONS] → FINALIZE
 ```
 
 | Step | What happens |
 |------|--------------|
-| Preflight | Machine on, idle, numpy installed, stroke fits. Fails here = nothing written |
+| Preflight | Machine on, idle, numpy installed, stroke fits, drive in CSP. Reads the drive torque limit 0x6072 and sets the torque guard to min(250 %, 0.8 × that limit). Fails here = nothing written |
 | Baseline | Read all parameters, save the backup preset, measure **3 times** (spread sets the improvement bar), record standstill noise |
 | Rescue | Only if the axis already rings: try a notch, else soften speed gain up to 3 times |
 | Speed | Speed gain (C01.01) × 1.25 per step until unstable or no longer improving. **When a step rings, settle at margin × that gain** (balanced 0.55, ≈5 dB) and re-measure |
 | Notch | If the unstable step shows a clear resonance at 40–500 Hz, put notch 3 there and retry |
 | Position | Position gain (C01.00) × 1.2 per step toward ~2× the speed gain; same margin rule |
 | Integral | Tighten C01.02 while it helps. Always runs in v2 (it matters for cutting loads) |
+| Feedforward | Only if the drive's torque FF source (C01.16) is already on: torque FF % (C01.17) × 1.15 per step within 50–200 %, then ÷ 1.15 if going up did not help. Kept when the score improves ≥ 3 %. The tuner never switches FF on. `--no-ff` skips it |
 | Verify | Measure the final gains plus 1 s at standstill. If unstable, back off 25 % once. If still unstable, keep the best stable step **only if its re-check fails for nothing worse than the HF-energy rule**, else revert |
+| Verify at other positions | Only with `--verify-at -100,100` (offsets from the start position). Needs the axis homed; offsets that would put the stroke past a soft limit are skipped, and Z only accepts positive (upward) offsets. Moves with `G53 G1` at half the stimulus feed, re-measures, and always goes back to the start. A failure anywhere reverts to baseline |
 | Finalize | Save a `one_click_<time>` preset if it improved or was margin-limited |
 
 **Score** = peak error + 2 × RMS error (lower is better). A step is kept only
 if it's stable **and** improves the score by at least max(3 %, 2 × the
 baseline's run-to-run spread), capped at 15 %. A step above the margin can
 never become the "best" step.
+
+**Sensitivity |S|.** Every measurement also computes |S(f)| = |FERR / command|
+from the captured joint command and drive FERR (`frf_analysis.py`, Welch H1,
+only coherent bins). Its peak **Ms** bounds the loop margins: gain margin ≥
+Ms/(Ms−1), phase margin ≥ 2·asin(1/(2Ms)). Ms 2.0 means at least 6 dB / 29°.
+The journal shows it as `sensitivity` on each measurement. It is report-only by
+default; `--ms-max 2.0` makes any step above it count as unstable. Short
+strokes may not excite enough frequencies, in which case it says "only N
+coherent bins" and has no effect.
 
 **"Unstable"** means any of: the move was aborted; the FFT shows a sharp peak
 (≥ 4× the noise floor and ≥ 10 % of the RMS); more than 35 % of the energy is
@@ -183,7 +194,7 @@ Engine bugs can usually be reproduced in the simulator
 
 | Not automated | Why |
 |---------------|-----|
-| Torque filter, feedforward, 2nd gain set | Trade-offs that need judgment. Use the AI-assisted loop |
+| Torque filter, speed feedforward, FF filters, switching FF on, 2nd gain set | Trade-offs that need judgment. Use the AI-assisted loop |
 | Inertia | Needs its own measurement: [INERTIA_TUNING.md](INERTIA_TUNING.md) |
 | Storing to EEPROM | Kept manual for safety |
 | More than one notch | Notches 1–2 belong to the drive's adaptive notch; a second failed notch usually means mechanics |
@@ -223,11 +234,21 @@ Failed runs are data. Add a row when a run teaches you something.
 | Keep-best on any verify failure | Keep-best only if its re-check fails for HF energy alone |
 | 6065 window set through hardware calls even in `--sim` | Through the IO layer (sim never touches EtherCAT) |
 
-**Still not done** (from the 2026-11-27 revamp plan): broadband
-(chirp/PRBS) excitation for a real frequency response, feedforward tuning
-(C01.13–18), a load-rejection test (torque offset 0x60B2, if the A6 maps it),
-testing at several positions along travel, and reading the drive's real torque
-limit for the guard. The realtime capture is the foundation for all of them.
+**Engine 2.1 (same day):** sensitivity |S| on every measurement, torque FF
+phase, torque guard from 0x6072, optional multi-position verify
+(`test_feedforward_phase`, `test_drive_torque_limit_guard`,
+`test_multi_position_verify`, `test_sensitivity_estimator`).
+
+**Still not done, on purpose:**
+
+- **Chirp/PRBS injection.** A dedicated broadband command needs either a
+  HAL summer on `joint.N.motor-pos-cmd` → drive target (changes the command
+  path that `cia402_homecomp` on `dev-drive-homing` also sits on) or a G-code
+  generated sweep (the planner smooths it away above a few Hz). |S| from the
+  normal strokes covers the low band where margin problems show up.
+- **Load-rejection test via 0x60B2 (torque offset).** Needs 0x60B2 added to
+  the RxPDO in `ethercat-conf.xml` — the same PDO map the drive-homing branch
+  rewrites. Do it after that branch is merged, not before.
 
 **Drive homing compatibility.** The capture taps signals that exist unchanged
 on `dev-drive-homing` (lcec 1.49 `cia402` + `cia402_homecomp`), and neither

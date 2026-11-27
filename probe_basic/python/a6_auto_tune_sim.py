@@ -96,6 +96,11 @@ class SimPlant:
     rest_torque_base_pct: float = 0.5
     rest_torque_per_hz: float = 0.01
     rest_ferr_units: float = 0.0002
+    # Torque FF: 0 = no effect (older tests). >0: tracking error shrinks to
+    # 30 % at this FF % and grows again either side of it.
+    torque_ff_ideal_pct: float = 0.0
+    # Extra ring amplitude at verify offsets (multi-position test), by offset.
+    ring_at_offset: Optional[Dict[float, float]] = None
 
     def torque_buffer(
         self, ferr: np.ndarray, params: Dict[str, float], seed: int
@@ -156,6 +161,10 @@ class SimPlant:
         track_amp = (
             self.track_c1 * v / pos + self.track_c2 * v / (pos * speed)
         )
+        ideal = self.torque_ff_ideal_pct
+        if ideal > 0 and params.get("torque_ff_source", 0.0):
+            miss = min(1.0, abs(params.get("torque_ff_pct", 0.0) - ideal) / ideal)
+            track_amp *= 0.3 + 0.7 * miss
         chunks: List[np.ndarray] = []
         for _cycle in range(spec.cycles):
             for sign in (1.0, -1.0):
@@ -243,6 +252,9 @@ class SimTuneIO:
         self.sample_hz = sample_hz
         self.ferr_window_calls: List[str] = []
         self.rest_calls = 0
+        self.max_torque: Optional[float] = None  # 0x6072 %, None = unreadable
+        self.position = 0.0
+        self.moves: List[float] = []
 
         self.write_calls = 0
         self.write_log: List[Tuple[str, Dict[str, float]]] = []
@@ -334,12 +346,19 @@ class SimTuneIO:
     def axis_state(self, axis: str) -> Dict[str, Any]:
         return {
             "homed": True,
-            "position": 0.0,
+            "position": self.position,
             "min_limit": -10000.0,
             "max_limit": 10000.0,
             "feed_override": 1.0,
             "opmode": 8,
         }
+
+    def max_torque_pct(self, axis: str) -> Optional[float]:
+        return self.max_torque
+
+    def move_axis_to(self, axis: str, target: float, feed: float) -> None:
+        self.moves.append(target)
+        self.position = target
 
     # -- motion -----------------------------------------------------------------
 
@@ -382,6 +401,10 @@ class SimTuneIO:
         buf = self.plant.ferr_buffer(
             spec, signed_stroke, self.params, self.sample_hz, seed=self.measure_calls
         )
+        extra = (self.plant.ring_at_offset or {}).get(round(self.position, 3), 0.0)
+        if extra:
+            t = np.arange(buf.size) / self.sample_hz
+            buf = buf + extra * np.sin(2.0 * np.pi * self.plant.resonance_hz * t)
         meta["torque_pct"] = [
             float(v)
             for v in self.plant.torque_buffer(buf, self.params, self.measure_calls)

@@ -55,10 +55,10 @@ it.
 | *(auto-read)* | Drive parameters load when you open the tab or pick an unread axis |
 | Parameter table | Current (on the drive) and Pending (your edits), with units and ranges |
 | **APPLY TO DRIVE** | Turns the machine off if needed, writes the Pending values with read-back checks and retries, turns it back on |
-| **START PLOT / STOP PLOT** | Live following-error plot (polls only while on and visible; nothing saved) |
+| **START PLOT / STOP PLOT** | Live following-error plot (polls only while on and visible; nothing saved). While on, it also starts a realtime `sampler.0` stream of all four axes (last 20 s) for ANALYZE |
 | **MM / PULSES** | Plot units |
 | **FERR / FFT** | Switch between the time plot and the spectrum from **ANALYZE** |
-| **ANALYZE** | FFT of the captured trace: finds resonances and gives a stable / unstable verdict |
+| **ANALYZE** | FFT of the last 10 s: finds resonances and gives a stable / unstable verdict. Uses the realtime stream at the true servo rate; the result line ends with `realtime 1000 Hz`. If the sampler isn't loaded it falls back to the polled plot and says `polled (approximate frequencies)` — don't place a notch from that |
 | **USE SUGGESTED NOTCH 3** | Loads the main resonance into notch 3 (C01.46–48) in Pending |
 | **COPY TUNING / COPY PLOT / COPY RESONANCE** | Put the gains, plot image or FFT report on the clipboard |
 | **PRESET** | Load (into Pending only) / save / delete named gain sets, stored in `config/tuning/presets/<axis>/` |
@@ -213,7 +213,7 @@ ethercat upload -p 0 -t uint16 0x2001 0x02   # slave 0 speed gain
 1. **Copy** `probe_basic/user_tabs/servo_tuner/` (and `signal_monitor/` for
    the Logging tab), plus from `probe_basic/python/`: `a6_servo_tune.py`,
    `a6_auto_tune.py`, `a6_auto_tune_sim.py`, `a6_graphical_inertia.py`,
-   `resonance_analysis.py`, `rt_capture.py`, `tune_trial.py`,
+   `resonance_analysis.py`, `rt_capture.py`, `frf_analysis.py`, `tune_trial.py`,
    `hal_signal_logger.py`, `signal_plot_widget.py`. Optionally
    `scripts/run_auto_tune.py`, `scripts/test_live_gain_write.py` and `config/`.
 2. **EtherCAT XML.** Map PDOs 60F4 (`ferr-fb`), 6077 (`torque-fb`) and 606C
@@ -243,6 +243,7 @@ On the machine: the tab's Current column should fill in (not "READ FAIL"), and
 | `probe_basic/python/a6_auto_tune.py` | One-click engine |
 | `probe_basic/python/a6_graphical_inertia.py` | Inertia identification |
 | `probe_basic/python/resonance_analysis.py` | FFT stability check |
+| `probe_basic/python/frf_analysis.py` | Sensitivity \|S\| (Ms, implied gain/phase margin) from command vs FERR |
 | `probe_basic/python/rt_capture.py` | Realtime capture via `sampler.0` + `halsampler` |
 | `scripts/test_live_gain_write.py` | Checks whether gains can be written with the drive enabled |
 | `probe_basic/python/tune_trial.py` | Clipboard text and images |

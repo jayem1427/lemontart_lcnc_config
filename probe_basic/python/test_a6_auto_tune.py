@@ -412,6 +412,96 @@ def test_estimate_and_config() -> None:
     print(f"  config: Z/conservative estimate ~{est / 60.0:.1f} min")
 
 
+def test_feedforward_phase(tmp: str) -> None:
+    """Torque FF climbs toward the plant's ideal when the source is on."""
+    plant = SimPlant(torque_ff_ideal_pct=150.0)
+    io = SimTuneIO(plant=plant, baseline={"torque_ff_source": 1.0,
+                                          "torque_ff_pct": 100.0})
+    _tuner, result = run_campaign(io, tmp)
+    assert result.status in ("improved", "margin-limited"), result.summary()
+    ff = io.params["torque_ff_pct"]
+    assert 130.0 <= ff <= 175.0, ff
+    accepts = [e for e in _events(result.journal_dir)
+               if e["phase"] == "feedforward" and e["kind"] == "accept"]
+    assert accepts, "no FF accept events"
+    print(f"  feedforward: torque FF 100 -> {ff:g}% (ideal 150)")
+
+
+def test_feedforward_skipped_when_source_off(tmp: str) -> None:
+    io = SimTuneIO(plant=SimPlant(torque_ff_ideal_pct=150.0))
+    _tuner, result = run_campaign(io, tmp)
+    assert io.params["torque_ff_pct"] == SIM_BASELINE["torque_ff_pct"]
+    skips = [e for e in _events(result.journal_dir)
+             if e["phase"] == "feedforward" and e["kind"] == "skip"]
+    assert skips, "FF phase should log a skip"
+    print("  feedforward: source off -> untouched")
+
+
+def test_drive_torque_limit_guard(tmp: str) -> None:
+    """Guard = min(config, 0.8 x 0x6072)."""
+    plant = SimPlant(torque_motion_pct=150.0)
+    io = SimTuneIO(plant=plant)
+    io.max_torque = 150.0  # -> guard 120 %, below the 150 % motion torque
+    _tuner, result = run_campaign(io, tmp)
+    assert result.status == "failed", result.summary()
+    msgs = " ".join(e["message"] for e in _events(result.journal_dir))
+    assert "0x6072 = 150% -> guard 120%" in msgs, msgs[:400]
+    assert "guard 120%" in msgs
+    print("  torque limit: 0x6072 150% -> guard 120%, run blocked")
+
+
+def test_multi_position_verify(tmp: str) -> None:
+    """A ring at another spot along travel reverts; start position restored."""
+    plant = SimPlant(ring_at_offset={50.0: 0.02})
+    io = SimTuneIO(plant=plant)
+    _tuner, result = run_campaign(io, tmp, verify_offsets=(-50.0, 50.0))
+    assert io.moves[-1] == 0.0, io.moves
+    assert -50.0 in io.moves and 50.0 in io.moves, io.moves
+    assert result.status == "reverted", result.summary()
+    for key in CORE_GAIN_KEYS:
+        assert io.params[key] == SIM_BASELINE[key], (key, io.params[key])
+    ok_dir = tmp + "_ok"
+    io2 = SimTuneIO(plant=SimPlant())
+    _t, r2 = run_campaign(io2, ok_dir, verify_offsets=(-50.0, 50.0))
+    assert r2.status in ("improved", "margin-limited"), r2.summary()
+    assert io2.moves == [-50.0, 50.0, 0.0], io2.moves
+    print("  multi-position: ring at +50 reverted; clean plant kept tune")
+
+
+def test_sensitivity_estimator() -> None:
+    """|S| from cmd vs ferr matches a sine sweep of the same discrete loop."""
+    import math
+    import numpy as np
+    from frf_analysis import margins_from_ms, sensitivity
+    fs, dt = 1000.0, 1e-3
+
+    def run(r, kp=60.0, kv=150.0, ki=3000.0, m=1.0, b=0.5, delay=2):
+        x = v = integ = 0.0
+        buf = [0.0] * delay
+        out = np.zeros(len(r))
+        for i, ri in enumerate(r):
+            e = ri - x
+            out[i] = e
+            ev = kp * e - v
+            integ += ki * ev * dt
+            buf.append(kv * ev + integ)
+            u = buf.pop(0)
+            v += (u - b * v) / m * dt
+            x += v * dt
+        return out
+
+    rng = np.random.default_rng(1)
+    r = np.cumsum(np.cumsum(np.repeat(rng.normal(0, 1, 600), 15))) * 5e-5
+    rep = sensitivity(r, run(r), fs)
+    assert rep.ok(), rep.reason
+    assert abs(rep.ms - 1.39) < 0.1 and abs(rep.f_ms_hz - 25) < 6, rep.summary()
+    gm, pm = margins_from_ms(2.0)
+    assert abs(gm - 6.02) < 0.05 and abs(pm - 28.96) < 0.1, (gm, pm)
+    flat = sensitivity([0.0] * 4000, [0.0] * 4000, fs)
+    assert not flat.ok()
+    print(f"  sensitivity: {rep.summary()} (true 1.39 @ 25 Hz)")
+
+
 def main() -> int:
     tests = [
         test_happy_path,
@@ -430,6 +520,10 @@ def main() -> int:
         test_rest_noise_gate,
         test_true_fs_used,
         test_ferr_window_via_io,
+        test_feedforward_phase,
+        test_feedforward_skipped_when_source_off,
+        test_drive_torque_limit_guard,
+        test_multi_position_verify,
     ]
     tmp_root = tempfile.mkdtemp(prefix="one_click_test_")
     try:
@@ -438,6 +532,8 @@ def main() -> int:
             test(os.path.join(tmp_root, test.__name__))
         print(f"{test_estimate_and_config.__name__}:")
         test_estimate_and_config()
+        print("test_sensitivity_estimator:")
+        test_sensitivity_estimator()
     finally:
         shutil.rmtree(tmp_root, ignore_errors=True)
     print("OK")

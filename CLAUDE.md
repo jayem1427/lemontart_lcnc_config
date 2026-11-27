@@ -173,10 +173,11 @@ their own machine: plain language, short sections, real values from the config.
   `python3 probe_basic/python/rt_capture.py X 1`, run
   `scripts/test_live_gain_write.py --axis <X|Y|Z>`, then `--dry-run`, then a
   real run. Expect lower gains than the July presets (margin 0.55 vs ~0.8).
-  Plan items still open: chirp/PRBS frequency response, feedforward phase,
-  load-rejection test, multi-position, real torque limit for the guard. The
-  Servo Tuning tab's live plot and ANALYZE button still poll from Python and
-  assume 1 kHz, so their FFT frequencies are off too: move them to `rt_capture`.
+  Engine 2.1 added |S| sensitivity (Ms), torque-FF phase, 0x6072 torque guard,
+  `--verify-at` multi-position; the tab's ANALYZE reads a realtime
+  `RtStream`. Deferred on purpose: chirp injection (command path) and 0x60B2
+  load rejection (PDO map) — both collide with `dev-drive-homing`, do them
+  after that merges.
 - **Drive homing vs upstream (checked 2026-11-27).** `cia402_homecomp` has no
   commits after the pinned `b13bf72`; lcec after v1.49.0 only changed the
   Delta ASDA driver. LinuxCNC master/tpnext-ma moved to the 64-bit HAL API

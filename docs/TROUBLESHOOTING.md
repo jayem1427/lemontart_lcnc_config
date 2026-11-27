@@ -106,3 +106,10 @@ After the machine OFF→ON that each gain write needs, the axis moved more than
 0.02 mm. On Z this is probably sag with the drive disabled. Park Z low or on a
 support, or run `scripts/test_live_gain_write.py --axis Z`; if it passes, tune
 with `--live-writes` so the drive never disables.
+
+### Servo tuning: "sampler.0 is already capturing"
+
+`sampler.0` has one FIFO, so only one reader works at a time. START PLOT on
+the Servo Tuning tab holds it; one-click stops the stream before it starts
+and restarts it after. If nothing is running (a crashed session left it on):
+`halcmd setp sampler.0.enable 0`.

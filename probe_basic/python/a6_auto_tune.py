@@ -56,7 +56,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from a6_servo_tune import (
+from a6_servo_tune import (  # noqa: E402
+    ethercat_upload_u16,
     AXES,
     FOLLOWING_ERROR_AUTOTUNE,
     PARAM_BY_KEY,
@@ -74,6 +75,7 @@ from a6_servo_tune import (
     restore_following_error_run,
     save_preset,
 )
+from frf_analysis import sensitivity
 from resonance_analysis import (
     ResonanceReport,
     analyze_ferr_resonance,
@@ -88,13 +90,14 @@ except ImportError:  # pragma: no cover - only available under LinuxCNC
 
 LOG = logging.getLogger(__name__)
 
-ENGINE_VERSION = "2.0"
+ENGINE_VERSION = "2.1"
 
 # SDO keys the engine is allowed to touch. Everything else is read-only to us.
 CORE_GAIN_KEYS = ("speed_gain_hz", "pos_gain_rad_s", "integral_ms")
 NOTCH3_KEYS = ("notch3_freq_hz", "notch3_width_pct", "notch3_depth_pct")
 MODE_KEY = "manual_mode"
-TOUCHABLE_KEYS = CORE_GAIN_KEYS + NOTCH3_KEYS + (MODE_KEY,)
+FF_KEYS = ("torque_ff_pct",)
+TOUCHABLE_KEYS = CORE_GAIN_KEYS + NOTCH3_KEYS + FF_KEYS + (MODE_KEY,)
 
 NOTCH_DISABLED_HZ = 8000.0
 
@@ -201,8 +204,24 @@ class OneClickConfig:
     noise_k: float = 2.0  # improvement must beat noise_k x spread (%)
     max_noise_threshold_pct: float = 15.0
     # Torque guard (% rated, 6077). A clipped torque hides instability.
-    # Placeholder until Phase 6 reads the drive's real limit.
+    # Lowered at preflight to torque_guard_drive_ratio x the drive's 0x6072.
     torque_guard_pct: float = 250.0
+    torque_guard_drive_ratio: float = 0.8
+    # Sensitivity |S| from pos-cmd vs FERR (frf_analysis). 0 = report only;
+    # >0 marks a step unstable when the measured peak Ms exceeds it.
+    ms_max: float = 0.0
+    frf_nperseg: int = 256
+    # Torque feedforward phase (C01 torque_ff_pct). Runs only when the
+    # drive's torque FF source is on; never turns the source on itself.
+    ff_enabled: bool = True
+    ff_step_ratio: float = 1.15
+    ff_min_pct: float = 50.0
+    ff_max_pct: float = 200.0
+    ff_improve_min_pct: float = 3.0
+    # Extra verify points, mm (deg for A) from the start position along the
+    # tuned axis. Needs the axis homed; Z accepts only positive (upward)
+    # offsets. Empty = verify at the start position only.
+    verify_offsets: Tuple[float, ...] = ()
     # Standstill noise gate at verify (needs realtime capture).
     rest_capture_s: float = 1.0
     rest_torque_rms_max_pct: float = 5.0
@@ -312,7 +331,9 @@ def estimate_campaign_seconds(cfg: OneClickConfig) -> float:
         + cfg.rescue_max_steps
         + (cfg.max_steps_per_phase + 1) * 2  # speed + position (+ notch retry)
         + cfg.max_steps_per_phase  # integral
+        + (cfg.max_steps_per_phase if cfg.ff_enabled else 0)  # feedforward
         + 2  # verify (+ one backoff re-verify)
+        + len(cfg.verify_offsets) + (1 if cfg.verify_offsets else 0)
     )
     write_overhead_s = 2.5  # machine OFF -> SDO write -> ON, per step
     return measures * (stim.total_time_s() + write_overhead_s)
@@ -339,6 +360,8 @@ class Measurement:
     report: Optional[ResonanceReport] = None
     torque_peak_pct: Optional[float] = None
     fs_hz: float = 1000.0
+    ms: Optional[float] = None  # sensitivity peak, from frf_analysis
+    f_ms_hz: Optional[float] = None
 
     def summary(self) -> str:
         gate = "UNSTABLE" if self.unstable else "stable"
@@ -878,6 +901,7 @@ class HardwareTuneIO:
                     result = cap.stop()
                     samples = [counts_to_unit(axis, c) for c in result.ferr_counts]
                     meta["torque_pct"] = list(result.torque_pct)
+                    meta["pos_cmd"] = list(result.pos_cmd)
                     meta["fs_hz"] = result.fs_hz
                 except Exception as exc:  # CaptureError or halcmd failure
                     meta["capture_error"] = f"{type(exc).__name__}: {exc}"
@@ -920,6 +944,24 @@ class HardwareTuneIO:
             time.sleep(0.01)
 
     # -- helpers -----------------------------------------------------------
+
+    def max_torque_pct(self, axis: str) -> Optional[float]:
+        """Drive torque limit 0x6072 (0.1 % rated per count), or None."""
+        try:
+            raw = ethercat_upload_u16(AXES[axis]["slave"], 0x6072, 0)
+            return raw / 10.0 if raw > 0 else None
+        except Exception as exc:
+            LOG.warning("0x6072 read failed: %s", exc)
+            return None
+
+    def move_axis_to(self, axis: str, target: float, feed: float) -> None:
+        """G53 G1 the tuned axis only (caller checked homed + limits)."""
+        self._ensure_mdi()
+        self._mdi(f"G90 G53 G1 {axis}{target:.4f} F{feed:.1f}")
+        self._cmd.wait_complete(120.0)
+        self._stat.poll()
+        if self._stat.state == linuxcnc.RCS_ERROR:
+            raise OneClickError(f"move to {axis}{target:.3f} failed (RCS_ERROR)")
 
     def _axis_position(self, axis: str) -> Optional[float]:
         idx = {"X": 0, "Y": 1, "Z": 2, "A": 3}.get(axis, 0)
@@ -1077,6 +1119,7 @@ class OneClickTuner:
         self._ferr_relaxed = False
         # v2: effective acceptance threshold (raised to beat measured noise)
         self._improve_pct: float = config.improvement_min_pct
+        self._torque_guard: float = config.torque_guard_pct
         self._first_unstable: Dict[str, float] = {}
         self._rest_baseline: Optional[Dict[str, float]] = None
 
@@ -1149,7 +1192,12 @@ class OneClickTuner:
             ref = self._phase_speed(ref)
             ref = self._phase_position(ref)
             ref = self._phase_integral(ref)
+            ref = self._phase_feedforward(ref)
             final_m, verify_outcome = self._phase_verify(ref)
+            if verify_outcome in ("pass", "keep_best") and self.cfg.verify_offsets:
+                final_m, verify_outcome = self._phase_verify_positions(
+                    final_m, verify_outcome
+                )
 
             result.measurements = self._measure_count
             result.final_values = {
@@ -1296,6 +1344,26 @@ class OneClickTuner:
             raise OneClickError(
                 f"preflight failed: drive opmode is {opmode}, not 8 (CSP) — "
                 "a drive home may have been interrupted"
+            )
+        self._state0 = state
+        reader = getattr(self.io, "max_torque_pct", None)
+        drive_lim = reader(self.cfg.axis) if reader else None
+        if drive_lim:
+            guard = min(
+                self.cfg.torque_guard_pct,
+                self.cfg.torque_guard_drive_ratio * drive_lim,
+            )
+            self._torque_guard = guard
+            self.journal.event(
+                "preflight",
+                "info",
+                f"drive torque limit 0x6072 = {drive_lim:g}% -> guard {guard:g}%",
+            )
+        else:
+            self.journal.event(
+                "preflight",
+                "info",
+                f"0x6072 not readable — torque guard stays {self._torque_guard:g}%",
             )
 
         stim = self.cfg.stimulus
@@ -1744,6 +1812,119 @@ class OneClickTuner:
                 break
         return ref
 
+    def _phase_feedforward(self, ref: Measurement) -> Measurement:
+        """Hill-climb torque FF % (up, then down if up did not help)."""
+        cfg = self.cfg
+        key = "torque_ff_pct"
+        if not cfg.ff_enabled:
+            return ref
+        if not self._writable([key]) or not self._current.get("torque_ff_source"):
+            self.journal.event(
+                "feedforward",
+                "skip",
+                "torque FF source is off or torque_ff_pct unreadable — "
+                "the tuner does not switch FF on",
+            )
+            return ref
+        lo = max(cfg.ff_min_pct, float(PARAM_BY_KEY[key]["min"]))
+        hi = min(cfg.ff_max_pct, float(PARAM_BY_KEY[key]["max"]))
+        self.journal.event(
+            "feedforward", "start",
+            f"torque FF {self._current[key]:g}% (search {lo:g}-{hi:g}%)",
+        )
+        for ratio in (cfg.ff_step_ratio, 1.0 / cfg.ff_step_ratio):
+            moved = False
+            for step in range(1, cfg.max_steps_per_phase + 1):
+                self._check_cancel()
+                cur = self._current[key]
+                cand = round(min(hi, max(lo, cur * ratio)), 1)
+                if abs(cand - cur) < 0.5:
+                    break
+                self._progress(
+                    "feedforward", f"step {step}: torque FF {cand:g}% (was {cur:g})"
+                )
+                self._write_values("feedforward", {key: cand})
+                m = self._measure(f"ff_{cand:g}pct")
+                if m.unstable:
+                    self.journal.event(
+                        "feedforward", "backoff",
+                        f"{cand:g}% unstable ({m.unstable_why}) — back to {cur:g}%",
+                    )
+                    self._write_values("feedforward", {key: cur})
+                    break
+                if self._improved(m, ref, max(cfg.ff_improve_min_pct, self._improve_pct)):
+                    self.journal.event(
+                        "feedforward", "accept",
+                        f"{cand:g}% accepted ({m.summary()})",
+                    )
+                    ref = m
+                    self._update_best(m)
+                    moved = True
+                else:
+                    self.journal.event(
+                        "feedforward", "stall",
+                        f"{cand:g}% no better — back to {cur:g}%",
+                    )
+                    self._write_values("feedforward", {key: cur})
+                    break
+            if moved:
+                break
+        return ref
+
+    def _phase_verify_positions(
+        self, final_m: Optional[Measurement], outcome: str
+    ) -> Tuple[Optional[Measurement], str]:
+        """Re-verify at other points along travel; always return to start."""
+        cfg = self.cfg
+        state = self.io.axis_state(cfg.axis)
+        start = state.get("position")
+        lo, hi = state.get("min_limit"), state.get("max_limit")
+        if not state.get("homed") or start is None or lo is None or hi is None:
+            self.journal.event(
+                "verify", "skip", "multi-position verify needs the axis homed"
+            )
+            return final_m, outcome
+        reach = abs(self._signed_stroke) + 1.0
+        feed = max(cfg.stimulus.feed / 2.0, 1.0)
+        failed: Optional[str] = None
+        try:
+            for off in cfg.verify_offsets:
+                self._check_cancel()
+                if cfg.axis == "Z" and off < 0:
+                    self.journal.event(
+                        "verify", "skip", f"Z offset {off:g} refused (down)"
+                    )
+                    continue
+                target = start + off
+                if not (lo + reach <= target <= hi - reach):
+                    self.journal.event(
+                        "verify", "skip",
+                        f"offset {off:+g} -> {target:.2f} outside limits "
+                        f"less stroke [{lo + reach:.2f}, {hi - reach:.2f}]",
+                    )
+                    continue
+                self._progress("verify", f"moving to {cfg.axis}{target:.2f}")
+                self.io.move_axis_to(cfg.axis, target, feed)
+                m = self._measure(f"verify_pos{off:+g}")
+                self.journal.event("verify", "position", m.summary(), offset=off)
+                if m.unstable:
+                    failed = f"unstable at offset {off:+g}: {m.unstable_why}"
+                    break
+        finally:
+            try:
+                self.io.move_axis_to(cfg.axis, start, feed)
+            except Exception as exc:
+                self.journal.event("verify", "warning", f"return to start failed: {exc}")
+        if failed is None:
+            return final_m, outcome
+        self.journal.event(
+            "verify", "revert", failed + " — restoring baseline (tune only "
+            "held at one spot)"
+        )
+        self._revert_to_baseline("verify")
+        m3 = self._measure("verify_baseline")
+        return m3, "revert_baseline"
+
     def _phase_verify(
         self, ref: Measurement
     ) -> Tuple[Optional[Measurement], str]:
@@ -1902,7 +2083,16 @@ class OneClickTuner:
         torque_peak = (
             max((abs(t) for t in torque), default=0.0) if torque else None
         )
-        meta_journal = {k: v for k, v in meta.items() if k != "torque_pct"}
+        meta_journal = {
+            k: v for k, v in meta.items() if k not in ("torque_pct", "pos_cmd")
+        }
+        sens = None
+        pos_cmd = meta.get("pos_cmd")
+        if pos_cmd and len(pos_cmd) == len(samples):
+            try:
+                sens = sensitivity(pos_cmd, samples, fs, nperseg=cfg.frf_nperseg)
+            except Exception as exc:
+                self.journal.event("measure", "warning", f"|S| failed: {exc}")
 
         report: Optional[ResonanceReport] = None
         gate_min_hz = self._gate_min_hz()
@@ -1926,9 +2116,18 @@ class OneClickTuner:
         score = peak + SCORE_RMS_WEIGHT * rms
         unstable, why = self._classify(report, meta, label=label)
         reasons = [why] if unstable else []
-        if torque_peak is not None and torque_peak >= cfg.torque_guard_pct:
+        if torque_peak is not None and torque_peak >= self._torque_guard:
             reasons.append(
-                f"torque {torque_peak:.0f}% >= guard {cfg.torque_guard_pct:g}%"
+                f"torque {torque_peak:.0f}% >= guard {self._torque_guard:g}%"
+            )
+        if (
+            sens is not None
+            and sens.ok()
+            and cfg.ms_max > 0
+            and sens.ms > cfg.ms_max
+        ):
+            reasons.append(
+                f"Ms {sens.ms:.2f} @ {sens.f_ms_hz:.0f} Hz > {cfg.ms_max:g}"
             )
         if label.startswith("verify"):
             rest_why = self._rest_check(label)
@@ -1952,11 +2151,16 @@ class OneClickTuner:
             report=report,
             torque_peak_pct=torque_peak,
             fs_hz=fs,
+            ms=sens.ms if sens is not None else None,
+            f_ms_hz=sens.f_ms_hz if sens is not None else None,
         )
         csv_path = self.journal.record_samples(label, samples, fs)
         fft_info = _report_to_dict(report)
         fft_info["gate_min_hz"] = gate_min_hz
         fft_info["fs_hz"] = fs
+        if sens is not None:
+            fft_info["sensitivity"] = sens.summary()
+            fft_info["ms"] = sens.ms
         self.journal.event(
             "measure",
             "measurement",
