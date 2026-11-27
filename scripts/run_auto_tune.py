@@ -99,6 +99,31 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="do not save pre/post presets under config/tuning/presets",
     )
+    parser.add_argument(
+        "--live-writes",
+        action="store_true",
+        help="write gains with the drive enabled (no machine OFF/ON per step). "
+        "Only after scripts/test_live_gain_write.py passed for this axis",
+    )
+    parser.add_argument(
+        "--allow-python-sampler",
+        action="store_true",
+        help="LEGACY: run without the realtime sampler (~300 Hz Python "
+        "polling; FFT frequencies and notches are unreliable)",
+    )
+    parser.add_argument(
+        "--margin",
+        type=float,
+        default=None,
+        help="override the stability margin ratio (gain = ratio x first "
+        "ringing gain; profile default 0.5/0.55/0.65)",
+    )
+    parser.add_argument(
+        "--repeats",
+        type=int,
+        default=None,
+        help="baseline repeats used to measure noise (default 3)",
+    )
     return parser.parse_args()
 
 
@@ -124,6 +149,10 @@ def main() -> int:
         dry_run=args.dry_run,
         allow_notch=not args.no_notch,
         save_presets=not args.no_presets,
+        live_writes=args.live_writes,
+        allow_python_sampler=args.allow_python_sampler,
+        **({"margin_ratio": args.margin} if args.margin is not None else {}),
+        **({"baseline_repeats": args.repeats} if args.repeats is not None else {}),
     )
 
     unit = axis_unit(args.axis)
@@ -166,7 +195,7 @@ def main() -> int:
     result = tuner.run()
     print()
     print(result.summary())
-    return 0 if result.status in ("improved", "no-change", "dry-run") else 2
+    return 0 if result.status in ("improved", "margin-limited", "no-change", "dry-run") else 2
 
 
 if __name__ == "__main__":

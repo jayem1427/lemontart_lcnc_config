@@ -53,6 +53,18 @@ def run_campaign(io, tmp, **cfg_overrides):
     return tuner, result
 
 
+def _events(jdir):
+    with open(os.path.join(jdir, "journal.json"), encoding="utf-8") as handle:
+        return json.load(handle)["events"]
+
+
+def _first_unstable(jdir, phase):
+    for e in _events(jdir):
+        if e["phase"] == phase and e["kind"] == "backoff":
+            return (e.get("data") or {}).get("first_unstable")
+    return None
+
+
 def test_happy_path(tmp: str) -> None:
     """Ladder climbs, notch clears the resonance, verify passes, preset saved."""
     plant = SimPlant(instability_amp=1.2)  # force a FERR watchdog trip too
@@ -65,8 +77,10 @@ def test_happy_path(tmp: str) -> None:
     # Speed gain climbed past the resonance threshold (notch made that possible)
     speed = io.params["speed_gain_hz"]
     assert speed > SIM_BASELINE["speed_gain_hz"], speed
-    assert speed > plant.resonance_gain_threshold_hz, speed
-    assert speed <= plant.critical_speed_hz, speed
+    # v2 margin rule: settle at margin_ratio x the first ringing speed gain
+    first = _first_unstable(result.journal_dir, "speed")
+    assert first is not None and first > plant.critical_speed_hz, first
+    assert abs(speed - 0.55 * first) < 0.5, (speed, first)
     # Notch 3 landed on the plant resonance
     notch = io.params["notch3_freq_hz"]
     assert abs(notch - plant.resonance_hz) <= 0.15 * plant.resonance_hz, notch
@@ -116,13 +130,18 @@ def test_low_critical_backoff(tmp: str) -> None:
     io = SimTuneIO(plant=plant)
     _tuner, result = run_campaign(io, tmp)
 
-    assert result.status == "improved", result.summary()
+    # v2: baseline (20 Hz) is within 1.6x of instability (~31 Hz), so the
+    # margin rule lowers the gain below baseline and says so.
+    assert result.status in ("margin-limited", "improved"), result.summary()
     speed = io.params["speed_gain_hz"]
-    assert speed <= plant.critical_speed_hz, speed
-    assert speed > SIM_BASELINE["speed_gain_hz"], speed
+    first = _first_unstable(result.journal_dir, "speed")
+    assert first is not None and first > plant.critical_speed_hz, first
+    assert abs(speed - 0.55 * first) < 0.5, (speed, first)
+    assert result.preset_name, result.summary()
     # The notch attempt against hard instability was reverted
     assert io.params["notch3_freq_hz"] == SIM_BASELINE["notch3_freq_hz"]
-    print(f"  low critical: backed off to {speed:.1f}Hz, notch reverted")
+    print(f"  low critical: {result.status}, margin {speed:.1f}Hz "
+          f"(first ring {first:.1f}Hz), notch reverted")
 
 
 def test_rescue_unstable_baseline(tmp: str) -> None:
@@ -281,7 +300,10 @@ def test_verify_fail_keeps_best(tmp: str) -> None:
     assert result.preset_name and result.preset_name.startswith("one_click_")
     assert io.params["speed_gain_hz"] > SIM_BASELINE["speed_gain_hz"]
     assert io.params["pos_gain_rad_s"] > SIM_BASELINE["pos_gain_rad_s"]
-    assert io.params["speed_gain_hz"] > plant.resonance_gain_threshold_hz
+    first = _first_unstable(result.journal_dir, "speed")
+    assert first is not None, "ladder should have found the ring"
+    assert io.params["speed_gain_hz"] <= 0.55 * first + 0.5, (
+        io.params["speed_gain_hz"], first)
     with open(os.path.join(result.journal_dir, "journal.json"),
               encoding="utf-8") as handle:
         data = json.load(handle)
@@ -291,6 +313,88 @@ def test_verify_fail_keeps_best(tmp: str) -> None:
         f"  verify keep-best: {result.reason}; "
         f"speed={io.params['speed_gain_hz']:.1f}Hz"
     )
+
+
+# ---------------------------------------------------------------- v2 tests
+
+
+def test_machine_fault_stops(tmp: str) -> None:
+    """2026-07-16 Z run: after a fault every move returned RCS_ERROR but the
+    engine kept writing gains. v2 must stop at the first fault and revert."""
+    io = SimTuneIO(fault_on_measure=5)
+    _tuner, result = run_campaign(io, tmp)
+    assert result.status == "failed", result.summary()
+    assert "machine fault" in result.reason, result.reason
+    assert io.measure_calls == 5, io.measure_calls  # nothing measured after it
+    for key in CORE_GAIN_KEYS:
+        assert io.params[key] == SIM_BASELINE[key], (key, io.params[key])
+    kinds = {e["kind"] for e in _events(result.journal_dir)}
+    assert "fault" in kinds and "revert-ok" in kinds, sorted(kinds)
+    print(f"  machine fault: stopped after measure #{io.measure_calls}, reverted")
+
+
+def test_baseline_repeats_set_threshold(tmp: str) -> None:
+    io = SimTuneIO()
+    _tuner, result = run_campaign(io, tmp, dry_run=True)
+    assert io.measure_calls == 3, io.measure_calls
+    noise = [e for e in _events(result.journal_dir)
+             if e["phase"] == "baseline" and e["kind"] == "noise"]
+    assert noise, "noise event missing"
+    data = noise[0]["data"]
+    assert data["improve_pct"] >= 3.0, data
+    print(f"  repeats: spread {data['spread_pct']:.1f}% -> threshold "
+          f"{data['improve_pct']:.1f}%")
+
+
+def test_torque_guard(tmp: str) -> None:
+    """A clipped torque hides instability: over the guard counts as unstable."""
+    plant = SimPlant(torque_motion_pct=150.0)
+    io = SimTuneIO(plant=plant)
+    _tuner, result = run_campaign(io, tmp, torque_guard_pct=100.0)
+    assert result.status == "failed", result.summary()
+    msgs = " ".join(e["message"] for e in _events(result.journal_dir))
+    assert "torque" in msgs and "guard" in msgs, msgs[:300]
+    for key in CORE_GAIN_KEYS:
+        assert io.params[key] == SIM_BASELINE[key], (key, io.params[key])
+    print("  torque guard: over-guard torque blocked the run, baseline kept")
+
+
+def test_rest_noise_gate(tmp: str) -> None:
+    """Standstill hiss above the limit fails verify (needs realtime capture)."""
+    plant = SimPlant(rest_torque_per_hz=0.1)  # ~8.7% rms at 82 Hz
+    io = SimTuneIO(plant=plant)
+    _tuner, result = run_campaign(io, tmp)
+    verify = [e for e in _events(result.journal_dir)
+              if e["kind"] == "measurement" and e["message"].startswith("verify")]
+    assert verify, "no verify measurement"
+    assert "standstill torque" in verify[0]["message"], verify[0]["message"]
+    assert io.rest_calls >= 2, io.rest_calls
+    # No gain within the margin is quiet enough at rest -> baseline restored
+    assert result.status == "reverted", result.summary()
+    for key in CORE_GAIN_KEYS:
+        assert io.params[key] == SIM_BASELINE[key], (key, io.params[key])
+    print(f"  rest gate: verify flagged standstill hiss -> {result.status}")
+
+
+def test_true_fs_used(tmp: str) -> None:
+    """FFT uses the capture's real rate: a 180 Hz resonance sampled at 500 Hz
+    is still notched at ~180 Hz (the legacy bug put it at the wrong place)."""
+    plant = SimPlant(instability_amp=1.2)
+    io = SimTuneIO(plant=plant, sample_hz=500.0)
+    _tuner, result = run_campaign(io, tmp)
+    fs = {(e.get("data") or {}).get("fft", {}).get("fs_hz")
+          for e in _events(result.journal_dir) if e["kind"] == "measurement"}
+    assert fs == {500.0}, fs
+    notch = io.params["notch3_freq_hz"]
+    assert abs(notch - plant.resonance_hz) <= 0.15 * plant.resonance_hz, notch
+    print(f"  true fs: 500 Hz capture, notch at {notch:.0f} Hz")
+
+
+def test_ferr_window_via_io(tmp: str) -> None:
+    io = SimTuneIO()
+    _tuner, result = run_campaign(io, tmp)
+    assert io.ferr_window_calls == ["relax", "restore"], io.ferr_window_calls
+    print("  6065 window: relaxed and restored through the IO layer")
 
 
 def test_estimate_and_config() -> None:
@@ -320,6 +424,12 @@ def main() -> int:
         test_preflight_failure,
         test_short_stroke_gate_not_fooled,
         test_verify_fail_keeps_best,
+        test_machine_fault_stops,
+        test_baseline_repeats_set_threshold,
+        test_torque_guard,
+        test_rest_noise_gate,
+        test_true_fs_used,
+        test_ferr_window_via_io,
     ]
     tmp_root = tempfile.mkdtemp(prefix="one_click_test_")
     try:

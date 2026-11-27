@@ -92,3 +92,17 @@ errors.
 | Pendant won't jog Z | Homing gate. `xhc-whb04b-6.hal` ties the pendant's "is homed" inputs to machine-on |
 | Plots flat or NaN in a custom tab | `hal.get_value` only works on the thread that created the component, and returns NaN for some pins. Read raw `lcec` pins instead |
 | Clipboard copy empty on the tuning tab | X11/Wayland quirk. Retry, or screenshot |
+
+## One-click tune refuses to start: "realtime capture (sampler.0) not loaded"
+
+Engine v2 needs the REALTIME CAPTURE block at the end of `custom.hal`. Check
+`halcmd show pin sampler.0.enable`. If the block is there but the pin isn't,
+LinuxCNC was not restarted after the HAL change. `--allow-python-sampler` runs
+the old poller, but its FFT frequencies are wrong (it ran at 250–750 Hz).
+
+## One-click tune stops: "did not settle after re-enable"
+
+After the machine OFF→ON that each gain write needs, the axis moved more than
+0.02 mm. On Z this is probably sag with the drive disabled. Park Z low or on a
+support, or run `scripts/test_live_gain_write.py --axis Z`; if it passes, tune
+with `--live-writes` so the drive never disables.

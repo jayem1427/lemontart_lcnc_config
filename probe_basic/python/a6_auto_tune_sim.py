@@ -90,6 +90,37 @@ class SimPlant:
     hunt_below_ms: float = 1.5
     resonance_base_amp: float = 0.004
     instability_amp: float = 0.5
+    # Torque (% rated): motion share ~ accel, plus noise that grows with
+    # speed gain (standstill hiss), plus large swings when unstable.
+    torque_motion_pct: float = 30.0
+    rest_torque_base_pct: float = 0.5
+    rest_torque_per_hz: float = 0.01
+    rest_ferr_units: float = 0.0002
+
+    def torque_buffer(
+        self, ferr: np.ndarray, params: Dict[str, float], seed: int
+    ) -> np.ndarray:
+        rng = np.random.default_rng(seed + 1000)
+        speed = max(params.get("speed_gain_hz", 20.0), 0.1)
+        hiss = self.rest_torque_base_pct + self.rest_torque_per_hz * speed
+        scale = float(np.max(np.abs(ferr))) or 1.0
+        motion = self.torque_motion_pct * ferr / scale
+        unstable = 0.0
+        if speed > self.critical_speed_hz:
+            unstable = 300.0
+        return motion + rng.normal(0.0, hiss, ferr.size) + unstable * np.sign(ferr)
+
+    def rest_buffers(
+        self, params: Dict[str, float], fs: float, seconds: float, seed: int
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        rng = np.random.default_rng(seed + 2000)
+        n = max(int(fs * seconds), 1)
+        speed = max(params.get("speed_gain_hz", 20.0), 0.1)
+        hiss = self.rest_torque_base_pct + self.rest_torque_per_hz * speed
+        return (
+            rng.normal(0.0, self.rest_ferr_units, n),
+            rng.normal(0.0, hiss, n),
+        )
 
     def notched(self, params: Dict[str, float]) -> bool:
         """Any of the five torque notches close enough to the resonance?"""
@@ -196,6 +227,8 @@ class SimTuneIO:
         fail_write_calls: Optional[set] = None,
         fail_writes_from: Optional[int] = None,
         read_fail_keys: Optional[List[str]] = None,
+        fault_on_measure: Optional[int] = None,
+        sample_hz: float = 1000.0,
     ) -> None:
         self.plant = plant or SimPlant()
         self.params: Dict[str, float] = dict(SIM_BASELINE)
@@ -205,6 +238,11 @@ class SimTuneIO:
         self.fail_write_calls = fail_write_calls or set()
         self.fail_writes_from = fail_writes_from
         self.read_fail_keys = list(read_fail_keys or [])
+
+        self.fault_on_measure = fault_on_measure  # 1-based measure ordinal
+        self.sample_hz = sample_hz
+        self.ferr_window_calls: List[str] = []
+        self.rest_calls = 0
 
         self.write_calls = 0
         self.write_log: List[Tuple[str, Dict[str, float]]] = []
@@ -265,6 +303,29 @@ class SimTuneIO:
             return path
         return f"<sim preset {name}>"
 
+    # -- 6065 window / capture ------------------------------------------------
+
+    def relax_ferr_window(self, axis: str) -> Tuple[float, float]:
+        self.ferr_window_calls.append("relax")
+        return 0.5, 1.0
+
+    def restore_ferr_window(self, axis: str) -> None:
+        self.ferr_window_calls.append("restore")
+
+    def capture_available(self) -> bool:
+        return True
+
+    def capture_rest(self, axis: str, seconds: float) -> Dict[str, Any]:
+        self.rest_calls += 1
+        ferr, tq = self.plant.rest_buffers(
+            self.params, self.sample_hz, seconds, seed=self.rest_calls
+        )
+        return {
+            "ferr": [float(v) for v in ferr],
+            "torque_pct": [float(v) for v in tq],
+            "fs_hz": self.sample_hz,
+        }
+
     # -- machine state ----------------------------------------------------------
 
     def machine_ready(self) -> Tuple[bool, str]:
@@ -277,6 +338,7 @@ class SimTuneIO:
             "min_limit": -10000.0,
             "max_limit": 10000.0,
             "feed_override": 1.0,
+            "opmode": 8,
         }
 
     # -- motion -----------------------------------------------------------------
@@ -301,13 +363,29 @@ class SimTuneIO:
             "abort_reason": "",
             "tripped_ferr": None,
             "position_drift": 0.0,
+            "fs_hz": self.sample_hz,
+            "torque_pct": None,
+            "machine_fault": False,
+            "capture_error": None,
+            "capture": "sim",
         }
         if cancel.is_set():
             meta.update(aborted=True, abort_reason="cancelled")
             return [], meta
+        if self.fault_on_measure is not None and self.measure_calls >= self.fault_on_measure:
+            meta.update(
+                aborted=True,
+                abort_reason="MDI leg reported RCS_ERROR [sim]",
+                machine_fault=True,
+            )
+            return [0.0] * 11, meta
         buf = self.plant.ferr_buffer(
-            spec, signed_stroke, self.params, sample_hz, seed=self.measure_calls
+            spec, signed_stroke, self.params, self.sample_hz, seed=self.measure_calls
         )
+        meta["torque_pct"] = [
+            float(v)
+            for v in self.plant.torque_buffer(buf, self.params, self.measure_calls)
+        ]
         over = np.nonzero(np.abs(buf) >= abs(abort_ferr))[0]
         if over.size:
             cut = min(int(over[0]) + 50, buf.size)
@@ -320,4 +398,5 @@ class SimTuneIO:
                 ),
                 tripped_ferr=float(buf[int(over[0])]),
             )
+            meta["torque_pct"] = meta["torque_pct"][:cut]
         return [float(v) for v in buf], meta

@@ -201,3 +201,32 @@ net a-ferr-s32 lcec.0.3.ferr-fb => conv-sint-real.15.in
 net a-ferr-float conv-sint-real.15.out => div2.7.in0
 net a-drive-ferr div2.7.out => tune-drive-ferr.3.in
 
+
+# ---- START REVERT: REALTIME CAPTURE for servo tuning (2026-11-27) ----
+# One row per servo cycle into a FIFO, read by halsampler from
+# probe_basic/python/rt_capture.py. Python polling could not do 1 kHz.
+# Channel order per axis: 60F4 ferr (s32), 6077 torque (s32), 606C vel (s32),
+# motor-pos-cmd (float). X=pins 0-3, Y=4-7, Z=8-11, A=12-15.
+# enable stays FALSE at rest so the FIFO is empty until a capture starts.
+# Only adds readers to existing signals (no new writers). To remove: delete
+# this block; the tuner then refuses to run (or use --allow-python-sampler).
+loadrt sampler depth=16384 cfg=sssfsssfsssfsssf
+setp sampler.0.enable 0
+addf sampler.0 servo-thread
+net x-ferr-s32       => sampler.0.pin.0
+net x-torque-s32     => sampler.0.pin.1
+net x-vel-s32        => sampler.0.pin.2
+net x-pos-float-cmd  => sampler.0.pin.3
+net y-ferr-s32       => sampler.0.pin.4
+net y-torque-s32     => sampler.0.pin.5
+net y-vel-s32        => sampler.0.pin.6
+net y-pos-float-cmd  => sampler.0.pin.7
+net z-ferr-s32       => sampler.0.pin.8
+net z-torque-s32     => sampler.0.pin.9
+net z-vel-s32        => sampler.0.pin.10
+net z-pos-float-cmd  => sampler.0.pin.11
+net a-ferr-s32       => sampler.0.pin.12
+net a-torque-s32     => sampler.0.pin.13
+net a-vel-s32        => sampler.0.pin.14
+net a-pos-float-cmd  => sampler.0.pin.15
+# ---- END REVERT: REALTIME CAPTURE ----

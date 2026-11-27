@@ -76,7 +76,10 @@ read-only on this firmware, so APPLY skips them. Set gain switchover to
 Home, clear the axis's travel, machine on, hand near the E-stop. Pick the
 axis, pick a profile (**BALANCED** unless you have a reason), press
 **ONE-CLICK TUNE**. It journals every step and restores the original gains if
-anything goes wrong or you cancel. Full details: [ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md).
+anything goes wrong or you cancel. Since engine v2 (2026-11-27) it needs the
+realtime capture block in `custom.hal` and settles at a fixed stability
+margin, so results land lower than the July presets. Full details:
+[ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md).
 
 ## AI-assisted
 
@@ -210,13 +213,14 @@ ethercat upload -p 0 -t uint16 0x2001 0x02   # slave 0 speed gain
 1. **Copy** `probe_basic/user_tabs/servo_tuner/` (and `signal_monitor/` for
    the Logging tab), plus from `probe_basic/python/`: `a6_servo_tune.py`,
    `a6_auto_tune.py`, `a6_auto_tune_sim.py`, `a6_graphical_inertia.py`,
-   `resonance_analysis.py`, `tune_trial.py`, `hal_signal_logger.py`,
-   `signal_plot_widget.py`. Optionally `scripts/run_auto_tune.py` and
-   `config/`.
+   `resonance_analysis.py`, `rt_capture.py`, `tune_trial.py`,
+   `hal_signal_logger.py`, `signal_plot_widget.py`. Optionally
+   `scripts/run_auto_tune.py`, `scripts/test_live_gain_write.py` and `config/`.
 2. **EtherCAT XML.** Map PDOs 60F4 (`ferr-fb`), 6077 (`torque-fb`) and 606C
    (`vel-fb`) on every slave.
-3. **HAL.** Copy the telemetry block at the end of `custom.hal` that makes
-   `tune-drive-ferr.N`, `tune-torque.N` and `tune-velocity.N`. Never wire
+3. **HAL.** Copy the telemetry block in `custom.hal` that makes
+   `tune-drive-ferr.N`, `tune-torque.N` and `tune-velocity.N`, and the
+   REALTIME CAPTURE block at its end (`sampler.0`, needed by one-click). Never wire
    these into `joint.N.f-error`. The `tune-velocity.N.gain` values are
    1/SCALE typed in by hand, so recompute them for your scale.
 4. **Python.** Edit the `AXES` table in `a6_servo_tune.py`: joint, slave,
@@ -239,7 +243,9 @@ On the machine: the tab's Current column should fill in (not "READ FAIL"), and
 | `probe_basic/python/a6_auto_tune.py` | One-click engine |
 | `probe_basic/python/a6_graphical_inertia.py` | Inertia identification |
 | `probe_basic/python/resonance_analysis.py` | FFT stability check |
+| `probe_basic/python/rt_capture.py` | Realtime capture via `sampler.0` + `halsampler` |
+| `scripts/test_live_gain_write.py` | Checks whether gains can be written with the drive enabled |
 | `probe_basic/python/tune_trial.py` | Clipboard text and images |
-| `custom.hal` (end) | Drive telemetry → `tune-*` pins |
+| `custom.hal` (end) | Drive telemetry → `tune-*` pins; `sampler.0` realtime capture |
 | `config/tuning/presets/` | Saved gain sets |
 | `logs/tuning/` | One-click and inertia journals (not in git) |

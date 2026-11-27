@@ -1407,7 +1407,10 @@ def apply_axis_params(
 
 # Drive SDO 6065: production fault window vs wider window during auto-tune moves.
 FOLLOWING_ERROR_RUN = 0.5
-FOLLOWING_ERROR_TUNING = 2.0
+FOLLOWING_ERROR_TUNING = 2.0  # inertia ID (a6_graphical_inertia)
+# One-click auto-tune uses a tighter window: the drive's 6065 trip is the only
+# realtime FERR stop, so keep it close to production (2026-11-27 review).
+FOLLOWING_ERROR_AUTOTUNE = 1.0
 
 
 def _following_error_params(value: float) -> AxisTuneParams:
@@ -1416,7 +1419,9 @@ def _following_error_params(value: float) -> AxisTuneParams:
     return params
 
 
-def relax_following_error_for_tuning(axis: str) -> float:
+def relax_following_error_for_tuning(
+    axis: str, value: float = FOLLOWING_ERROR_TUNING
+) -> float:
     """Raise 6065 for tuning stimulus. Returns prior drive value (best effort)."""
     prior = FOLLOWING_ERROR_RUN
     try:
@@ -1427,7 +1432,7 @@ def relax_following_error_for_tuning(axis: str) -> float:
         LOG.debug("could not read prior 6065 on %s", axis, exc_info=True)
     apply_axis_params(
         axis,
-        _following_error_params(FOLLOWING_ERROR_TUNING),
+        _following_error_params(value),
         keys=["following_error"],
     )
     return prior

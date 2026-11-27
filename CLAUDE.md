@@ -103,8 +103,8 @@ their own machine: plain language, short sections, real values from the config.
   Put `G61` in test programs. Jogging gets full acceleration.
 - **Following error is split on purpose.** LinuxCNC `FERROR 1270 / MIN_FERROR 254` is
   effectively off. The drive enforces it: `6065 = 0.5 mm` (6554 counts; A 182 counts) and
-  `6066 = 250 ms` → Er47.0 → `amp-fault-in`. The tuning tools raise 6065 to
-  2.0 temporarily and restore it in a `finally` block.
+  `6066 = 250 ms` → Er47.0 → `amp-fault-in`. The tuning tools raise 6065
+  temporarily (inertia ID 2.0, one-click 1.0) and restore it in a `finally` block.
 - **Digital inputs:** lcec reads raw DI from PDO `0x2040:05` → `lcec.0.N.di-1..5`
   (only di-1…5 exist). Drive DI functions are cleared with `0x2004:01/05/09/0d/11 = 0`.
   DB15/CN1: DI1=pin 10, DI2=9, DI3=8, DI4=7 (TouchProbe2), DI5=11 (TouchProbe1),
@@ -164,6 +164,27 @@ their own machine: plain language, short sections, real values from the config.
   on exit, "Failed to get reference clock time", and mb2hal transaction errors at shutdown.
 
 ## Open threads (as of 2026-11-18)
+
+- **Servo tuning engine v2 (2026-11-27, `dev-jerk-testing`).** Realtime
+  `sampler.0` capture (end of `custom.hal`, `rt_capture.py`), stability margin,
+  baseline repeats, fault stop, settle check, torque and standstill gates. All
+  sim tests pass; **not yet run on the machine.** Before tuning: fix the Y ball
+  nut, restart LinuxCNC (new HAL block), bench-check
+  `python3 probe_basic/python/rt_capture.py X 1`, run
+  `scripts/test_live_gain_write.py --axis <X|Y|Z>`, then `--dry-run`, then a
+  real run. Expect lower gains than the July presets (margin 0.55 vs ~0.8).
+  Plan items still open: chirp/PRBS frequency response, feedforward phase,
+  load-rejection test, multi-position, real torque limit for the guard. The
+  Servo Tuning tab's live plot and ANALYZE button still poll from Python and
+  assume 1 kHz, so their FFT frequencies are off too: move them to `rt_capture`.
+- **Drive homing vs upstream (checked 2026-11-27).** `cia402_homecomp` has no
+  commits after the pinned `b13bf72`; lcec after v1.49.0 only changed the
+  Delta ASDA driver. LinuxCNC master/tpnext-ma moved to the 64-bit HAL API
+  (2026-09-18) and changed `homing.c` (sync groups, bounded moves, abort
+  fixes; `homing.h` unchanged). homecomp CI builds against 2.10.0-pre2 (has the
+  64-bit API), so build it against the tpnext RIP tree, not the stock 2.9.8
+  headers, and re-run D1/D2 on the tpnext launcher. No conflict with the tuner:
+  both branches keep the 60F4/6077/606C PDOs and the `*-s32` signals.
 
 - **Spindle back on Modbus (2026-11-18)** on its own CH340 adapter; fault→E-stop net reconnected. Confirm M3/at-speed/fault read on the machine.
 - **MQL Probe Basic tab** clipping fixed 2026-11-18 (fits 1645x619). Not yet checked on the real screen.

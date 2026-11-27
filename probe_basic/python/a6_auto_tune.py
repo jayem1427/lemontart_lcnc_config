@@ -58,13 +58,14 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from a6_servo_tune import (
     AXES,
-    FOLLOWING_ERROR_TUNING,
+    FOLLOWING_ERROR_AUTOTUNE,
     PARAM_BY_KEY,
     AxisTuneParams,
     apply_axis_params,
     axis_unit,
     counts_to_unit,
     drive_ferr_counts_halpin,
+    hal_getp,
     hal_getp_s32,
     machine_is_on,
     read_axis_params,
@@ -87,7 +88,7 @@ except ImportError:  # pragma: no cover - only available under LinuxCNC
 
 LOG = logging.getLogger(__name__)
 
-ENGINE_VERSION = "1.0"
+ENGINE_VERSION = "2.0"
 
 # SDO keys the engine is allowed to touch. Everything else is read-only to us.
 CORE_GAIN_KEYS = ("speed_gain_hz", "pos_gain_rad_s", "integral_ms")
@@ -188,14 +189,38 @@ class OneClickConfig:
     integral_min_ms: float = 2.0
     max_steps_per_phase: int = 8
     max_stall_steps: int = 2
-    backoff_ratio: float = 0.75  # "back off ~20-25%" from docs/SERVO_TUNING.md
+    backoff_ratio: float = 0.75  # verify backoff / rescue softening step
     rescue_max_steps: int = 3
+    # Stability margin (v2): when a ladder step rings, the gain is set to
+    # margin_ratio x the FIRST ringing gain, not to the last stable step.
+    # 0.55 is ~5 dB of gain margin; the old "last stable step" was ~2 dB.
+    margin_ratio: float = 0.55
+    # Baseline is measured this many times; the run-to-run spread sets the
+    # smallest score change that counts as a real improvement.
+    baseline_repeats: int = 3
+    noise_k: float = 2.0  # improvement must beat noise_k x spread (%)
+    max_noise_threshold_pct: float = 15.0
+    # Torque guard (% rated, 6077). A clipped torque hides instability.
+    # Placeholder until Phase 6 reads the drive's real limit.
+    torque_guard_pct: float = 250.0
+    # Standstill noise gate at verify (needs realtime capture).
+    rest_capture_s: float = 1.0
+    rest_torque_rms_max_pct: float = 5.0
+    rest_ferr_rms_max: float = 0.002  # axis units (2 um)
+    # Hardware behaviour
+    live_writes: bool = False  # write gains with the drive enabled (test first!)
+    allow_python_sampler: bool = False  # legacy ~300 Hz sampler; FFT unreliable
+    settle_ferr: float = 0.02  # after re-enable, |FERR| must stay below this...
+    settle_hold_s: float = 0.3  # ...for this long...
+    settle_timeout_s: float = 5.0  # ...within this time, or the run stops
 
     # Acceptance / stability gates
     improvement_min_pct: float = 3.0  # keep climbing only if score improves
     integral_improve_min_pct: float = 0.5  # RMS gate for the integral phase
     integral_peak_guard_pct: float = 10.0  # peak may not regress more
-    integral_skip_improved_pct: float = 30.0  # skip integral if best already this much better
+    # v2: integral always runs (it matters for load rejection). Set >0 to
+    # restore the old "skip when already N% better" shortcut.
+    integral_skip_improved_pct: float = 0.0
     keep_best_min_improve_pct: float = 1.0  # salvage best stable step after verify fail
     verify_hf_margin: float = 0.12  # verify HF fail needs baseline_hf + this margin
     hf_fail: float = 0.35
@@ -264,6 +289,7 @@ PROFILES: Dict[str, Dict[str, Any]] = {
         max_steps_per_phase=6,
         improvement_min_pct=4.0,
         integral_min_ms=3.0,
+        margin_ratio=0.5,
     ),
     "balanced": dict(integral_min_ms=3.0),
     "aggressive": dict(
@@ -273,6 +299,7 @@ PROFILES: Dict[str, Dict[str, Any]] = {
         max_steps_per_phase=10,
         improvement_min_pct=2.0,
         integral_min_ms=1.0,
+        margin_ratio=0.65,
     ),
 }
 
@@ -281,7 +308,7 @@ def estimate_campaign_seconds(cfg: OneClickConfig) -> float:
     """Rough worst-case duration for the confirm dialog / CLI banner."""
     stim = cfg.stimulus or DEFAULT_STIMULI[cfg.axis]
     measures = (
-        1  # baseline
+        max(1, cfg.baseline_repeats)  # baseline
         + cfg.rescue_max_steps
         + (cfg.max_steps_per_phase + 1) * 2  # speed + position (+ notch retry)
         + cfg.max_steps_per_phase  # integral
@@ -310,15 +337,22 @@ class Measurement:
     dominant_hz: Optional[float]
     dominant_mag: Optional[float]
     report: Optional[ResonanceReport] = None
+    torque_peak_pct: Optional[float] = None
+    fs_hz: float = 1000.0
 
     def summary(self) -> str:
         gate = "UNSTABLE" if self.unstable else "stable"
         dom = (
             f" dom={self.dominant_hz:.1f}Hz" if self.dominant_hz is not None else ""
         )
+        tq = (
+            f" tq={self.torque_peak_pct:.0f}%"
+            if self.torque_peak_pct is not None
+            else ""
+        )
         return (
             f"{self.label}: peak={self.peak:.5f} rms={self.rms:.5f} "
-            f"score={self.score:.5f} {gate}{dom}"
+            f"score={self.score:.5f} {gate}{dom}{tq}"
             + (f" [{self.unstable_why}]" if self.unstable else "")
         )
 
@@ -503,7 +537,10 @@ def _jsonable(value: Any) -> Any:
 
 
 class _FerrSampler(threading.Thread):
-    """Samples drive 60F4 (as axis units) at ~sample_hz while a move runs.
+    """LEGACY (only with allow_python_sampler): polls drive 60F4 from Python.
+
+    Measured 250-750 Hz with jitter on the mill, so the FFT built on it puts
+    frequencies in the wrong place. The default path is rt_capture.RtCapture.
 
     Sets ``tripped`` when |FERR| crosses the abort limit so the caller can
     cmd.abort() the move. Keeps sampling after the trip so the journal still
@@ -540,10 +577,33 @@ class _FerrSampler(threading.Thread):
             else:
                 next_t = time.monotonic()
 
+    def poll(self) -> None:
+        """Watchdog interface; this sampler trips from its own thread."""
+
     def stop(self) -> List[float]:
         self._stop.set()
         self.join(timeout=2.0)
         return list(self.samples)
+
+
+class _CaptureWatch:
+    """Watchdog over the realtime capture's latest row (tens of ms latency)."""
+
+    def __init__(self, cap: Any, axis: str, abort_limit: float) -> None:
+        self.cap = cap
+        self.axis = axis
+        self.abort_limit = abs(abort_limit)
+        self.tripped = False
+        self.trip_value: Optional[float] = None
+
+    def poll(self) -> None:
+        counts = self.cap.latest_ferr_counts
+        if counts is None or self.tripped:
+            return
+        value = counts_to_unit(self.axis, counts)
+        if abs(value) >= self.abort_limit:
+            self.tripped = True
+            self.trip_value = value
 
 
 class HardwareTuneIO:
@@ -551,7 +611,7 @@ class HardwareTuneIO:
 
     name = "hardware"
 
-    def __init__(self) -> None:
+    def __init__(self, config: Optional["OneClickConfig"] = None) -> None:
         if linuxcnc is None:
             raise OneClickError(
                 "linuxcnc Python module not available — "
@@ -559,6 +619,47 @@ class HardwareTuneIO:
             )
         self._stat = linuxcnc.stat()
         self._cmd = linuxcnc.command()
+        self._cfg = config
+
+    def _opt(self, name: str, default: Any) -> Any:
+        return getattr(self._cfg, name, default) if self._cfg else default
+
+    # -- realtime capture -------------------------------------------------------
+
+    def capture_available(self) -> bool:
+        try:
+            import rt_capture
+
+            return rt_capture.sampler_available()
+        except Exception:
+            return False
+
+    def capture_rest(self, axis: str, seconds: float) -> Optional[Dict[str, Any]]:
+        """Standstill capture: FERR (axis units) and torque (%) at rest."""
+        if not self.capture_available():
+            return None
+        import rt_capture
+
+        cap = rt_capture.RtCapture(axis)
+        cap.start()
+        try:
+            time.sleep(max(seconds, 0.2))
+        finally:
+            result = cap.stop()
+        return {
+            "ferr": [counts_to_unit(axis, c) for c in result.ferr_counts],
+            "torque_pct": list(result.torque_pct),
+            "fs_hz": result.fs_hz,
+        }
+
+    # -- 6065 window --------------------------------------------------------------
+
+    def relax_ferr_window(self, axis: str) -> Tuple[float, float]:
+        prior = relax_following_error_for_tuning(axis, FOLLOWING_ERROR_AUTOTUNE)
+        return prior, FOLLOWING_ERROR_AUTOTUNE
+
+    def restore_ferr_window(self, axis: str) -> None:
+        restore_following_error_run(axis)
 
     # -- SDO ----------------------------------------------------------------
 
@@ -568,7 +669,10 @@ class HardwareTuneIO:
     def write_params(
         self, axis: str, params: AxisTuneParams, keys: List[str]
     ) -> Dict[str, Any]:
-        result = apply_axis_params(axis, params, cycle_enable=True, keys=keys)
+        live = bool(self._opt("live_writes", False))
+        result = apply_axis_params(axis, params, cycle_enable=not live, keys=keys)
+        if result.get("cycled_enable"):
+            self._wait_settled(axis)
         return {
             "written": result.get("written_keys", []),
             "failed": result.get("failed_keys", []),
@@ -579,6 +683,39 @@ class HardwareTuneIO:
         self, axis: str, name: str, params: AxisTuneParams, notes: str = ""
     ) -> str:
         return save_preset(axis, name, params, notes=notes)
+
+    def _wait_settled(self, axis: str) -> None:
+        """After machine OFF->ON, wait until the drive is holding position.
+
+        2026-07-16 Z run: the first move after a write tripped at 1.0 mm FERR
+        within ~13 samples. Never move before the axis has settled.
+        """
+        limit = float(self._opt("settle_ferr", 0.02))
+        hold = float(self._opt("settle_hold_s", 0.3))
+        timeout = float(self._opt("settle_timeout_s", 5.0))
+        pin = drive_ferr_counts_halpin(axis)
+        deadline = time.monotonic() + timeout
+        quiet_since: Optional[float] = None
+        last = float("nan")
+        while time.monotonic() < deadline:
+            if not machine_is_on():
+                quiet_since = None
+            else:
+                counts = hal_getp_s32(pin)
+                if counts == counts:
+                    last = counts_to_unit(axis, counts)
+                    if abs(last) <= limit:
+                        quiet_since = quiet_since or time.monotonic()
+                        if time.monotonic() - quiet_since >= hold:
+                            return
+                    else:
+                        quiet_since = None
+            time.sleep(0.02)
+        raise OneClickError(
+            f"axis {axis} did not settle after re-enable (|FERR| {last:.4f}, "
+            f"need <= {limit:g} for {hold:g}s) — check Z sag / brake, or use "
+            "live writes if scripts/test_live_gain_write.py passed"
+        )
 
     # -- machine state --------------------------------------------------------
 
@@ -604,6 +741,7 @@ class HardwareTuneIO:
             "min_limit": None,
             "max_limit": None,
             "feed_override": None,
+            "opmode": None,
         }
         try:
             self._stat.poll()
@@ -614,6 +752,13 @@ class HardwareTuneIO:
             state["feed_override"] = float(self._stat.feedrate)
         except Exception:
             LOG.exception("axis_state read failed")
+        # Drive-homing branch (lcec 1.49 cia402) maps 6061; must be CSP (8).
+        try:
+            op = hal_getp(f"lcec.0.{AXES[axis]['slave']}.opmode-display")
+            if op == op:
+                state["opmode"] = int(op)
+        except Exception:
+            pass
         return state
 
     # -- motion ----------------------------------------------------------------
@@ -643,12 +788,17 @@ class HardwareTuneIO:
         sample_hz: float,
         cancel: threading.Event,
     ) -> Tuple[List[float], Dict[str, Any]]:
-        """Run the back-and-forth stimulus while sampling drive FERR.
+        """Run the back-and-forth stimulus while capturing drive telemetry.
 
-        Uses relative (G91) strokes so work offsets do not matter; G90 is
-        restored in a finally block no matter what happened. On an abort the
-        axis is returned to its starting point at half feed when the machine
-        is still healthy.
+        Default: realtime capture (rt_capture, one row per servo cycle). The
+        legacy Python poller is used only with allow_python_sampler. Uses
+        relative (G91) strokes so work offsets do not matter; G90 is restored
+        in a finally block. On an abort the axis is returned to its start at
+        half feed when the machine is still healthy.
+
+        meta keys: aborted, abort_reason, tripped_ferr, position_drift,
+        fs_hz, torque_pct (list or None), machine_fault (bool),
+        capture_error (str or None).
         """
         axis = spec.axis
         meta: Dict[str, Any] = {
@@ -656,13 +806,36 @@ class HardwareTuneIO:
             "abort_reason": "",
             "tripped_ferr": None,
             "position_drift": None,
+            "fs_hz": sample_hz,
+            "torque_pct": None,
+            "machine_fault": False,
+            "capture_error": None,
+            "capture": "legacy-python",
         }
         self._ensure_mdi()
         start_pos = self._axis_position(axis)
         leg_timeout = spec.leg_time_s() * 3.0 + 5.0
 
-        sampler = _FerrSampler(axis, sample_hz, abort_ferr)
-        sampler.start()
+        cap = None
+        sampler: Optional[_FerrSampler] = None
+        if self.capture_available():
+            import rt_capture
+
+            cap = rt_capture.RtCapture(axis)
+            cap.start()
+            watch: Any = _CaptureWatch(cap, axis, abort_ferr)
+            meta["capture"] = "realtime-sampler"
+        elif self._opt("allow_python_sampler", False):
+            sampler = _FerrSampler(axis, sample_hz, abort_ferr)
+            sampler.start()
+            watch = sampler
+        else:
+            raise OneClickError(
+                "realtime capture unavailable (sampler.0 not loaded); refusing "
+                "to tune on the legacy Python sampler"
+            )
+
+        samples: List[float] = []
         try:
             self._mdi("G21")
             self._wait_leg(2.0)
@@ -682,32 +855,49 @@ class HardwareTuneIO:
                         f"G1 {axis}{sign * signed_stroke:.4f} F{spec.feed:.1f}"
                     )
                     ok, why = self._wait_leg_watchdog(
-                        leg_timeout, sampler, cancel
+                        leg_timeout, watch, cancel
                     )
                     if not ok:
                         meta.update(aborted=True, abort_reason=why)
-                        if sampler.tripped:
-                            meta["tripped_ferr"] = sampler.trip_value
+                        if watch.tripped:
+                            meta["tripped_ferr"] = watch.trip_value
                         done = True
                         break
                     if spec.dwell_s > 0:
-                        time.sleep(spec.dwell_s)
+                        self._sleep_watching(spec.dwell_s, watch)
             if not meta["aborted"] and spec.settle_s > 0:
-                time.sleep(spec.settle_s)
+                self._sleep_watching(spec.settle_s, watch)
         finally:
             try:
                 self._mdi("G90")
                 self._cmd.wait_complete(3.0)
             except Exception:
                 LOG.exception("G90 restore failed after stimulus")
-            samples = sampler.stop()
+            if cap is not None:
+                try:
+                    result = cap.stop()
+                    samples = [counts_to_unit(axis, c) for c in result.ferr_counts]
+                    meta["torque_pct"] = list(result.torque_pct)
+                    meta["fs_hz"] = result.fs_hz
+                except Exception as exc:  # CaptureError or halcmd failure
+                    meta["capture_error"] = f"{type(exc).__name__}: {exc}"
+                    cap.abort()
+            elif sampler is not None:
+                samples = sampler.stop()
+
+        # A FERR trip, RCS error or dropped STATE_ON may mean the drive
+        # faulted. The engine must stop on that, not treat it as "unstable".
+        ready, why_not = self.machine_ready()
+        reason = str(meta.get("abort_reason") or "")
+        if not ready or "RCS_ERROR" in reason or "dropped out of STATE_ON" in reason:
+            meta["machine_fault"] = True
+            meta["machine_state"] = why_not
 
         # Return to the start point if we aborted mid-leg and can still move.
         end_pos = self._axis_position(axis)
         if start_pos is not None and end_pos is not None:
             drift = end_pos - start_pos
             meta["position_drift"] = drift
-            ready, _why = self.machine_ready()
             if meta["aborted"] and ready and abs(drift) > 0.01:
                 try:
                     self._ensure_mdi()
@@ -722,6 +912,12 @@ class HardwareTuneIO:
                     LOG.exception("return-to-start failed")
                     meta["returned_to_start"] = False
         return samples, meta
+
+    def _sleep_watching(self, seconds: float, watch: Any) -> None:
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            watch.poll()
+            time.sleep(0.01)
 
     # -- helpers -----------------------------------------------------------
 
@@ -746,13 +942,24 @@ class HardwareTuneIO:
         self._cmd.wait_complete(timeout)
 
     def _wait_leg_watchdog(
-        self, timeout: float, sampler: _FerrSampler, cancel: threading.Event
+        self, timeout: float, sampler: Any, cancel: threading.Event
     ) -> Tuple[bool, str]:
-        """Wait for one MDI leg, aborting fast on FERR trip / cancel / fault."""
+        """Wait for one MDI leg, aborting fast on FERR trip / cancel / fault.
+
+        Checks every 10 ms (was 100 ms: up to ~17 mm of travel at F10000).
+        """
         deadline = time.monotonic() + timeout
         while True:
-            rc = self._cmd.wait_complete(0.1)
+            sampler.poll()
+            rc = self._cmd.wait_complete(0.01)
+            sampler.poll()
             if rc != -1:
+                if sampler.tripped:
+                    return (
+                        False,
+                        f"FERR watchdog tripped at {sampler.trip_value:.4f} "
+                        f"(limit {sampler.abort_limit:.4f})",
+                    )
                 if linuxcnc is not None and rc == getattr(linuxcnc, "RCS_ERROR", 3):
                     return False, "MDI leg reported RCS_ERROR"
                 self._stat.poll()
@@ -846,7 +1053,7 @@ class OneClickTuner:
             self.cfg.stimulus = DEFAULT_STIMULI.get(config.axis)
         if self.cfg.stimulus is None:
             raise ValueError(f"no stimulus for axis {config.axis!r}")
-        self.io = io if io is not None else HardwareTuneIO()
+        self.io = io if io is not None else HardwareTuneIO(config)
         self.journal = TuneJournal(
             journal_root or default_journal_root(), config.axis, config
         )
@@ -868,6 +1075,10 @@ class OneClickTuner:
         self._notch_applied = False
         self._signed_stroke: float = abs(config.stimulus.stroke)
         self._ferr_relaxed = False
+        # v2: effective acceptance threshold (raised to beat measured noise)
+        self._improve_pct: float = config.improvement_min_pct
+        self._first_unstable: Dict[str, float] = {}
+        self._rest_baseline: Optional[Dict[str, float]] = None
 
     # -- public API ----------------------------------------------------------
 
@@ -895,23 +1106,23 @@ class OneClickTuner:
             self._save_backup_preset()
 
             if not self.cfg.dry_run:
-                prior_ferr = relax_following_error_for_tuning(axis)
+                prior_ferr, window = self.io.relax_ferr_window(axis)
                 self._ferr_relaxed = True
-                self._abort_ferr = FOLLOWING_ERROR_TUNING * self.cfg.ferr_abort_ratio
+                self._abort_ferr = window * self.cfg.ferr_abort_ratio
                 self.journal.event(
                     "baseline",
                     "ferr-window",
-                    f"6065 raised to {FOLLOWING_ERROR_TUNING:g} {axis_unit(axis)} "
-                    f"for tuning (was {prior_ferr:g}); production window is 0.5",
+                    f"6065 set to {window:g} {axis_unit(axis)} for tuning "
+                    f"(was {prior_ferr:g}); production window is 0.5",
                     prior=prior_ferr,
-                    tuning=FOLLOWING_ERROR_TUNING,
+                    tuning=window,
                     abort_ferr=self._abort_ferr,
                 )
 
             self.io.begin_session()
             session_open = True
 
-            base_m = self._measure("baseline")
+            base_m = self._measure_baseline()
             result.baseline_score = base_m.score
             self._baseline_score = base_m.score
             if base_m.report is not None:
@@ -986,12 +1197,31 @@ class OneClickTuner:
                 elif improvement is not None and improvement >= 1.0:
                     result.status = "improved"
                     result.reason = f"score improved {improvement:.1f}%"
+                elif self._first_unstable and any(
+                    abs(result.final_values.get(k, 0.0) - result.baseline_values.get(k, 0.0)) > 1e-6
+                    for k in CORE_GAIN_KEYS
+                ):
+                    # v2: the baseline sat too close to instability; gains
+                    # were lowered to the margin even though the air-move
+                    # score got worse. Safer, so keep and save it.
+                    result.status = "margin-limited"
+                    result.reason = (
+                        "baseline was within the stability margin; gains lowered "
+                        "to " + ", ".join(
+                            f"{k}={self._current[k]:g} ({self.cfg.margin_ratio:g} x "
+                            f"first ring {v:g})"
+                            for k, v in self._first_unstable.items()
+                        )
+                    )
                 else:
                     result.status = "no-change"
                     result.reason = (
                         "no meaningful improvement found beyond the baseline"
                     )
-                if self.cfg.save_presets and result.status == "improved":
+                if self.cfg.save_presets and result.status in (
+                    "improved",
+                    "margin-limited",
+                ):
                     result.preset_name = self._save_final_preset()
 
             self._finalize(result)
@@ -1016,7 +1246,7 @@ class OneClickTuner:
         finally:
             if getattr(self, "_ferr_relaxed", False):
                 try:
-                    restore_following_error_run(self.cfg.axis)
+                    self.io.restore_ferr_window(self.cfg.axis)
                     self.journal.event(
                         "finalize",
                         "ferr-window",
@@ -1046,6 +1276,27 @@ class OneClickTuner:
 
         state = self.io.axis_state(axis)
         self.journal.event("preflight", "machine", "machine ready", **state)
+
+        if not self.io.capture_available():
+            if not self.cfg.allow_python_sampler:
+                raise OneClickError(
+                    "preflight failed: realtime capture (sampler.0) not loaded — "
+                    "see the REALTIME CAPTURE block in custom.hal. "
+                    "--allow-python-sampler runs the old ~300 Hz poller, whose "
+                    "FFT frequencies are wrong"
+                )
+            self.journal.event(
+                "preflight",
+                "warning",
+                "LEGACY Python sampler: FFT frequencies and notch placement "
+                "are unreliable",
+            )
+        opmode = state.get("opmode")
+        if opmode is not None and opmode != 8:
+            raise OneClickError(
+                f"preflight failed: drive opmode is {opmode}, not 8 (CSP) — "
+                "a drive home may have been interrupted"
+            )
 
         stim = self.cfg.stimulus
         homed = state.get("homed")
@@ -1279,21 +1530,33 @@ class OneClickTuner:
                             "notch-ok",
                             "notch cleared the ring — continuing ladder",
                         )
-                        if self._improved(m2, ref, cfg.improvement_min_pct):
+                        if self._improved(m2, ref, self._improve_pct):
                             ref = m2
                         self._update_best(m2)
                         continue
                     self._revert_notch("speed")
+                target = self._margin_target(key, cand, cur)
                 self.journal.event(
                     "speed",
                     "backoff",
-                    f"unstable at {cand:.1f} Hz ({m.unstable_why}) — "
-                    f"returning to {cur:.1f} Hz",
+                    f"unstable at {cand:.1f} Hz ({m.unstable_why}) — margin "
+                    f"backoff to {target:.1f} Hz ({cfg.margin_ratio:g} x first "
+                    f"ringing gain)",
+                    first_unstable=cand,
+                    margin_ratio=cfg.margin_ratio,
                 )
-                self._write_values("speed", {key: cur})
+                self._write_values("speed", {key: target})
+                if target < cur - 1e-6:
+                    ref = self._measure(f"speed_margin_{target:.1f}hz")
+                    if ref.unstable:
+                        raise OneClickError(
+                            f"still unstable at the margin gain {target:.1f} Hz "
+                            f"({ref.unstable_why}) — check mechanics"
+                        )
+                    self._update_best(ref)
                 break
 
-            if self._improved(m, ref, cfg.improvement_min_pct):
+            if self._improved(m, ref, self._improve_pct):
                 self.journal.event(
                     "speed",
                     "accept",
@@ -1307,7 +1570,7 @@ class OneClickTuner:
                 self.journal.event(
                     "speed",
                     "stall",
-                    f"{cand:.1f} Hz stable but no {cfg.improvement_min_pct:g}% "
+                    f"{cand:.1f} Hz stable but no {self._improve_pct:.1f}% "
                     f"improvement ({m.summary()}) — reverting to {cur:.1f} Hz "
                     f"(stall {stalls}/{cfg.max_stall_steps})",
                 )
@@ -1355,15 +1618,27 @@ class OneClickTuner:
             m = self._measure(f"pos_{cand:.1f}rads")
 
             if m.unstable:
+                target = self._margin_target(key, cand, cur)
                 self.journal.event(
                     "position",
                     "backoff",
-                    f"unstable at {cand:.1f} rad/s ({m.unstable_why}) — "
-                    f"returning to {cur:.1f}",
+                    f"unstable at {cand:.1f} rad/s ({m.unstable_why}) — margin "
+                    f"backoff to {target:.1f} ({cfg.margin_ratio:g} x first "
+                    f"ringing gain)",
+                    first_unstable=cand,
+                    margin_ratio=cfg.margin_ratio,
                 )
-                self._write_values("position", {key: cur})
+                self._write_values("position", {key: target})
+                if target < cur - 1e-6:
+                    ref = self._measure(f"pos_margin_{target:.1f}rads")
+                    if ref.unstable:
+                        raise OneClickError(
+                            f"still unstable at the margin gain {target:.1f} "
+                            f"rad/s ({ref.unstable_why}) — check mechanics"
+                        )
+                    self._update_best(ref)
                 break
-            if self._improved(m, ref, cfg.improvement_min_pct):
+            if self._improved(m, ref, self._improve_pct):
                 self.journal.event(
                     "position", "accept", f"{cand:.1f} rad/s accepted ({m.summary()})"
                 )
@@ -1508,8 +1783,22 @@ class OneClickTuner:
         if self._keep_best_after_verify_failure(verify_m=m, backoff_m=m2):
             salvage_m = self._measure("verify_best")
             self.journal.event("verify", "best-check", salvage_m.summary())
-            self._update_best(salvage_m)
-            return salvage_m, "keep_best"
+            # Keep-best exists for the harmless-HF false positive (2026-07-12
+            # X). Any other failure on the re-check (ring, resonance, torque,
+            # standstill noise, abort) means the best step is not safe.
+            hard = [
+                r.strip()
+                for r in (salvage_m.unstable_why or "").split(";")
+                if r.strip() and not r.strip().startswith("HF energy")
+            ]
+            if not (salvage_m.unstable and hard):
+                self._update_best(salvage_m)
+                return salvage_m, "keep_best"
+            self.journal.event(
+                "verify",
+                "best-rejected",
+                "best step failed its re-check: " + "; ".join(hard),
+            )
 
         self.journal.event(
             "verify",
@@ -1593,6 +1882,27 @@ class OneClickTuner:
         )
         if meta.get("abort_reason") == "cancelled" or self._cancel.is_set():
             raise OneClickCancelled()
+        if meta.get("capture_error"):
+            self.journal.record_samples(label + "_INVALID", samples, cfg.sample_hz)
+            raise OneClickError(
+                f"measurement {label!r} invalid: {meta['capture_error']}"
+            )
+        if meta.get("machine_fault"):
+            self.journal.record_samples(label + "_FAULT", samples, cfg.sample_hz)
+            self.journal.event(
+                "measure", "fault", f"machine fault during {label}", meta=meta
+            )
+            raise OneClickError(
+                f"machine fault during {label!r} "
+                f"({meta.get('abort_reason') or meta.get('machine_state')}) — "
+                "stopping the campaign; clear the fault before retrying"
+            )
+        fs = float(meta.get("fs_hz") or cfg.sample_hz)
+        torque = meta.get("torque_pct")
+        torque_peak = (
+            max((abs(t) for t in torque), default=0.0) if torque else None
+        )
+        meta_journal = {k: v for k, v in meta.items() if k != "torque_pct"}
 
         report: Optional[ResonanceReport] = None
         gate_min_hz = self._gate_min_hz()
@@ -1600,7 +1910,7 @@ class OneClickTuner:
             report = analyze_ferr_resonance(
                 samples,
                 axis=cfg.axis,
-                fs_hz=cfg.sample_hz,
+                fs_hz=fs,
                 min_hz=gate_min_hz,
                 hf_fail=cfg.hf_fail,
                 ring_fail=cfg.ring_fail,
@@ -1615,6 +1925,16 @@ class OneClickTuner:
         rms = float(report.rms) if report is not None else _rms(samples)
         score = peak + SCORE_RMS_WEIGHT * rms
         unstable, why = self._classify(report, meta, label=label)
+        reasons = [why] if unstable else []
+        if torque_peak is not None and torque_peak >= cfg.torque_guard_pct:
+            reasons.append(
+                f"torque {torque_peak:.0f}% >= guard {cfg.torque_guard_pct:g}%"
+            )
+        if label.startswith("verify"):
+            rest_why = self._rest_check(label)
+            if rest_why:
+                reasons.append(rest_why)
+        unstable, why = bool(reasons), "; ".join(r for r in reasons if r)
         dominant = report.dominant if report is not None else None
 
         m = Measurement(
@@ -1630,20 +1950,129 @@ class OneClickTuner:
             dominant_hz=float(dominant.freq_hz) if dominant else None,
             dominant_mag=float(dominant.magnitude) if dominant else None,
             report=report,
+            torque_peak_pct=torque_peak,
+            fs_hz=fs,
         )
-        csv_path = self.journal.record_samples(label, samples, cfg.sample_hz)
+        csv_path = self.journal.record_samples(label, samples, fs)
         fft_info = _report_to_dict(report)
         fft_info["gate_min_hz"] = gate_min_hz
+        fft_info["fs_hz"] = fs
         self.journal.event(
             "measure",
             "measurement",
             m.summary(),
-            meta=meta,
+            meta=meta_journal,
             csv=csv_path,
             gains={k: self._current.get(k) for k in TOUCHABLE_KEYS},
             fft=fft_info,
         )
         return m
+
+    def _measure_baseline(self) -> Measurement:
+        """Measure the baseline N times; spread sets the improvement bar."""
+        cfg = self.cfg
+        n = max(1, int(cfg.baseline_repeats))
+        ms = [self._measure("baseline" if n == 1 else f"baseline_{i + 1}")
+              for i in range(n)]
+        if any(m.unstable for m in ms):
+            worst = next(m for m in ms if m.unstable)
+            self.journal.event(
+                "baseline", "unstable", f"baseline repeat unstable: {worst.summary()}"
+            )
+            base = worst
+        else:
+            ordered = sorted(ms, key=lambda m: m.score)
+            base = ordered[len(ordered) // 2]  # median
+        if n > 1:
+            scores = [m.score for m in ms]
+            med = base.score if base.score > 0 else max(scores)
+            spread_pct = (max(scores) - min(scores)) / med * 100.0 if med > 0 else 0.0
+            self._improve_pct = min(
+                cfg.max_noise_threshold_pct,
+                max(cfg.improvement_min_pct, cfg.noise_k * spread_pct),
+            )
+            self.journal.event(
+                "baseline",
+                "noise",
+                f"baseline spread {spread_pct:.1f}% over {n} runs -> a step must "
+                f"improve the score by >= {self._improve_pct:.1f}%",
+                scores=scores,
+                spread_pct=spread_pct,
+                improve_pct=self._improve_pct,
+            )
+        if cfg.rest_capture_s > 0 and not cfg.dry_run:
+            self._rest_baseline = self._rest_stats("baseline")
+        return base
+
+    def _margin_target(self, key: str, unstable_value: float, cur: float) -> float:
+        """Gain to settle on after `unstable_value` rang: margin x first ring."""
+        self._first_unstable.setdefault(key, unstable_value)
+        first = self._first_unstable[key]
+        target = min(
+            cur,
+            max(float(PARAM_BY_KEY[key]["min"]), self.cfg.margin_ratio * first),
+        )
+        # A "best" step remembered above the margin must never be restored.
+        if self._best_values.get(key, -math.inf) > target + 1e-6:
+            self.journal.event(
+                "margin",
+                "best-reset",
+                f"best step had {key}={self._best_values[key]:g} above the "
+                f"margin {target:g}; it can no longer be kept",
+            )
+            self._best_values = {}
+            self._best_score = math.inf
+        return target
+
+    def _rest_stats(self, label: str) -> Optional[Dict[str, float]]:
+        capture = getattr(self.io, "capture_rest", None)
+        if capture is None:
+            return None
+        try:
+            data = capture(self.cfg.axis, self.cfg.rest_capture_s)
+        except Exception as exc:
+            self.journal.event("rest", "warning", f"standstill capture failed: {exc}")
+            return None
+        if not data:
+            return None
+        ferr = [float(v) for v in data.get("ferr") or []]
+        tq = [float(v) for v in data.get("torque_pct") or []]
+        stats = {
+            "ferr_rms": _rms(ferr),
+            "ferr_peak": _peak(ferr),
+            "torque_rms_pct": _rms(tq),
+            "torque_peak_pct": _peak(tq),
+            "n": float(len(ferr)),
+        }
+        self.journal.event(
+            "rest",
+            "standstill",
+            f"{label}: rest FERR rms {stats['ferr_rms'] * 1000:.2f} um, "
+            f"torque rms {stats['torque_rms_pct']:.2f}%",
+            **stats,
+        )
+        return stats
+
+    def _rest_check(self, label: str) -> str:
+        """'' if standstill noise is acceptable, else the reason."""
+        cfg = self.cfg
+        if cfg.rest_capture_s <= 0 or cfg.dry_run:
+            return ""
+        stats = self._rest_stats(label)
+        if stats is None:
+            return ""
+        why = []
+        if stats["torque_rms_pct"] > cfg.rest_torque_rms_max_pct:
+            why.append(
+                f"standstill torque rms {stats['torque_rms_pct']:.1f}% "
+                f"> {cfg.rest_torque_rms_max_pct:g}%"
+            )
+        if stats["ferr_rms"] > cfg.rest_ferr_rms_max:
+            why.append(
+                f"standstill FERR rms {stats['ferr_rms'] * 1000:.1f} um "
+                f"> {cfg.rest_ferr_rms_max * 1000:g} um"
+            )
+        return "; ".join(why)
 
     def _gate_min_hz(self) -> float:
         """Lowest frequency the stability gate treats as a possible resonance.
@@ -1766,6 +2195,9 @@ class OneClickTuner:
     def _update_best(self, m: Measurement) -> None:
         if m.unstable:
             return
+        for key, first in self._first_unstable.items():
+            if self._current.get(key, 0.0) > self.cfg.margin_ratio * first + 1e-6:
+                return  # above the margin: never a candidate
         if m.score < self._best_score:
             self._best_score = m.score
             self._best_values = {
