@@ -65,6 +65,28 @@ it.
 | **ONE-CLICK TUNE** | See [ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md) |
 | **INERTIA** panel | See [INERTIA_TUNING.md](INERTIA_TUNING.md) |
 
+### Where ANALYZE gets its data
+
+The scrolling plot is a display only: Python polls it from the Qt timer, and
+the real rate varies (250–750 Hz was measured in July). An FFT of that puts
+every peak at the wrong frequency, so from 2026-11-27 ANALYZE doesn't use
+it:
+
+- **START PLOT** also starts `RtStream` (`rt_capture.py`). It reads the
+  realtime `sampler.0` (end of `custom.hal`), one row per servo cycle for all
+  four axes, and keeps the last 20 s.
+- **ANALYZE / COPY RESONANCE** take the last 10 s of the selected axis from
+  it, at the true rate. The result line ends with `realtime 1000 Hz`.
+- Jog or run the move you want to look at with the plot on, then press
+  ANALYZE within 10 s. To look at a resonance, a few sharp back-and-forth
+  jogs work better than one long move.
+- If the sampler isn't loaded, the line says `polled (approximate
+  frequencies)`. The verdict is still roughly right, but **don't place a
+  notch from a polled result**.
+- Only one reader can use `sampler.0` at a time. ONE-CLICK stops the stream
+  and restarts it when it finishes. A second tuner window gets "sampler.0 is
+  already capturing" (see TROUBLESHOOTING).
+
 `C01.10` (speed feedback filter) and `C01.38` (gain switchover mode) are
 read-only on this firmware, so APPLY skips them. Set gain switchover to
 "fixed 1st set" on the drive panel if you need to.

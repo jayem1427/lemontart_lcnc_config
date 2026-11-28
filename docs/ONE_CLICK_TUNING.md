@@ -13,6 +13,11 @@ the wrong place, and that the "back off one step" rule left only ~2 dB of gain
 margin. v2 captures in realtime, uses a real margin, measures run-to-run noise,
 and stops on the first machine fault. See *What changed in v2* below.
 
+**Engine 2.1 (same day)** adds a measured stability margin (sensitivity peak
+**Ms**) on every move, a torque-feedforward phase, a torque guard taken from
+the drive's own limit, and optional re-checks at other positions along the
+axis. See *Reading the results* below.
+
 It automates the manual zone ladder in [SERVO_TUNING.md](SERVO_TUNING.md).
 
 ---
@@ -41,8 +46,32 @@ python3 scripts/run_auto_tune.py --axis X --profile balanced
 python3 scripts/run_auto_tune.py --axis Z --stroke 5 --feed 3000 --no-notch
 python3 scripts/run_auto_tune.py --axis Y --live-writes          # only after test_live_gain_write.py passed
 python3 scripts/run_auto_tune.py --axis Y --margin 0.5 --repeats 5
+python3 scripts/run_auto_tune.py --axis X --verify-at=-100,100   # re-check at two more spots (homed only)
+python3 scripts/run_auto_tune.py --axis Y --ms-max 2.0           # reject any step with Ms above 2.0
+python3 scripts/run_auto_tune.py --axis Z --no-ff                # leave torque feedforward alone
 python3 probe_basic/python/rt_capture.py Y 1.0                    # bench check: 1 s realtime capture at rest
 ```
+
+| Flag | Default | What it does |
+|------|---------|--------------|
+| `--sim` | off | Simulated axis. Nothing moves; no LinuxCNC needed |
+| `--dry-run` | off | Real moves and measurements, no SDO writes |
+| `--profile` | balanced | conservative / balanced / aggressive (table below) |
+| `--stroke`, `--feed`, `--cycles` | per axis | Override the test move |
+| `--no-notch` | off | Never place notch 3 |
+| `--no-presets` | off | Don't save `pre_one_click_*` / `one_click_*` presets |
+| `--live-writes` | off | Write gains with the drive enabled. Only after `test_live_gain_write.py` printed `LIVE OK` |
+| `--margin` | 0.5 / 0.55 / 0.65 | Settle at this × the first ringing gain |
+| `--repeats` | 3 | Baseline repeats; their spread sets the improvement bar |
+| `--no-ff` | off | Skip the feedforward phase |
+| `--ms-max` | 0 (report only) | Steps with a measured Ms above this count as unstable |
+| `--verify-at` | none | Comma list of offsets (mm, ° for A) from the start position to re-verify at. Use `=` before a negative first value: `--verify-at=-100,100` |
+| `--allow-python-sampler` | off | Old ~300 Hz poller when `sampler.0` is missing. FFT frequencies are wrong; don't trust notches |
+| `--yes` | off | Skip the confirmation prompt |
+
+The tab's ONE-CLICK button uses the defaults: feedforward phase on, Ms
+report-only, no extra positions. `--ms-max` and `--verify-at` are CLI-only
+for now.
 
 Exit code 0 means improved, margin-limited, no change, or dry run. 2 means anything else.
 Ctrl+C cancels the same way the CANCEL button does.
@@ -71,9 +100,18 @@ Ctrl+C cancels the same way the CANCEL button does.
 - **Settles before moving.** After each machine OFF→ON write, the axis must
   hold |FERR| ≤ 0.02 mm for 0.3 s within 5 s, or the run stops. Avoided
   entirely with `--live-writes`.
-- **Torque guard.** A step whose torque peak reaches 250 % rated counts as
-  unstable (a clipped torque hides instability). Placeholder until the drive's
-  real torque limit is set.
+- **Torque guard.** A step whose torque peak (6077) reaches the guard counts as
+  unstable, because a drive sitting on its torque limit can't show you it's
+  ringing. The guard is the lower of 250 % rated and **80 % of the drive's torque
+  limit 0x6072**, read at preflight (the journal shows
+  `drive torque limit 0x6072 = …% -> guard …%`). If 0x6072 can't be read it
+  stays at 250 %. Lowering the drive's torque limit (step 4 of the plan) therefore
+  lowers the guard automatically.
+- **Multi-position moves** (`--verify-at` only). The tuned axis only, `G53 G1` at
+  half the test feed, absolute targets = start + offset. Refused unless the axis
+  is homed; offsets whose stroke would cross a soft limit are skipped; Z refuses
+  negative (downward) offsets. It always returns to the start position, even
+  after an error.
 - **Drive opmode.** On the drive-homing branch (`lcec.0.N.opmode-display`
   exists) the drive must be in CSP (8), or preflight fails.
 - **Writes use the same checked path as APPLY**: machine off, write, read
@@ -83,8 +121,11 @@ Ctrl+C cancels the same way the CANCEL button does.
   `pre_one_click_<time>` preset before anything is written. Cancel, an error,
   or a failed final check restores them. If even the restore fails, the
   journal gets a **CRITICAL** entry listing the exact values to put back.
+- **Touched:** speed gain, position gain, integral, notch 3, gain mode, and
+  torque FF % (only when the drive's torque FF source is already on).
 - **Not touched:** LinuxCNC's following-error settings, the 2nd gain set,
-  torque filter, feedforward, stiffness, inertia, EEPROM. (Drive-homing work
+  torque filter, speed feedforward, FF source and FF filters, stiffness,
+  inertia, EEPROM. (Drive-homing work
   found that some A6 SDO writes persist; restore from the `pre_one_click_*`
   preset if a run was interrupted by a power loss.)
 - C00.04 (gain mode) is set to manual if it wasn't, so the drive's own
@@ -160,7 +201,7 @@ out anything worth keeping):
 |------|----------|
 | `journal.md` | Readable log, written as it goes, so a crash still leaves the story up to that point |
 | `journal.json` | Same events, machine-readable: every write, every measurement with its FFT peaks |
-| `NN_<label>.csv` | Raw following-error samples for each measurement (1 kHz) |
+| `NN_<label>.csv` | Raw following-error samples for each measurement, at the true servo rate (`fs_hz` in the JSON) |
 
 The engine writes what it's *about* to do before doing it, so **the last
 entry before a failure tells you what went wrong**.
@@ -180,6 +221,10 @@ entry before a failure tells you what went wrong**.
 | `failed`: SDO write failed | A write didn't read back right | Check the bus. If it's always the same parameter, it may be read-only on your firmware |
 | **CRITICAL** | The restore itself failed | Machine off; LOAD the `pre_one_click_*` preset and APPLY |
 | `reverted` | Final check unstable, nothing better than baseline to keep | Try CONSERVATIVE, or a longer stroke for cleaner measurements |
+| `reverted`: unstable at offset ±N | The tune held at the start but rang elsewhere along the axis | Tune at the worst spot (start the run there), or check that stretch of the screw / ways |
+| Steps flagged `Ms … > 2` | Only with `--ms-max`: the measured margin is too thin | Expected near the top of the ladder. If even baseline trips it, the axis was already marginal |
+| `feedforward skip: source is off` | C01.16 torque FF source is 0 | Not an error. Turn it on in the table (1 = internal) if you want the phase |
+| Torque guard trips early after you lowered 0x6072 | Guard = 0.8 × the new limit | Intended. Raise the limit or shorten/slow the test move |
 | `improved` (after a failed verify) | Kept the best stable step | Try it. The journal says why verify failed |
 | `no-change` | Nothing beat baseline by 3 % | Baseline may already be good. Try AGGRESSIVE |
 | Watchdog trips on the first step | Already close to the edge | Start from a softer preset |
@@ -187,6 +232,74 @@ entry before a failure tells you what went wrong**.
 Engine bugs can usually be reproduced in the simulator
 (`a6_auto_tune_sim.py` has knobs for resonance, instability, noise). Tests:
 `python3 probe_basic/python/test_a6_auto_tune.py`.
+
+---
+
+## Reading the results
+
+### Ms, the measured stability margin
+
+Following error is the command filtered by the loop's **sensitivity
+function** S(f): `FERR(f) = S(f) × CMD(f)`. The realtime capture records both
+signals, so each measurement estimates |S(f)| = |FERR / CMD| at every frequency
+the test move contains (Welch averaging, `frf_analysis.py`). It only keeps
+frequencies where the two signals are clearly related (coherence ≥ 0.7). The
+**peak of |S| is Ms**. It is the standard single-number robustness measure,
+and it bounds both margins whatever the mechanics are:
+
+| Ms | Gain margin at least | Phase margin at least | Reads as |
+|----|----------------------|-----------------------|----------|
+| 1.2 | 15.6 dB | 49° | Very calm, probably leaving stiffness on the table |
+| 1.4 | 10.9 dB | 42° | Comfortable |
+| **2.0** | **6.0 dB** | **29°** | Usual industrial upper limit |
+| 2.5 | 4.4 dB | 23° | Lightly damped; will overshoot and ring on hard moves |
+| > 3 | < 3.5 dB | < 19° | Close to oscillating at f(Ms) |
+
+The journal line looks like
+`Ms 1.62 @ 48 Hz (GM>=8.2 dB, PM>=36 deg, bw~19 Hz; 31 coherent bins)`.
+**f(Ms)** is where the loop is weakest, and is often where it will ring.
+**bw** is roughly where the loop stops rejecting following error (|S| first
+reaches 0.707). Higher bw means stiffer tracking.
+
+How to use it:
+
+- **Compare steps, not absolute values.** As the ladder raises gains, Ms
+  rises and its frequency moves up. A sudden jump marks where margin goes.
+- **It complements the ringing check.** The FFT check sees ringing that has
+  already started; Ms sees the margin before any ringing starts.
+- **Limits.** The normal test stroke is a trapezoid, so most of its energy is
+  below ~50 Hz. If it reports "only N coherent bins", the move didn't excite
+  enough frequencies. A longer stroke or more cycles helps. It says nothing
+  about frequencies the move didn't contain (that's what chirp injection would
+  add, see below). Air moves give a slightly optimistic Ms, because cutting
+  adds load.
+- **Gate.** Report-only by default. `--ms-max 2.0` treats any step above it
+  as unstable. Try report-only for a few runs first, to see where your axes sit.
+
+### Torque feedforward
+
+Feedforward sends the torque the commanded acceleration *will* need straight
+to the current loop, instead of waiting for following error to build up and the PID
+to react. Get it right and the error during acceleration mostly disappears without
+raising any feedback gain, so it costs no stability margin. 100 % means
+"inertia exactly as the drive believes it is". Above that it over-predicts:
+the axis leads the command and overshoots at the end of the ramp.
+
+The phase starts from the current value (C01.17), tries × 1.15 steps up to
+200 %, and keeps each one that improves the score ≥ 3 %. If the first step up
+doesn't help, it tries ÷ 1.15 steps down to 50 %. Expect it to settle near
+100 % when the inertia ratio (C00.06) is right. **A result far from 100 %
+usually means the inertia ratio is wrong**: fix that, don't chase it with FF.
+The July presets had torque FF at 120–125 % on X/Y and 200 % on Z, which
+suggests Z's inertia ratio is low, or that FF is covering for gravity.
+
+### Multi-position verify
+
+A ball screw isn't the same everywhere along its length. Near the far end the unsupported
+length is longest, so the first screw mode is lowest, and a tight spot
+or a lube patch changes friction. `--verify-at` re-runs the verify move at the
+offsets you give and reverts if any of them fails. A good set for X is the
+start ± a third of the travel. On Z, start low and use positive offsets only.
 
 ---
 
