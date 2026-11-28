@@ -10,7 +10,13 @@ loadrt [EMCMOT]EMCMOT servo_period_nsec=[EMCMOT]SERVO_PERIOD num_joints=[KINS]JO
 # =========================================================
 # lcec_conf is loaded in ethercat_loadusr.hal (# NOTWOPASS, first HALFILE in ini).
 loadrt lcec
+# DRIVE-HOMING: cia402 must be the one from linuxcnc-ethercat >= 1.49.0 (in-tree C port with
+# position scaling, mode-6 handshake and stale-homed protection), not the old halcompile'd
+# hal-cia402 .comp. Install: scripts/install-drive-homing.sh. Drive homing itself runs in
+# [EMCMOT]HOMEMOD = cia402_homecomp (github.com/linuxcnc-ethercat/cia402_homecomp).
 loadrt cia402 count=4
+# DRIVE-HOMING: conv_*/mult2.0-3/div2.0-3 no longer scale position (cia402 does). Kept loaded and
+# un-addf'd so the instance numbers used by custom.hal / coolant.hal / the pendant don't shift.
 loadrt conv_real_sint count=4
 loadrt conv_sint_real count=4
 loadrt conv_uint_real count=1
@@ -24,7 +30,8 @@ loadrt and2 count=12
 loadrt debounce cfg=1,3
 loadrt oneshot count=2
 loadrt flipflop count=2
-loadrt or2 count=6
+# DRIVE-HOMING: or2.6/7 = shared home bus guard (section 6). REVERT: count=6
+loadrt or2 count=8
 loadrt near count=3
 loadrt comp count=1
 loadrt constant names=probe-tool-num
@@ -41,15 +48,9 @@ addf cia402.2.read-all servo-thread
 addf cia402.3.read-all servo-thread
 addf laser-flute-hold servo-thread
 
-# Convert Feedback & Read Inputs
-addf conv-sint-real.0 servo-thread
-addf conv-sint-real.1 servo-thread
-addf conv-sint-real.2 servo-thread
-addf conv-sint-real.3 servo-thread
-addf div2.0 servo-thread
-addf div2.1 servo-thread
-addf div2.2 servo-thread
-addf div2.3 servo-thread
+# Read Inputs
+# DRIVE-HOMING: position feedback is scaled by cia402.N.read-all (pos-scale).
+# REVERT: addf conv-sint-real.0-3 and div2.0-3 here.
 addf and2.0 servo-thread
 addf and2.1 servo-thread
 addf and2.2 servo-thread
@@ -86,6 +87,9 @@ addf or2.2 servo-thread
 addf or2.4 servo-thread
 addf flipflop.0 servo-thread
 addf flipflop.1 servo-thread
+# DRIVE-HOMING: guard must run after the flipflops and before motion. REVERT: delete both.
+addf or2.6 servo-thread
+addf or2.7 servo-thread
 setp debounce.0.delay 5
 setp debounce.1.delay 8
 setp oneshot.0.width 0.05
@@ -111,15 +115,8 @@ addf ilowpass.3 servo-thread
 addf motion-command-handler servo-thread
 addf motion-controller servo-thread
 
-# Convert Command (Inches -> Counts)
-addf mult2.0 servo-thread
-addf mult2.1 servo-thread
-addf mult2.2 servo-thread
-addf mult2.3 servo-thread
-addf conv-real-sint.0 servo-thread
-addf conv-real-sint.1 servo-thread
-addf conv-real-sint.2 servo-thread
-addf conv-real-sint.3 servo-thread
+# DRIVE-HOMING: position command is scaled by cia402.N.write-all (pos-scale).
+# REVERT: addf mult2.0-3 and conv-real-sint.0-3 here.
 
 # Write to Drives
 addf cia402.0.write-all servo-thread
@@ -135,70 +132,174 @@ initf lcec.activate servo-thread
 # 4. HARDWARE PIN ROUTING & STATE MACHINES
 # =========================================================
 
+# DRIVE-HOMING START (branch dev-drive-homing, docs/DRIVE_HOMING.md)
+# Each joint: cia402 (lcec >= 1.49) owns controlword, modes of operation (6060/6061), position
+# scaling and the drive's homing handshake. cia402_homecomp ([EMCMOT]HOMEMOD) owns LinuxCNC's
+# homing: it requests drive homing through cia402.N.home, presents the command as feedback while
+# the drive moves on its own, and re-syncs LinuxCNC to the drive at the end or on any abort.
+# auto-fault-reset 0 keeps the old behaviour (the old hal-cia402 defaulted to 0; lcec's is 1):
+# a drive fault is NOT cleared automatically by the next Machine On.
+# REVERT (switch homing, old scaling): check out dev-jerk-testing.
 # --- X AXIS (Slave 0) ---
-setp mult2.0.in1 [JOINT_0]SCALE
-net x-pos-float-cmd joint.0.motor-pos-cmd => mult2.0.in0
-net x-pos-scaled-cmd mult2.0.out => conv-real-sint.0.in
-net x-pos-s32-cmd   conv-real-sint.0.out  => lcec.0.0.pos-cmd
+setp cia402.0.pos-scale        [JOINT_0]SCALE
+setp cia402.0.auto-fault-reset 0
+net x-pos-s32-fb       lcec.0.0.pos-fb             => cia402.0.drv-actual-position
+net x-pos-s32-cmd      cia402.0.drv-target-position => lcec.0.0.pos-cmd
+net x-pos-float-cmd    joint.0.motor-pos-cmd        => cia402.0.pos-cmd joint.0.cia-pos-cmd
+net x-vel-cmd          joint.0.vel-cmd              => cia402.0.velocity-cmd joint.0.cia-velocity-cmd
+net x-pos-float-fb-drv cia402.0.pos-fb              => joint.0.cia-pos-fb-in
+net x-pos-float-fb     joint.0.cia-pos-fb-out       => joint.0.motor-pos-fb
 
-setp div2.0.in1 [JOINT_0]SCALE
-net x-pos-s32-fb    lcec.0.0.pos-fb       => conv-sint-real.0.in
-net x-pos-float-fb-raw conv-sint-real.0.out => div2.0.in0
-net x-pos-float-fb  div2.0.out            => joint.0.motor-pos-fb
-
-net x-status-word   lcec.0.0.status-word  => cia402.0.statusword
-net x-ctrl-word     cia402.0.controlword  => lcec.0.0.ctrl-word
-net x-amp-enable    joint.0.amp-enable-out => cia402.0.enable
+net x-status-word      lcec.0.0.status-word         => cia402.0.statusword
+net x-ctrl-word        cia402.0.controlword         => lcec.0.0.ctrl-word
+net x-opmode           cia402.0.opmode              => lcec.0.0.opmode
+net x-opmode-disp      lcec.0.0.opmode-display      => cia402.0.opmode-display joint.0.cia-opmode-display
+net x-amp-enable-cmd   joint.0.amp-enable-out       => joint.0.cia-enable-in
+net x-amp-enable       joint.0.cia-enable-out       => cia402.0.enable
 # If the machine faults at enable with no drive alarm, comment these four drv-fault nets out.
-net x-amp-fault     cia402.0.drv-fault => joint.0.amp-fault-in
+net x-amp-fault        cia402.0.drv-fault           => joint.0.amp-fault-in
+
+net x-home             joint.0.cia-home            <=> cia402.0.home
+net x-stat-homed       cia402.0.stat-homed          => joint.0.cia-stat-homed
+net x-stat-homing      cia402.0.stat-homing         => joint.0.cia-stat-homing
+net x-stat-home-err    cia402.0.stat-homing-error   => joint.0.cia-stat-homing-error
+net x-stat-fault       cia402.0.stat-fault          => joint.0.cia-stat-fault
+net x-stat-op-en       cia402.0.stat-op-enabled     => joint.0.cia-stat-op-enabled
+# 1 = the drive homes this joint, 0 = LinuxCNC switch homing. TRAP: with 0 here AND
+# HOME_SEARCH_VEL = HOME_LATCH_VEL = 0 in the INI, the joint is marked homed WHERE IT STANDS.
+# Check joint.0.is-custom-homing against the INI before homing (test H1).
+setp joint.0.request-custom-homing [JOINT_0]DRIVE_HOME_ENABLE
+setp joint.0.cia-timeout-ms      [JOINT_0]DRIVE_HOME_TIMEOUT_MS
+# Drive-side homing settings, sent every cycle over the RxPDO (see ethercat-conf.xml)
+setp lcec.0.0.home-method      [JOINT_0]DRIVE_HOME_METHOD
+setp lcec.0.0.home-speed-fast  [JOINT_0]DRIVE_HOME_SPEED_FAST
+setp lcec.0.0.home-speed-slow  [JOINT_0]DRIVE_HOME_SPEED_SLOW
+setp lcec.0.0.home-accel       [JOINT_0]DRIVE_HOME_ACCEL
+setp lcec.0.0.home-offset      0
+setp lcec.0.0.home-calc-method 0
 
 # --- Y AXIS (Slave 1) ---
-setp mult2.1.in1 [JOINT_1]SCALE
-net y-pos-float-cmd joint.1.motor-pos-cmd => mult2.1.in0
-net y-pos-scaled-cmd mult2.1.out => conv-real-sint.1.in
-net y-pos-s32-cmd   conv-real-sint.1.out  => lcec.0.1.pos-cmd
+setp cia402.1.pos-scale        [JOINT_1]SCALE
+setp cia402.1.auto-fault-reset 0
+net y-pos-s32-fb       lcec.0.1.pos-fb             => cia402.1.drv-actual-position
+net y-pos-s32-cmd      cia402.1.drv-target-position => lcec.0.1.pos-cmd
+net y-pos-float-cmd    joint.1.motor-pos-cmd        => cia402.1.pos-cmd joint.1.cia-pos-cmd
+net y-vel-cmd          joint.1.vel-cmd              => cia402.1.velocity-cmd joint.1.cia-velocity-cmd
+net y-pos-float-fb-drv cia402.1.pos-fb              => joint.1.cia-pos-fb-in
+net y-pos-float-fb     joint.1.cia-pos-fb-out       => joint.1.motor-pos-fb
 
-setp div2.1.in1 [JOINT_1]SCALE
-net y-pos-s32-fb    lcec.0.1.pos-fb       => conv-sint-real.1.in
-net y-pos-float-fb-raw conv-sint-real.1.out => div2.1.in0
-net y-pos-float-fb  div2.1.out            => joint.1.motor-pos-fb
+net y-status-word      lcec.0.1.status-word         => cia402.1.statusword
+net y-ctrl-word        cia402.1.controlword         => lcec.0.1.ctrl-word
+net y-opmode           cia402.1.opmode              => lcec.0.1.opmode
+net y-opmode-disp      lcec.0.1.opmode-display      => cia402.1.opmode-display joint.1.cia-opmode-display
+net y-amp-enable-cmd   joint.1.amp-enable-out       => joint.1.cia-enable-in
+net y-amp-enable       joint.1.cia-enable-out       => cia402.1.enable
+# If the machine faults at enable with no drive alarm, comment these four drv-fault nets out.
+net y-amp-fault        cia402.1.drv-fault           => joint.1.amp-fault-in
 
-net y-status-word   lcec.0.1.status-word  => cia402.1.statusword
-net y-ctrl-word     cia402.1.controlword  => lcec.0.1.ctrl-word
-net y-amp-enable    joint.1.amp-enable-out => cia402.1.enable
-net y-amp-fault     cia402.1.drv-fault => joint.1.amp-fault-in
+net y-home             joint.1.cia-home            <=> cia402.1.home
+net y-stat-homed       cia402.1.stat-homed          => joint.1.cia-stat-homed
+net y-stat-homing      cia402.1.stat-homing         => joint.1.cia-stat-homing
+net y-stat-home-err    cia402.1.stat-homing-error   => joint.1.cia-stat-homing-error
+# Shared bus guard: abort a Y drive home that starts with the Y/Z home bus already closed
+# (flipflop.1, section 6). The module reports it as "drive fault"; the machine stays on.
+net y-stat-fault       cia402.1.stat-fault          => or2.6.in0
+net y-bus-at-start     flipflop.1.out               => or2.6.in1
+net y-home-abort       or2.6.out                    => joint.1.cia-stat-fault
+net y-stat-op-en       cia402.1.stat-op-enabled     => joint.1.cia-stat-op-enabled
+# 1 = the drive homes this joint, 0 = LinuxCNC switch homing. TRAP: with 0 here AND
+# HOME_SEARCH_VEL = HOME_LATCH_VEL = 0 in the INI, the joint is marked homed WHERE IT STANDS.
+# Check joint.1.is-custom-homing against the INI before homing (test H1).
+setp joint.1.request-custom-homing [JOINT_1]DRIVE_HOME_ENABLE
+setp joint.1.cia-timeout-ms      [JOINT_1]DRIVE_HOME_TIMEOUT_MS
+# Drive-side homing settings, sent every cycle over the RxPDO (see ethercat-conf.xml)
+setp lcec.0.1.home-method      [JOINT_1]DRIVE_HOME_METHOD
+setp lcec.0.1.home-speed-fast  [JOINT_1]DRIVE_HOME_SPEED_FAST
+setp lcec.0.1.home-speed-slow  [JOINT_1]DRIVE_HOME_SPEED_SLOW
+setp lcec.0.1.home-accel       [JOINT_1]DRIVE_HOME_ACCEL
+setp lcec.0.1.home-offset      0
+setp lcec.0.1.home-calc-method 0
 
 # --- Z AXIS (Slave 2) ---
-setp mult2.2.in1 [JOINT_2]SCALE
-net z-pos-float-cmd joint.2.motor-pos-cmd => mult2.2.in0
-net z-pos-scaled-cmd mult2.2.out => conv-real-sint.2.in
-net z-pos-s32-cmd   conv-real-sint.2.out  => lcec.0.2.pos-cmd
+setp cia402.2.pos-scale        [JOINT_2]SCALE
+setp cia402.2.auto-fault-reset 0
+net z-pos-s32-fb       lcec.0.2.pos-fb             => cia402.2.drv-actual-position
+net z-pos-s32-cmd      cia402.2.drv-target-position => lcec.0.2.pos-cmd
+net z-pos-float-cmd    joint.2.motor-pos-cmd        => cia402.2.pos-cmd joint.2.cia-pos-cmd
+net z-vel-cmd          joint.2.vel-cmd              => cia402.2.velocity-cmd joint.2.cia-velocity-cmd
+net z-pos-float-fb-drv cia402.2.pos-fb              => joint.2.cia-pos-fb-in
+net z-pos-float-fb     joint.2.cia-pos-fb-out       => joint.2.motor-pos-fb
 
-setp div2.2.in1 [JOINT_2]SCALE
-net z-pos-s32-fb    lcec.0.2.pos-fb       => conv-sint-real.2.in
-net z-pos-float-fb-raw conv-sint-real.2.out => div2.2.in0
-net z-pos-float-fb  div2.2.out            => joint.2.motor-pos-fb
+net z-status-word      lcec.0.2.status-word         => cia402.2.statusword
+net z-ctrl-word        cia402.2.controlword         => lcec.0.2.ctrl-word
+net z-opmode           cia402.2.opmode              => lcec.0.2.opmode
+net z-opmode-disp      lcec.0.2.opmode-display      => cia402.2.opmode-display joint.2.cia-opmode-display
+net z-amp-enable-cmd   joint.2.amp-enable-out       => joint.2.cia-enable-in
+net z-amp-enable       joint.2.cia-enable-out       => cia402.2.enable
+# If the machine faults at enable with no drive alarm, comment these four drv-fault nets out.
+net z-amp-fault        cia402.2.drv-fault           => joint.2.amp-fault-in
 
-net z-status-word   lcec.0.2.status-word  => cia402.2.statusword
-net z-ctrl-word     cia402.2.controlword  => lcec.0.2.ctrl-word
-net z-amp-enable    joint.2.amp-enable-out => cia402.2.enable
-net z-amp-fault     cia402.2.drv-fault => joint.2.amp-fault-in
+net z-home             joint.2.cia-home            <=> cia402.2.home
+net z-stat-homed       cia402.2.stat-homed          => joint.2.cia-stat-homed
+net z-stat-homing      cia402.2.stat-homing         => joint.2.cia-stat-homing
+net z-stat-home-err    cia402.2.stat-homing-error   => joint.2.cia-stat-homing-error
+# Shared bus guard, as on Y (flipflop.0).
+net z-stat-fault       cia402.2.stat-fault          => or2.7.in0
+net z-bus-at-start     flipflop.0.out               => or2.7.in1
+net z-home-abort       or2.7.out                    => joint.2.cia-stat-fault
+net z-stat-op-en       cia402.2.stat-op-enabled     => joint.2.cia-stat-op-enabled
+# 1 = the drive homes this joint, 0 = LinuxCNC switch homing. TRAP: with 0 here AND
+# HOME_SEARCH_VEL = HOME_LATCH_VEL = 0 in the INI, the joint is marked homed WHERE IT STANDS.
+# Check joint.2.is-custom-homing against the INI before homing (test H1).
+setp joint.2.request-custom-homing [JOINT_2]DRIVE_HOME_ENABLE
+setp joint.2.cia-timeout-ms      [JOINT_2]DRIVE_HOME_TIMEOUT_MS
+# Drive-side homing settings, sent every cycle over the RxPDO (see ethercat-conf.xml)
+setp lcec.0.2.home-method      [JOINT_2]DRIVE_HOME_METHOD
+setp lcec.0.2.home-speed-fast  [JOINT_2]DRIVE_HOME_SPEED_FAST
+setp lcec.0.2.home-speed-slow  [JOINT_2]DRIVE_HOME_SPEED_SLOW
+setp lcec.0.2.home-accel       [JOINT_2]DRIVE_HOME_ACCEL
+setp lcec.0.2.home-offset      0
+setp lcec.0.2.home-calc-method 0
 
 # --- A AXIS (Slave 3) ---
-setp mult2.3.in1 [JOINT_3]SCALE
-net a-pos-float-cmd joint.3.motor-pos-cmd => mult2.3.in0
-net a-pos-scaled-cmd mult2.3.out => conv-real-sint.3.in
-net a-pos-s32-cmd   conv-real-sint.3.out  => lcec.0.3.pos-cmd
+setp cia402.3.pos-scale        [JOINT_3]SCALE
+setp cia402.3.auto-fault-reset 0
+net a-pos-s32-fb       lcec.0.3.pos-fb             => cia402.3.drv-actual-position
+net a-pos-s32-cmd      cia402.3.drv-target-position => lcec.0.3.pos-cmd
+net a-pos-float-cmd    joint.3.motor-pos-cmd        => cia402.3.pos-cmd joint.3.cia-pos-cmd
+net a-vel-cmd          joint.3.vel-cmd              => cia402.3.velocity-cmd joint.3.cia-velocity-cmd
+net a-pos-float-fb-drv cia402.3.pos-fb              => joint.3.cia-pos-fb-in
+net a-pos-float-fb     joint.3.cia-pos-fb-out       => joint.3.motor-pos-fb
 
-setp div2.3.in1 [JOINT_3]SCALE
-net a-pos-s32-fb    lcec.0.3.pos-fb       => conv-sint-real.3.in
-net a-pos-float-fb-raw conv-sint-real.3.out => div2.3.in0
-net a-pos-float-fb  div2.3.out            => joint.3.motor-pos-fb
+net a-status-word      lcec.0.3.status-word         => cia402.3.statusword
+net a-ctrl-word        cia402.3.controlword         => lcec.0.3.ctrl-word
+net a-opmode           cia402.3.opmode              => lcec.0.3.opmode
+net a-opmode-disp      lcec.0.3.opmode-display      => cia402.3.opmode-display joint.3.cia-opmode-display
+net a-amp-enable-cmd   joint.3.amp-enable-out       => joint.3.cia-enable-in
+net a-amp-enable       joint.3.cia-enable-out       => cia402.3.enable
+# If the machine faults at enable with no drive alarm, comment these four drv-fault nets out.
+net a-amp-fault        cia402.3.drv-fault           => joint.3.amp-fault-in
 
-net a-status-word   lcec.0.3.status-word  => cia402.3.statusword
-net a-ctrl-word     cia402.3.controlword  => lcec.0.3.ctrl-word
-net a-amp-enable    joint.3.amp-enable-out => cia402.3.enable
-net a-amp-fault     cia402.3.drv-fault => joint.3.amp-fault-in
+net a-home             joint.3.cia-home            <=> cia402.3.home
+net a-stat-homed       cia402.3.stat-homed          => joint.3.cia-stat-homed
+net a-stat-homing      cia402.3.stat-homing         => joint.3.cia-stat-homing
+net a-stat-home-err    cia402.3.stat-homing-error   => joint.3.cia-stat-homing-error
+net a-stat-fault       cia402.3.stat-fault          => joint.3.cia-stat-fault
+net a-stat-op-en       cia402.3.stat-op-enabled     => joint.3.cia-stat-op-enabled
+# 1 = the drive homes this joint, 0 = LinuxCNC switch homing. TRAP: with 0 here AND
+# HOME_SEARCH_VEL = HOME_LATCH_VEL = 0 in the INI, the joint is marked homed WHERE IT STANDS.
+# Check joint.3.is-custom-homing against the INI before homing (test H1).
+setp joint.3.request-custom-homing [JOINT_3]DRIVE_HOME_ENABLE
+setp joint.3.cia-timeout-ms      [JOINT_3]DRIVE_HOME_TIMEOUT_MS
+# Drive-side homing settings, sent every cycle over the RxPDO (see ethercat-conf.xml)
+setp lcec.0.3.home-method      [JOINT_3]DRIVE_HOME_METHOD
+setp lcec.0.3.home-speed-fast  [JOINT_3]DRIVE_HOME_SPEED_FAST
+setp lcec.0.3.home-speed-slow  [JOINT_3]DRIVE_HOME_SPEED_SLOW
+setp lcec.0.3.home-accel       [JOINT_3]DRIVE_HOME_ACCEL
+setp lcec.0.3.home-offset      0
+setp lcec.0.3.home-calc-method 0
+
+# DRIVE-HOMING END
 
 # =========================================================
 # 5. TOOL PREP / MANUAL TOOL CHANGE (Probe Basic postgui)
@@ -220,7 +321,11 @@ net tool-number iocontrol.0.tool-prep-number
 #   Z home  lcec.0.1.di-4 (also 0.0.di-3/4 + 0.1.di-3 — shorted together)
 #   Z- lim  gagged (no free DI) | Z+ lim none | A home/limits gagged
 # Y+Z home shorted is OK: home one axis at a time (HOME_SEQUENCE Z->X->Y).
-# If the shared bus is already closed at REF, ignore it until it has been
+# DRIVE-HOMING: with drive homing the DRIVE reads the bus, and it can't ignore anything. A home
+# that starts with the bus closed would send the drive the wrong way looking for the switch to
+# open (Y toward +, Z DOWN), so the same flipflops abort it instead (or2.6/or2.7, section 4):
+# jog whichever of Y/Z is on its switch off it, then home again.
+# Switch homing (DRIVE_HOME_ENABLE = 0): if the shared bus is already closed at REF, ignore it until it has been
 # seen open, then latch the next close. Stops Y latching in place and Z
 # backing off down. not.9 is laser mux; not.3/10 used by that ignore logic.
 

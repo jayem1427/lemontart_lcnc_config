@@ -3,7 +3,9 @@
 
     <slave idx="0" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
-      <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <!-- DRIVE-HOMING START: 6060 is now a PDO (cia402 sets 8 = CSP or 6 = homing).
+           REVERT: restore <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+           DRIVE-HOMING END -->
       <!-- 6065: position deviation limit (encoder counts). 6554 = 0.5 mm @ 13107.2 counts/mm -->
       <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="9A 19 00 00"/></sdoConfig>
       <!-- 6066: ms deviation must persist before Er47.0 (250 ms) -->
@@ -16,7 +18,14 @@
       <!-- C01.10 speed feedback filter: 3 = speed observer -->
       <sdoConfig idx="2001" subIdx="11"><sdoDataRaw data="03 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="01"><sdoDataRaw data="00 00"/></sdoConfig>
-      <sdoConfig idx="2004" subIdx="05"><sdoDataRaw data="00 00"/></sdoConfig>
+      <!-- DRIVE-HOMING START: DI2 (X home switch) gets drive function 5 = home switch, so the
+           drive can home on it (0x6098 method 5). C04.05 logic: 1 = active high. VERIFY in test H1
+           (0x60FD bit 2 must be 1 ON the switch and 0 off it) before any drive home; if it is
+           inverted, use "00 00". lcec.0.0.di-2 keeps reading the raw input.
+           The A6 stores SDO writes: REVERT = both lines back to data="00 00", not deletion. -->
+      <sdoConfig idx="2004" subIdx="05"><sdoDataRaw data="05 00"/></sdoConfig>
+      <sdoConfig idx="2004" subIdx="06"><sdoDataRaw data="01 00"/></sdoConfig>
+      <!-- DRIVE-HOMING END -->
       <sdoConfig idx="2004" subIdx="09"><sdoDataRaw data="00 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="0d"><sdoDataRaw data="00 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="11"><sdoDataRaw data="00 00"/></sdoConfig>
@@ -24,11 +33,23 @@
         <pdo idx="1600">
           <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word" halType="u32"/>
           <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd" halType="s32"/>
+          <!-- DRIVE-HOMING START (REVERT: delete these entries) -->
+          <pdoEntry idx="6060" subIdx="00" bitLen="8" halPin="opmode" halType="s32"/>
+          <pdoEntry idx="6098" subIdx="00" bitLen="8" halPin="home-method" halType="s32"/>
+          <pdoEntry idx="6099" subIdx="01" bitLen="32" halPin="home-speed-fast" halType="u32"/>
+          <pdoEntry idx="6099" subIdx="02" bitLen="32" halPin="home-speed-slow" halType="u32"/>
+          <pdoEntry idx="609a" subIdx="00" bitLen="32" halPin="home-accel" halType="u32"/>
+          <pdoEntry idx="607c" subIdx="00" bitLen="32" halPin="home-offset" halType="s32"/>
+          <pdoEntry idx="60e6" subIdx="00" bitLen="8" halPin="home-calc-method" halType="u32"/>
+          <!-- DRIVE-HOMING END -->
         </pdo>
       </syncManager>
       <syncManager idx="3" dir="in">
         <pdo idx="1a00">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
+          <!-- DRIVE-HOMING START (REVERT: delete) -->
+          <pdoEntry idx="6061" subIdx="00" bitLen="8" halPin="opmode-display" halType="s32"/>
+          <!-- DRIVE-HOMING END -->
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb" halType="s32"/>
           <pdoEntry idx="606c" subIdx="00" bitLen="32" halPin="vel-fb" halType="s32"/>
           <pdoEntry idx="6077" subIdx="00" bitLen="16" halPin="torque-fb" halType="s32"/>
@@ -47,7 +68,9 @@
 
     <slave idx="1" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
-      <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <!-- DRIVE-HOMING START: 6060 is now a PDO (cia402 sets 8 = CSP or 6 = homing).
+           REVERT: restore <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+           DRIVE-HOMING END -->
       <!-- 6065: position deviation limit (encoder counts). 6554 = 0.5 mm @ 13107.2 counts/mm -->
       <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="9A 19 00 00"/></sdoConfig>
       <!-- 6066: ms deviation must persist before Er47.0 (250 ms) -->
@@ -62,17 +85,32 @@
       <sdoConfig idx="2004" subIdx="01"><sdoDataRaw data="00 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="05"><sdoDataRaw data="00 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="09"><sdoDataRaw data="00 00"/></sdoConfig>
+      <!-- DRIVE-HOMING stage 2 (test H5, Y): DI4 = shared Y/Z home bus. To let the Y drive home on
+           it, change the next line to data="05 00" and add
+           <sdoConfig idx="2004" subIdx="0e"><sdoDataRaw data="01 00"/></sdoConfig> (logic as found for X). -->
       <sdoConfig idx="2004" subIdx="0d"><sdoDataRaw data="00 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="11"><sdoDataRaw data="00 00"/></sdoConfig>
       <syncManager idx="2" dir="out">
         <pdo idx="1600">
           <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word" halType="u32"/>
           <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd" halType="s32"/>
+          <!-- DRIVE-HOMING START (REVERT: delete these entries) -->
+          <pdoEntry idx="6060" subIdx="00" bitLen="8" halPin="opmode" halType="s32"/>
+          <pdoEntry idx="6098" subIdx="00" bitLen="8" halPin="home-method" halType="s32"/>
+          <pdoEntry idx="6099" subIdx="01" bitLen="32" halPin="home-speed-fast" halType="u32"/>
+          <pdoEntry idx="6099" subIdx="02" bitLen="32" halPin="home-speed-slow" halType="u32"/>
+          <pdoEntry idx="609a" subIdx="00" bitLen="32" halPin="home-accel" halType="u32"/>
+          <pdoEntry idx="607c" subIdx="00" bitLen="32" halPin="home-offset" halType="s32"/>
+          <pdoEntry idx="60e6" subIdx="00" bitLen="8" halPin="home-calc-method" halType="u32"/>
+          <!-- DRIVE-HOMING END -->
         </pdo>
       </syncManager>
       <syncManager idx="3" dir="in">
         <pdo idx="1a00">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
+          <!-- DRIVE-HOMING START (REVERT: delete) -->
+          <pdoEntry idx="6061" subIdx="00" bitLen="8" halPin="opmode-display" halType="s32"/>
+          <!-- DRIVE-HOMING END -->
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb" halType="s32"/>
           <pdoEntry idx="606c" subIdx="00" bitLen="32" halPin="vel-fb" halType="s32"/>
           <pdoEntry idx="6077" subIdx="00" bitLen="16" halPin="torque-fb" halType="s32"/>
@@ -91,7 +129,9 @@
 
     <slave idx="2" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
-      <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <!-- DRIVE-HOMING START: 6060 is now a PDO (cia402 sets 8 = CSP or 6 = homing).
+           REVERT: restore <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+           DRIVE-HOMING END -->
       <!-- 6065: position deviation limit (encoder counts). 6554 = 0.5 mm @ 13107.2 counts/mm -->
       <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="9A 19 00 00"/></sdoConfig>
       <!-- 6066: ms deviation must persist before Er47.0 (250 ms) -->
@@ -105,6 +145,9 @@
       <sdoConfig idx="2001" subIdx="11"><sdoDataRaw data="03 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="01"><sdoDataRaw data="00 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="05"><sdoDataRaw data="00 00"/></sdoConfig>
+      <!-- DRIVE-HOMING stage 3 (test H6, Z): after the jumper from the shared home bus to this
+           drive's DI3 (CN1 pin 8), change the next line to data="05 00" and add
+           <sdoConfig idx="2004" subIdx="0a"><sdoDataRaw data="01 00"/></sdoConfig>. -->
       <sdoConfig idx="2004" subIdx="09"><sdoDataRaw data="00 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="0d"><sdoDataRaw data="00 00"/></sdoConfig>
       <sdoConfig idx="2004" subIdx="11"><sdoDataRaw data="00 00"/></sdoConfig>
@@ -112,11 +155,23 @@
         <pdo idx="1600">
           <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word" halType="u32"/>
           <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd" halType="s32"/>
+          <!-- DRIVE-HOMING START (REVERT: delete these entries) -->
+          <pdoEntry idx="6060" subIdx="00" bitLen="8" halPin="opmode" halType="s32"/>
+          <pdoEntry idx="6098" subIdx="00" bitLen="8" halPin="home-method" halType="s32"/>
+          <pdoEntry idx="6099" subIdx="01" bitLen="32" halPin="home-speed-fast" halType="u32"/>
+          <pdoEntry idx="6099" subIdx="02" bitLen="32" halPin="home-speed-slow" halType="u32"/>
+          <pdoEntry idx="609a" subIdx="00" bitLen="32" halPin="home-accel" halType="u32"/>
+          <pdoEntry idx="607c" subIdx="00" bitLen="32" halPin="home-offset" halType="s32"/>
+          <pdoEntry idx="60e6" subIdx="00" bitLen="8" halPin="home-calc-method" halType="u32"/>
+          <!-- DRIVE-HOMING END -->
         </pdo>
       </syncManager>
       <syncManager idx="3" dir="in">
         <pdo idx="1a00">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
+          <!-- DRIVE-HOMING START (REVERT: delete) -->
+          <pdoEntry idx="6061" subIdx="00" bitLen="8" halPin="opmode-display" halType="s32"/>
+          <!-- DRIVE-HOMING END -->
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb" halType="s32"/>
           <pdoEntry idx="606c" subIdx="00" bitLen="32" halPin="vel-fb" halType="s32"/>
           <pdoEntry idx="6077" subIdx="00" bitLen="16" halPin="torque-fb" halType="s32"/>
@@ -135,7 +190,9 @@
 
     <slave idx="3" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
-      <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+      <!-- DRIVE-HOMING START: 6060 is now a PDO (cia402 sets 8 = CSP or 6 = homing).
+           REVERT: restore <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
+           DRIVE-HOMING END -->
       <!-- 6065: position deviation limit (encoder counts). REVERT: 3641 = 10 deg @ 364.09 counts/deg, widened 2026-11-27 while A is unconnected (was 182 = 0.5 deg, "B6 00 00 00") -->
       <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="39 0E 00 00"/></sdoConfig>
       <!-- 6066: ms deviation must persist before Er47.0 (250 ms) -->
@@ -151,11 +208,23 @@
         <pdo idx="1600">
           <pdoEntry idx="6040" subIdx="00" bitLen="16" halPin="ctrl-word" halType="u32"/>
           <pdoEntry idx="607a" subIdx="00" bitLen="32" halPin="pos-cmd" halType="s32"/>
+          <!-- DRIVE-HOMING START (REVERT: delete these entries) -->
+          <pdoEntry idx="6060" subIdx="00" bitLen="8" halPin="opmode" halType="s32"/>
+          <pdoEntry idx="6098" subIdx="00" bitLen="8" halPin="home-method" halType="s32"/>
+          <pdoEntry idx="6099" subIdx="01" bitLen="32" halPin="home-speed-fast" halType="u32"/>
+          <pdoEntry idx="6099" subIdx="02" bitLen="32" halPin="home-speed-slow" halType="u32"/>
+          <pdoEntry idx="609a" subIdx="00" bitLen="32" halPin="home-accel" halType="u32"/>
+          <pdoEntry idx="607c" subIdx="00" bitLen="32" halPin="home-offset" halType="s32"/>
+          <pdoEntry idx="60e6" subIdx="00" bitLen="8" halPin="home-calc-method" halType="u32"/>
+          <!-- DRIVE-HOMING END -->
         </pdo>
       </syncManager>
       <syncManager idx="3" dir="in">
         <pdo idx="1a00">
           <pdoEntry idx="6041" subIdx="00" bitLen="16" halPin="status-word" halType="u32"/>
+          <!-- DRIVE-HOMING START (REVERT: delete) -->
+          <pdoEntry idx="6061" subIdx="00" bitLen="8" halPin="opmode-display" halType="s32"/>
+          <!-- DRIVE-HOMING END -->
           <pdoEntry idx="6064" subIdx="00" bitLen="32" halPin="pos-fb" halType="s32"/>
           <pdoEntry idx="606c" subIdx="00" bitLen="32" halPin="vel-fb" halType="s32"/>
           <pdoEntry idx="6077" subIdx="00" bitLen="16" halPin="torque-fb" halType="s32"/>

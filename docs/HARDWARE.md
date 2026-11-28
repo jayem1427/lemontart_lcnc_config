@@ -63,7 +63,7 @@ The config that goes with it is [`ethercat-conf.xml`](../ethercat-conf.xml).
 |-------|-----------------|
 | Distributed clocks | `assignActivate="300"`, SYNC0 = 1 × cycle, shift 300 µs, 1 ms cycle. The master leads (**M2R**, `refClockSyncCycles="-1"`). With the reference clock leading (R2M) the machine shook violently on enable |
 | Mode | CSP, `0x6060 = 8` |
-| Digital inputs | Read raw from PDO `0x2040:05` (bits 0–4 = DI1–DI5). The drive's own input functions are cleared with `0x2004:01/05/09/0D/11 = 0`, so homes and limits are LinuxCNC's business only |
+| Digital inputs | Read raw from PDO `0x2040:05` (bits 0–4 = DI1–DI5). The drive's own input functions are cleared with `0x2004:01/05/09/0D/11 = 0`, so homes and limits are LinuxCNC's business only. **On this branch (`dev-drive-homing`) slave 0 DI2 has drive function 5 (home switch)** so the X drive can home on it; LinuxCNC still reads the raw bit |
 | Following error | The drive enforces `0x6065` (counts) and `0x6066` (ms): Er47.0, EtherCAT error code `0x8611`. Read the last error with `ethercat upload -p N -t uint16 0x603F 0` |
 | SDO writes persist | C13.10 (`0x2013:11`) = 1 on all four: **every SDO write is stored in EEPROM**. A "temporary" write is permanent unless you write the old value back |
 | Start-up SDOs | lcec writes them on every start, so loop gains (C00/C01) there overwrite your tuning each launch. Only mode, fault windows, input functions and the speed observer (`0x2001:11 = 3`) belong there |
@@ -71,7 +71,7 @@ The config that goes with it is [`ethercat-conf.xml`](../ethercat-conf.xml).
 | SDO types | The drive doesn't describe its object types, so `ethercat upload/download` needs `-t` |
 | Bus health counters | C13.04 `0x2013:05` sync loss, C13.09 `0x2013:0A` invalid frames, C13.12 `0x2013:13` IRQ loss (all read only) |
 | Not reachable | Drive-internal inertia identification (C07 / F30) isn't available over EtherCAT on this firmware |
-| Homing | Done by LinuxCNC on switches. `HOME_ABSOLUTE_ENCODER = 1` caused a runaway; don't use it. Drive-side homing is being worked on in branch `dev-drive-homing` (`docs/DRIVE_HOMING.md` there), not yet run on the machine |
+| Homing | **This branch:** X and A are homed by the drive (home switch, then encoder index; A index only); Y and Z are still homed by LinuxCNC on switches. Not yet run on the machine: `docs/DRIVE_HOMING.md`. `HOME_ABSOLUTE_ENCODER = 1` caused a runaway; don't use it |
 
 Tuning the gains over EtherCAT: [SERVO_TUNING.md](SERVO_TUNING.md). NIC driver
 and timing: [SETUP.md](SETUP.md#ethercat-driver-and-timing).

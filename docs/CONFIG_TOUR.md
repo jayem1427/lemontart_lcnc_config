@@ -93,6 +93,12 @@ is enough.
 
 ## Homing
 
+> **Branch `dev-drive-homing`:** the drives home themselves (home switch, then encoder index; X and A first;
+> A to its Z pulse). LinuxCNC starts and supervises it through the upstream
+> `cia402_homecomp` homing module (`[EMCMOT]HOMEMOD`) and lcec ≥ 1.49 `cia402`,
+> which also takes over position scaling. The table below is the switch homing on
+> `dev-jerk-testing`. See [DRIVE_HOMING.md](DRIVE_HOMING.md).
+
 | Setting | Value | Why |
 |---------|-------|-----|
 | Order | Z → X → Y → A (`HOME_SEQUENCE` 0/1/2/3) | Z clears first. Y and Z share a switch, so they can't home together |

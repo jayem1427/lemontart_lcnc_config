@@ -61,6 +61,14 @@ errors.
 | Y "homes" without moving | The shared Y/Z home switch was already closed. HAL's ignore-until-open logic handles this. Don't add `HOME_IS_SHARED` |
 | Y runs away on REF ALL | `HOME_ABSOLUTE_ENCODER = 1`. Never use it here |
 | Tool setter only works after pressing Z home | It's on a different input than HAL expects. Trip each sensor and watch `halcmd` |
+| `cia402_homecomp: joint N homing aborted: drive fault` (branch `dev-drive-homing`) | **No motion, Y or Z, right at the start:** the shared Y/Z home bus was already closed (HAL guard). Jog whichever of Y/Z sits on its switch off it and home again. **During the move:** the drive alarmed; read the panel code (Er47.0, or a C10.08 homing timeout) |
+| `cia402_homecomp: joint N homing aborted: drive reported homing error` | Statusword bit 13: unsupported method (panel ALF4.2), C10.08 timeout, or the switch was never found (is the DI function 5 set on that drive, and its polarity right? test H1.5). Run `scripts/drive_homing_d0.sh` |
+| A drive-homed axis starts **away** from its home switch | The drive sees the switch as active: polarity (`0x2004` logic, test H1.5), or on Y/Z the other axis is holding the shared bus. E-stop; do not wait for the timeout |
+| Home lands 10 mm off (one screw turn) | The index next to the switch edge is too close to it (`scripts/index_survey.py`, want 2–8 mm). Move the switch flag or re-clock the coupling |
+| A joint shows homed instantly without moving | `DRIVE_HOME_ENABLE = 0` with `HOME_SEARCH_VEL = HOME_LATCH_VEL = 0`: homed in place. Change the three together |
+| `cia402_homecomp: joint N homing aborted: timeout` | Took longer than `DRIVE_HOME_TIMEOUT_MS`. If `joint.N.cia-state` sat at 1, the drive never reported mode 6 in `0x6061` (check `lcec.0.N.opmode-display`). If it sat at 2, the A6 may never set statusword bit 12: log `lcec.0.N.status-word` ([DRIVE_HOMING.md](DRIVE_HOMING.md), H2) |
+| A joint shows homed instantly, without moving (branch `dev-drive-homing`) | `joint.N.request-custom-homing` isn't 1, so LinuxCNC's own homing (search/latch velocity 0) homed it in place. Check `halcmd show pin joint.N.is-custom-homing`. **Don't run anything; unhome and fix the HAL** |
+| `HOMEMOD cia402_homecomp not found` / `cannot load cia402_homecomp`, or `cia402.N.pos-scale` / `stat-homing` not found | Module not built for the LinuxCNC you launched, or lcec is older than 1.49. Run `scripts/install-drive-homing.sh` (stock and tpnext) |
 
 ## Probing and tool changes
 
