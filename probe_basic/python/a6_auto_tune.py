@@ -39,8 +39,10 @@ Safety model:
 - Moves are short relative MDI strokes with a watchdog that aborts motion if
   |drive FERR| crosses a fraction of the 6065 fault window.
 - Cancel or any error reverts every touched SDO to its baseline value.
-- Nothing touches LinuxCNC joint FERROR / INI limits, and nothing is stored
-  to drive EEPROM (RAM only, exactly like the APPLY button).
+- Nothing touches LinuxCNC joint FERROR / INI limits. Every SDO write is
+  stored to drive EEPROM by the drive itself (A6-EC C13.10 "EtherCAT parameter
+  storage" = 1, the factory default), exactly like the APPLY button; the
+  backup preset is the undo.
 """
 
 from __future__ import annotations
@@ -201,6 +203,11 @@ class OneClickConfig:
     # Baseline is measured this many times; the run-to-run spread sets the
     # smallest score change that counts as a real improvement.
     baseline_repeats: int = 3
+    # Unscored warm-up moves before the baseline repeats. The first move of a
+    # campaign can carry a start-up transient (Z 2026-11-27: 405 um / 198 %
+    # torque on baseline_1, then 49 um on the next two), which inflated the
+    # spread to 416 % and the improvement bar to 15 %. 0 = off.
+    baseline_warmup: int = 1
     noise_k: float = 2.0  # improvement must beat noise_k x spread (%)
     max_noise_threshold_pct: float = 15.0
     # Torque guard (% rated, 6077). A clipped torque hides instability.
@@ -224,6 +231,8 @@ class OneClickConfig:
     verify_offsets: Tuple[float, ...] = ()
     # Standstill noise gate at verify (needs realtime capture).
     rest_capture_s: float = 1.0
+    # Measured about the mean (AC rms): a vertical axis holds a steady
+    # gravity torque (Z ~12 %) that is not oscillation.
     rest_torque_rms_max_pct: float = 5.0
     rest_ferr_rms_max: float = 0.002  # axis units (2 um)
     # Hardware behaviour
@@ -2176,6 +2185,11 @@ class OneClickTuner:
         """Measure the baseline N times; spread sets the improvement bar."""
         cfg = self.cfg
         n = max(1, int(cfg.baseline_repeats))
+        for i in range(max(0, int(cfg.baseline_warmup))):
+            w = self._measure(f"warmup_{i + 1}")
+            self.journal.event(
+                "baseline", "warmup", f"warm-up move (not scored): {w.summary()}"
+            )
         ms = [self._measure("baseline" if n == 1 else f"baseline_{i + 1}")
               for i in range(n)]
         if any(m.unstable for m in ms):
@@ -2244,7 +2258,9 @@ class OneClickTuner:
         stats = {
             "ferr_rms": _rms(ferr),
             "ferr_peak": _peak(ferr),
-            "torque_rms_pct": _rms(tq),
+            # AC rms: steady holding torque (gravity on Z) is not hiss
+            "torque_rms_pct": _ac_rms(tq),
+            "torque_mean_pct": _mean(tq),
             "torque_peak_pct": _peak(tq),
             "n": float(len(ferr)),
         }
@@ -2252,7 +2268,8 @@ class OneClickTuner:
             "rest",
             "standstill",
             f"{label}: rest FERR rms {stats['ferr_rms'] * 1000:.2f} um, "
-            f"torque rms {stats['torque_rms_pct']:.2f}%",
+            f"torque rms {stats['torque_rms_pct']:.2f}% "
+            f"(about mean {stats['torque_mean_pct']:.1f}%)",
             **stats,
         )
         return stats
@@ -2599,6 +2616,20 @@ def _fmt(value: Any) -> str:
 def _peak(samples: List[float]) -> float:
     finite = [abs(v) for v in samples if v == v]
     return max(finite) if finite else 0.0
+
+
+def _mean(samples: List[float]) -> float:
+    finite = [v for v in samples if v == v]
+    return sum(finite) / len(finite) if finite else 0.0
+
+
+def _ac_rms(samples: List[float]) -> float:
+    """RMS about the mean (the DC holding torque removed)."""
+    finite = [v for v in samples if v == v]
+    if not finite:
+        return 0.0
+    m = sum(finite) / len(finite)
+    return math.sqrt(sum((v - m) ** 2 for v in finite) / len(finite))
 
 
 def _rms(samples: List[float]) -> float:

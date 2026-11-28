@@ -2702,7 +2702,7 @@ class UserTab(QWidget):
             f"speed / position gains and tightens the integral with an FFT "
             f"stability gate between steps (auto notch if a resonance shows), "
             f"then verifies. Worst case ~{est_min:.0f} min; usually much less."
-            f"\n\nSafety: writes are RAM-only via the normal APPLY path "
+            f"\n\nSafety: writes go through the normal APPLY path "
             f"(motors cycle OFF/ON per step); motion aborts if drive FERR "
             f"nears the 6065 window; CANCEL or any failure restores the "
             f"baseline. Everything is journaled under logs/tuning/one_click/."
@@ -2800,8 +2800,9 @@ class UserTab(QWidget):
             self,
             f"One-click tune {result.axis}: {status}",
             result.summary()
-            + "\n\nGains are RAM-only — store to drive EEPROM (vendor tool / "
-            "panel) if you want them to survive power loss."
+            + "\n\nThe drive stores every SDO write in EEPROM (C13.10 = 1), "
+            "so these gains survive a power cycle. To undo, LOAD the "
+            "pre_one_click_* preset and APPLY."
             + "\nJournal (keep it — it is how we learn from failures):\n"
             + str(result.journal_dir),
         )
@@ -3182,7 +3183,8 @@ class UserTab(QWidget):
             "Load defaults",
             "Fill Pending with built-in catalog defaults?\n\n"
             "APPLY after this will overwrite ALL 28 tuning SDOs on the drive "
-            "with those defaults (RAM only — not EEPROM).\n\n"
+            "with those defaults, and the drive stores them in EEPROM "
+            "(C13.10 = 1).\n\n"
             "Prefer the auto-read values unless you really want a factory-ish reset.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
@@ -3330,7 +3332,7 @@ class UserTab(QWidget):
             f"(unchanged / unread keys untouched):\n"
             f"{preview}\n\n"
             f"{cycle_note}\n\n"
-            "RAM only until you store EEPROM on the drive.\n"
+            "The drive stores the writes in EEPROM (C13.10 = 1).\n"
             "ethercat-conf.xml no longer overwrites C00/C01 on startup."
             f"{default_note}",
             QMessageBox.Yes | QMessageBox.No,

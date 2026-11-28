@@ -1,0 +1,1436 @@
+{
+ "axis": "Z",
+ "engine": "2.1",
+ "events": [
+  {
+   "t": 0.001,
+   "phase": "setup",
+   "kind": "config",
+   "message": "campaign configuration",
+   "data": {
+    "config": {
+     "axis": "Z",
+     "profile": "conservative",
+     "stimulus": {
+      "axis": "Z",
+      "stroke": 10.0,
+      "feed": 6000.0,
+      "cycles": 4,
+      "dwell_s": 0.25,
+      "settle_s": 0.5
+     },
+     "sample_hz": 1000.0,
+     "dry_run": false,
+     "speed_step_ratio": 1.15,
+     "speed_gain_max_hz": 120.0,
+     "speed_vs_filter_cap": 0.25,
+     "pos_step_ratio": 1.2,
+     "pos_to_speed_ratio": 2.0,
+     "pos_gain_max_rad_s": 250.0,
+     "integral_step_ratio": 0.7,
+     "integral_min_ms": 3.0,
+     "max_steps_per_phase": 6,
+     "max_stall_steps": 2,
+     "backoff_ratio": 0.75,
+     "rescue_max_steps": 3,
+     "margin_ratio": 0.5,
+     "baseline_repeats": 3,
+     "baseline_warmup": 1,
+     "noise_k": 2.0,
+     "max_noise_threshold_pct": 15.0,
+     "torque_guard_pct": 250.0,
+     "torque_guard_drive_ratio": 0.8,
+     "ms_max": 0.0,
+     "frf_nperseg": 256,
+     "ff_enabled": true,
+     "ff_step_ratio": 1.15,
+     "ff_min_pct": 50.0,
+     "ff_max_pct": 200.0,
+     "ff_improve_min_pct": 3.0,
+     "verify_offsets": [],
+     "rest_capture_s": 1.0,
+     "rest_torque_rms_max_pct": 5.0,
+     "rest_ferr_rms_max": 0.002,
+     "live_writes": false,
+     "allow_python_sampler": false,
+     "settle_ferr": 0.02,
+     "settle_hold_s": 0.3,
+     "settle_timeout_s": 5.0,
+     "improvement_min_pct": 4.0,
+     "integral_improve_min_pct": 0.5,
+     "integral_peak_guard_pct": 10.0,
+     "integral_skip_improved_pct": 0.0,
+     "keep_best_min_improve_pct": 1.0,
+     "verify_hf_margin": 0.12,
+     "hf_fail": 0.35,
+     "ring_fail": 0.85,
+     "min_prominence_ratio": 4.0,
+     "min_resonance_amplitude": 0.001,
+     "resonance_vs_rms": 0.1,
+     "gate_min_hz_factor": 6.0,
+     "gate_min_hz_floor": 25.0,
+     "gate_min_hz_cap": 120.0,
+     "min_meaningful_rms": 0.0005,
+     "ferr_abort_ratio": 0.8,
+     "ferr_abort_fallback": 0.8,
+     "allow_notch": true,
+     "notch_width_pct": 5.0,
+     "notch_depth_pct": 10.0,
+     "save_presets": true
+    }
+   }
+  },
+  {
+   "t": 0.017,
+   "phase": "preflight",
+   "kind": "machine",
+   "message": "machine ready",
+   "data": {
+    "homed": true,
+    "position": -39.69486999511719,
+    "min_limit": -203.2,
+    "max_limit": 400.0,
+    "feed_override": 1.0,
+    "opmode": null
+   }
+  },
+  {
+   "t": 0.062,
+   "phase": "preflight",
+   "kind": "info",
+   "message": "drive torque limit 0x6072 = 300% -> guard 240%"
+  },
+  {
+   "t": 0.064,
+   "phase": "preflight",
+   "kind": "stimulus",
+   "message": "stimulus direction +10 mm",
+   "data": {
+    "direction": 1.0,
+    "spec": "4x 0<->10 mm @ F6000 (~3.3s per measurement)"
+   }
+  },
+  {
+   "t": 1.743,
+   "phase": "baseline",
+   "kind": "warning",
+   "message": "2 SDO reads failed (they will never be written)",
+   "data": {
+    "failed": [
+     "adaptive_notch_freq_hz",
+     "adaptive_notch_amp_pct"
+    ]
+   }
+  },
+  {
+   "t": 1.749,
+   "phase": "baseline",
+   "kind": "params",
+   "message": "baseline snapshot (44 keys)",
+   "data": {
+    "values": {
+     "adaptive_notch": 0.0,
+     "adaptive_notch_times": 0.0,
+     "damping_pct": 0.0,
+     "following_error": 0.500030517578125,
+     "following_error_time_ms": 250.0,
+     "gain_sw_mode": 0.0,
+     "gain_sw_thresh": 10.0,
+     "gain_sw_time_ms": 5.0,
+     "gain_sw_width": 10.0,
+     "inertia_ratio_pct": 150.0,
+     "integral_2_ms": 2.0,
+     "integral_ms": 3.0,
+     "manual_mode": 0.0,
+     "notch1_depth_pct": 100.0,
+     "notch1_freq_hz": 8000.0,
+     "notch1_width_pct": 0.0,
+     "notch2_depth_pct": 100.0,
+     "notch2_freq_hz": 8000.0,
+     "notch2_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch4_depth_pct": 100.0,
+     "notch4_freq_hz": 8000.0,
+     "notch4_width_pct": 0.0,
+     "notch5_depth_pct": 100.0,
+     "notch5_freq_hz": 8000.0,
+     "notch5_width_pct": 0.0,
+     "pdff_pct": 100.0,
+     "pos_gain_2_rad_s": 144.0,
+     "pos_gain_rad_s": 50.0,
+     "speed_fb_filter": 3.0,
+     "speed_fb_lpf_hz": 8000.0,
+     "speed_ff_filter_hz": 318.0,
+     "speed_ff_pct": 101.0,
+     "speed_ff_source": 1.0,
+     "speed_gain_2_hz": 30.0,
+     "speed_gain_hz": 26.0,
+     "stiffness_level": 14.0,
+     "torque_ff_filter_hz": 318.0,
+     "torque_ff_pct": 200.0,
+     "torque_ff_source": 1.0,
+     "torque_filter_2_hz": 420.0,
+     "torque_filter_hz": 150.0
+    },
+    "abort_ferr": 0.4000244140625
+   }
+  },
+  {
+   "t": 1.752,
+   "phase": "baseline",
+   "kind": "backup",
+   "message": "baseline preset saved: pre_one_click_20261127_234616",
+   "data": {
+    "path": "/home/jon/linuxcnc/configs/ethercat_mill/config/tuning/presets/Z/pre_one_click_20261127_234616.json"
+   }
+  },
+  {
+   "t": 3.841,
+   "phase": "baseline",
+   "kind": "ferr-window",
+   "message": "6065 set to 1 mm for tuning (was 0.500031); production window is 0.5",
+   "data": {
+    "prior": 0.500030517578125,
+    "tuning": 1.0,
+    "abort_ferr": 0.8
+   }
+  },
+  {
+   "t": 8.576,
+   "phase": "measure",
+   "kind": "measurement",
+   "message": "warmup_1: peak=0.35202 rms=0.02274 score=0.39749 stable dom=61.0Hz tq=187%",
+   "data": {
+    "meta": {
+     "aborted": false,
+     "abort_reason": "",
+     "tripped_ferr": null,
+     "position_drift": 0.0,
+     "fs_hz": 1000.0,
+     "machine_fault": false,
+     "capture_error": null,
+     "capture": "realtime-sampler"
+    },
+    "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20261127_234614_Z/01_warmup_1.csv",
+    "gains": {
+     "speed_gain_hz": 26.0,
+     "pos_gain_rad_s": 50.0,
+     "integral_ms": 3.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "torque_ff_pct": 200.0,
+     "manual_mode": 0.0
+    },
+    "fft": {
+     "n_samples": 4477,
+     "peak_abs": 0.352020263671875,
+     "rms": 0.02273614141879807,
+     "hf_energy_ratio": 0.001035681587426704,
+     "ring_score": 0.24101125487029806,
+     "gate_stable": false,
+     "gate_reason": "peak at 61.0 Hz",
+     "peaks": [
+      {
+       "freq_hz": 60.97833370560643,
+       "magnitude": 0.00011164089808225062,
+       "prominence": 33.7240781644484
+      },
+      {
+       "freq_hz": 75.72034844762118,
+       "magnitude": 0.00011076448602269926,
+       "prominence": 33.4593347835881
+      },
+      {
+       "freq_hz": 83.09135581862854,
+       "magnitude": 0.00010816193144728623,
+       "prominence": 32.67316452308187
+      },
+      {
+       "freq_hz": 85.995085995086,
+       "magnitude": 0.00010216542299875901,
+       "prominence": 30.861760968419333
+      },
+      {
+       "freq_hz": 70.13625195443377,
+       "magnitude": 9.972169084766007e-05,
+       "prominence": 30.123567210645017
+      }
+     ],
+     "gate_min_hz": 60.0,
+     "fs_hz": 1000.0,
+     "sensitivity": "|S| n/a (only 0 coherent bins (the move did not excite enough frequencies))",
+     "ms": null
+    }
+   }
+  },
+  {
+   "t": 8.583,
+   "phase": "baseline",
+   "kind": "warmup",
+   "message": "warm-up move (not scored): warmup_1: peak=0.35202 rms=0.02274 score=0.39749 stable dom=61.0Hz tq=187%"
+  },
+  {
+   "t": 13.257,
+   "phase": "measure",
+   "kind": "measurement",
+   "message": "baseline_1: peak=0.04906 rms=0.01899 score=0.08703 stable dom=60.4Hz tq=42%",
+   "data": {
+    "meta": {
+     "aborted": false,
+     "abort_reason": "",
+     "tripped_ferr": null,
+     "position_drift": 0.0002288818359375,
+     "fs_hz": 1000.0,
+     "machine_fault": false,
+     "capture_error": null,
+     "capture": "realtime-sampler"
+    },
+    "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20261127_234614_Z/02_baseline_1.csv",
+    "gains": {
+     "speed_gain_hz": 26.0,
+     "pos_gain_rad_s": 50.0,
+     "integral_ms": 3.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "torque_ff_pct": 200.0,
+     "manual_mode": 0.0
+    },
+    "fft": {
+     "n_samples": 4489,
+     "peak_abs": 0.0490570068359375,
+     "rms": 0.018985328371270226,
+     "hf_energy_ratio": 0.0011259267048416633,
+     "ring_score": 0.026237560473001298,
+     "gate_stable": false,
+     "gate_reason": "peak at 60.4 Hz",
+     "peaks": [
+      {
+       "freq_hz": 60.36979282691022,
+       "magnitude": 0.0001577088194673366,
+       "prominence": 50.05105228481912
+      },
+      {
+       "freq_hz": 62.59746045889953,
+       "magnitude": 0.00013147887951025104,
+       "prominence": 41.72662185249533
+      },
+      {
+       "freq_hz": 61.48362664290487,
+       "magnitude": 0.00012006522615906459,
+       "prominence": 38.10434275250276
+      },
+      {
+       "freq_hz": 68.83492982846958,
+       "magnitude": 0.00011938889154786913,
+       "prominence": 37.889698707221655
+      },
+      {
+       "freq_hz": 67.72109601247493,
+       "magnitude": 0.00011421487592102778,
+       "prominence": 36.24765403567973
+      }
+     ],
+     "gate_min_hz": 60.0,
+     "fs_hz": 1000.0,
+     "sensitivity": "|S| n/a (only 1 coherent bins (the move did not excite enough frequencies))",
+     "ms": null
+    }
+   }
+  },
+  {
+   "t": 17.95,
+   "phase": "measure",
+   "kind": "measurement",
+   "message": "baseline_2: peak=0.04890 rms=0.01893 score=0.08676 stable dom=65.6Hz tq=42%",
+   "data": {
+    "meta": {
+     "aborted": false,
+     "abort_reason": "",
+     "tripped_ferr": null,
+     "position_drift": 0.0,
+     "fs_hz": 1000.0,
+     "machine_fault": false,
+     "capture_error": null,
+     "capture": "realtime-sampler"
+    },
+    "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20261127_234614_Z/03_baseline_2.csv",
+    "gains": {
+     "speed_gain_hz": 26.0,
+     "pos_gain_rad_s": 50.0,
+     "integral_ms": 3.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "torque_ff_pct": 200.0,
+     "manual_mode": 0.0
+    },
+    "fft": {
+     "n_samples": 4497,
+     "peak_abs": 0.0489044189453125,
+     "rms": 0.01892886559502346,
+     "hf_energy_ratio": 0.0012190904105572797,
+     "ring_score": 0.02684072360235122,
+     "gate_stable": false,
+     "gate_reason": "peak at 65.6 Hz",
+     "peaks": [
+      {
+       "freq_hz": 65.59928841449856,
+       "magnitude": 0.00020763994526001178,
+       "prominence": 67.96760131727099
+      },
+      {
+       "freq_hz": 67.60062263731376,
+       "magnitude": 0.00017569462378884426,
+       "prominence": 57.51081338571244
+      },
+      {
+       "freq_hz": 63.59795419168334,
+       "magnitude": 0.00015760906047613944,
+       "prominence": 51.590794695200316
+      },
+      {
+       "freq_hz": 64.70980653769179,
+       "magnitude": 0.00014850340276711035,
+       "prominence": 48.61020388390995
+      },
+      {
+       "freq_hz": 76.71781187458305,
+       "magnitude": 0.00012411206563396658,
+       "prominence": 40.626091406011255
+      }
+     ],
+     "gate_min_hz": 60.0,
+     "fs_hz": 1000.0,
+     "sensitivity": "|S| n/a (only 1 coherent bins (the move did not excite enough frequencies))",
+     "ms": null
+    }
+   }
+  },
+  {
+   "t": 22.636,
+   "phase": "measure",
+   "kind": "measurement",
+   "message": "baseline_3: peak=0.04723 rms=0.01902 score=0.08526 stable dom=63.6Hz tq=42%",
+   "data": {
+    "meta": {
+     "aborted": false,
+     "abort_reason": "",
+     "tripped_ferr": null,
+     "position_drift": 7.62939453125e-05,
+     "fs_hz": 1000.0,
+     "machine_fault": false,
+     "capture_error": null,
+     "capture": "realtime-sampler"
+    },
+    "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20261127_234614_Z/04_baseline_3.csv",
+    "gains": {
+     "speed_gain_hz": 26.0,
+     "pos_gain_rad_s": 50.0,
+     "integral_ms": 3.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "torque_ff_pct": 200.0,
+     "manual_mode": 0.0
+    },
+    "fft": {
+     "n_samples": 4497,
+     "peak_abs": 0.0472259521484375,
+     "rms": 0.01901772908260158,
+     "hf_energy_ratio": 0.0016852499652821474,
+     "ring_score": 0.028340116281323262,
+     "gate_stable": false,
+     "gate_reason": "peak at 63.6 Hz",
+     "peaks": [
+      {
+       "freq_hz": 63.59795419168334,
+       "magnitude": 0.00024472190347034654,
+       "prominence": 78.12648843038089
+      },
+      {
+       "freq_hz": 64.70980653769179,
+       "magnitude": 0.00023797008095365665,
+       "prominence": 75.97099610928558
+      },
+      {
+       "freq_hz": 65.59928841449856,
+       "magnitude": 0.00022831071533403088,
+       "prominence": 72.88728228708595
+      },
+      {
+       "freq_hz": 66.711140760507,
+       "magnitude": 0.00020113389136963334,
+       "prominence": 64.2111899842722
+      },
+      {
+       "freq_hz": 62.70847231487658,
+       "magnitude": 0.0001596466833727915,
+       "prominence": 50.966564841975455
+      }
+     ],
+     "gate_min_hz": 60.0,
+     "fs_hz": 1000.0,
+     "sensitivity": "|S| n/a (only 1 coherent bins (the move did not excite enough frequencies))",
+     "ms": null
+    }
+   }
+  },
+  {
+   "t": 22.64,
+   "phase": "baseline",
+   "kind": "noise",
+   "message": "baseline spread 2.0% over 3 runs -> a step must improve the score by >= 4.1%",
+   "data": {
+    "scores": [
+     0.08702766357847795,
+     0.08676215013535943,
+     0.08526141031364065
+    ],
+    "spread_pct": 2.035741693908844,
+    "improve_pct": 4.071483387817688
+   }
+  },
+  {
+   "t": 23.838,
+   "phase": "rest",
+   "kind": "standstill",
+   "message": "baseline: rest FERR rms 0.13 um, torque rms 0.37% (about mean 12.2%)",
+   "data": {
+    "ferr_rms": 0.00013166294690170424,
+    "ferr_peak": 0.000457763671875,
+    "torque_rms_pct": 0.3651127300748963,
+    "torque_mean_pct": 12.20307845084409,
+    "torque_peak_pct": 13.5,
+    "n": 1007.0
+   }
+  },
+  {
+   "t": 23.842,
+   "phase": "speed",
+   "kind": "cap",
+   "message": "speed gain capped at 37.5 Hz (0.25 x C01.03 torque filter 150 Hz)"
+  },
+  {
+   "t": 23.845,
+   "phase": "speed",
+   "kind": "start",
+   "message": "speed ladder from 26.0 Hz, cap 37.5 Hz"
+  },
+  {
+   "t": 24.594,
+   "phase": "speed",
+   "kind": "write",
+   "message": "SDO write speed_gain_hz=29.9",
+   "data": {
+    "written": [
+     "speed_gain_hz"
+    ],
+    "failed": [],
+    "skipped": []
+   }
+  },
+  {
+   "t": 29.259,
+   "phase": "measure",
+   "kind": "measurement",
+   "message": "speed_29.9hz: peak=0.04326 rms=0.01760 score=0.07847 stable dom=64.8Hz tq=42%",
+   "data": {
+    "meta": {
+     "aborted": false,
+     "abort_reason": "",
+     "tripped_ferr": null,
+     "position_drift": 0.00640869140625,
+     "fs_hz": 1000.0,
+     "machine_fault": false,
+     "capture_error": null,
+     "capture": "realtime-sampler"
+    },
+    "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20261127_234614_Z/05_speed_29.9hz.csv",
+    "gains": {
+     "speed_gain_hz": 29.9,
+     "pos_gain_rad_s": 50.0,
+     "integral_ms": 3.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "torque_ff_pct": 200.0,
+     "manual_mode": 0.0
+    },
+    "fft": {
+     "n_samples": 4474,
+     "peak_abs": 0.0432586669921875,
+     "rms": 0.017603722813115157,
+     "hf_energy_ratio": 0.0018604385051827121,
+     "ring_score": 0.02883600871491236,
+     "gate_stable": false,
+     "gate_reason": "peak at 64.8 Hz",
+     "peaks": [
+      {
+       "freq_hz": 64.81895395619132,
+       "magnitude": 0.0002652099717812126,
+       "prominence": 80.74986619203663
+      },
+      {
+       "freq_hz": 63.70138578453285,
+       "magnitude": 0.00025045290628952684,
+       "prominence": 76.25670533598937
+      },
+      {
+       "freq_hz": 66.83057666517657,
+       "magnitude": 0.00024192571709341979,
+       "prominence": 73.66038747525724
+      },
+      {
+       "freq_hz": 65.7130084935181,
+       "magnitude": 0.00023889216909111225,
+       "prominence": 72.73674726056903
+      },
+      {
+       "freq_hz": 62.80733124720607,
+       "magnitude": 0.00017756064637803955,
+       "prominence": 54.06281799926622
+      }
+     ],
+     "gate_min_hz": 60.0,
+     "fs_hz": 1000.0,
+     "sensitivity": "|S| n/a (only 1 coherent bins (the move did not excite enough frequencies))",
+     "ms": null
+    }
+   }
+  },
+  {
+   "t": 29.264,
+   "phase": "speed",
+   "kind": "accept",
+   "message": "29.9 Hz accepted (speed_29.9hz: peak=0.04326 rms=0.01760 score=0.07847 stable dom=64.8Hz tq=42%)"
+  },
+  {
+   "t": 30.027,
+   "phase": "speed",
+   "kind": "write",
+   "message": "SDO write speed_gain_hz=34.385",
+   "data": {
+    "written": [
+     "speed_gain_hz"
+    ],
+    "failed": [],
+    "skipped": []
+   }
+  },
+  {
+   "t": 34.704,
+   "phase": "measure",
+   "kind": "measurement",
+   "message": "speed_34.4hz: peak=0.04143 rms=0.01632 score=0.07406 stable dom=65.8Hz tq=42%",
+   "data": {
+    "meta": {
+     "aborted": false,
+     "abort_reason": "",
+     "tripped_ferr": null,
+     "position_drift": 0.0064849853515625,
+     "fs_hz": 1000.0,
+     "machine_fault": false,
+     "capture_error": null,
+     "capture": "realtime-sampler"
+    },
+    "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20261127_234614_Z/06_speed_34.4hz.csv",
+    "gains": {
+     "speed_gain_hz": 34.385,
+     "pos_gain_rad_s": 50.0,
+     "integral_ms": 3.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "torque_ff_pct": 200.0,
+     "manual_mode": 0.0
+    },
+    "fft": {
+     "n_samples": 4501,
+     "peak_abs": 0.0414276123046875,
+     "rms": 0.01631678705447666,
+     "hf_energy_ratio": 0.001643136038373973,
+     "ring_score": 0.028627422959963345,
+     "gate_stable": false,
+     "gate_reason": "peak at 65.8 Hz",
+     "peaks": [
+      {
+       "freq_hz": 65.7631637413908,
+       "magnitude": 0.00017874697689441264,
+       "prominence": 55.18801038930482
+      },
+      {
+       "freq_hz": 64.8744723394801,
+       "magnitude": 0.00016497183679213784,
+       "prominence": 50.93494503241467
+      },
+      {
+       "freq_hz": 63.76360808709175,
+       "magnitude": 0.00015696927633351913,
+       "prominence": 48.46415980625572
+      },
+      {
+       "freq_hz": 82.20395467673849,
+       "magnitude": 0.0001367520792854824,
+       "prominence": 42.222113646287625
+      },
+      {
+       "freq_hz": 67.76271939568984,
+       "magnitude": 0.00013511608541925661,
+       "prominence": 41.71700162674594
+      }
+     ],
+     "gate_min_hz": 60.0,
+     "fs_hz": 1000.0,
+     "sensitivity": "|S| n/a (only 1 coherent bins (the move did not excite enough frequencies))",
+     "ms": null
+    }
+   }
+  },
+  {
+   "t": 34.708,
+   "phase": "speed",
+   "kind": "accept",
+   "message": "34.4 Hz accepted (speed_34.4hz: peak=0.04143 rms=0.01632 score=0.07406 stable dom=65.8Hz tq=42%)"
+  },
+  {
+   "t": 35.47,
+   "phase": "speed",
+   "kind": "write",
+   "message": "SDO write speed_gain_hz=37.5",
+   "data": {
+    "written": [
+     "speed_gain_hz"
+    ],
+    "failed": [],
+    "skipped": []
+   }
+  },
+  {
+   "t": 40.153,
+   "phase": "measure",
+   "kind": "measurement",
+   "message": "speed_37.5hz: peak=0.04074 rms=0.01573 score=0.07220 stable dom=81.5Hz tq=42%",
+   "data": {
+    "meta": {
+     "aborted": false,
+     "abort_reason": "",
+     "tripped_ferr": null,
+     "position_drift": 0.006561279296875,
+     "fs_hz": 1000.0,
+     "machine_fault": false,
+     "capture_error": null,
+     "capture": "realtime-sampler"
+    },
+    "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20261127_234614_Z/07_speed_37.5hz.csv",
+    "gains": {
+     "speed_gain_hz": 37.5,
+     "pos_gain_rad_s": 50.0,
+     "integral_ms": 3.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "torque_ff_pct": 200.0,
+     "manual_mode": 0.0
+    },
+    "fft": {
+     "n_samples": 4476,
+     "peak_abs": 0.040740966796875,
+     "rms": 0.015730520049011196,
+     "hf_energy_ratio": 0.0014370038832910177,
+     "ring_score": 0.028148460332271346,
+     "gate_stable": false,
+     "gate_reason": "peak at 81.5 Hz",
+     "peaks": [
+      {
+       "freq_hz": 81.54602323503127,
+       "magnitude": 0.00016453332817636354,
+       "prominence": 50.51104817984662
+      },
+      {
+       "freq_hz": 82.66309204647006,
+       "magnitude": 0.0001474497085280985,
+       "prominence": 45.266447923449114
+      },
+      {
+       "freq_hz": 79.53529937444146,
+       "magnitude": 0.00014304957193033455,
+       "prominence": 43.91562426874662
+      },
+      {
+       "freq_hz": 80.65236818588025,
+       "magnitude": 0.00013098782246839726,
+       "prominence": 40.21271729568584
+      },
+      {
+       "freq_hz": 84.67381590705988,
+       "magnitude": 0.00013091133680336826,
+       "prominence": 40.18923651428935
+      }
+     ],
+     "gate_min_hz": 60.0,
+     "fs_hz": 1000.0,
+     "sensitivity": "|S| n/a (only 1 coherent bins (the move did not excite enough frequencies))",
+     "ms": null
+    }
+   }
+  },
+  {
+   "t": 40.158,
+   "phase": "speed",
+   "kind": "stall",
+   "message": "37.5 Hz stable but no 4.1% improvement (speed_37.5hz: peak=0.04074 rms=0.01573 score=0.07220 stable dom=81.5Hz tq=42%) \u2014 reverting to 34.4 Hz (stall 1/2)"
+  },
+  {
+   "t": 40.923,
+   "phase": "speed",
+   "kind": "write",
+   "message": "SDO write speed_gain_hz=34.385",
+   "data": {
+    "written": [
+     "speed_gain_hz"
+    ],
+    "failed": [],
+    "skipped": []
+   }
+  },
+  {
+   "t": 41.673,
+   "phase": "speed",
+   "kind": "write",
+   "message": "SDO write speed_gain_hz=37.5",
+   "data": {
+    "written": [
+     "speed_gain_hz"
+    ],
+    "failed": [],
+    "skipped": []
+   }
+  },
+  {
+   "t": 46.295,
+   "phase": "measure",
+   "kind": "measurement",
+   "message": "speed_37.5hz: peak=0.04120 rms=0.01582 score=0.07285 stable dom=82.1Hz tq=42%",
+   "data": {
+    "meta": {
+     "aborted": false,
+     "abort_reason": "",
+     "tripped_ferr": null,
+     "position_drift": 0.0028228759765625,
+     "fs_hz": 1000.0,
+     "machine_fault": false,
+     "capture_error": null,
+     "capture": "realtime-sampler"
+    },
+    "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20261127_234614_Z/08_speed_37.5hz.csv",
+    "gains": {
+     "speed_gain_hz": 37.5,
+     "pos_gain_rad_s": 50.0,
+     "integral_ms": 3.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "torque_ff_pct": 200.0,
+     "manual_mode": 0.0
+    },
+    "fft": {
+     "n_samples": 4446,
+     "peak_abs": 0.04119873046875,
+     "rms": 0.015823407407955487,
+     "hf_energy_ratio": 0.0015422760462751924,
+     "ring_score": 0.028362443481365986,
+     "gate_stable": false,
+     "gate_reason": "peak at 82.1 Hz",
+     "peaks": [
+      {
+       "freq_hz": 82.09626630679263,
+       "magnitude": 0.00012504853320168243,
+       "prominence": 38.07744539531124
+      },
+      {
+       "freq_hz": 71.52496626180837,
+       "magnitude": 0.0001226692448994792,
+       "prominence": 37.35294892912136
+      },
+      {
+       "freq_hz": 69.72559604138551,
+       "magnitude": 0.00011897064987736402,
+       "prominence": 36.22672180443514
+      },
+      {
+       "freq_hz": 70.17543859649123,
+       "magnitude": 0.00011459136949360443,
+       "prominence": 34.89322507789281
+      },
+      {
+       "freq_hz": 85.02024291497976,
+       "magnitude": 0.00010708889672931435,
+       "prominence": 32.60871209962925
+      }
+     ],
+     "gate_min_hz": 60.0,
+     "fs_hz": 1000.0,
+     "sensitivity": "|S| n/a (only 1 coherent bins (the move did not excite enough frequencies))",
+     "ms": null
+    }
+   }
+  },
+  {
+   "t": 46.3,
+   "phase": "speed",
+   "kind": "stall",
+   "message": "37.5 Hz stable but no 4.1% improvement (speed_37.5hz: peak=0.04120 rms=0.01582 score=0.07285 stable dom=82.1Hz tq=42%) \u2014 reverting to 34.4 Hz (stall 2/2)"
+  },
+  {
+   "t": 47.057,
+   "phase": "speed",
+   "kind": "write",
+   "message": "SDO write speed_gain_hz=34.385",
+   "data": {
+    "written": [
+     "speed_gain_hz"
+    ],
+    "failed": [],
+    "skipped": []
+   }
+  },
+  {
+   "t": 47.067,
+   "phase": "position",
+   "kind": "start",
+   "message": "position ladder from 50.0 rad/s toward ~68.8 (cap 82.5)"
+  },
+  {
+   "t": 47.836,
+   "phase": "position",
+   "kind": "write",
+   "message": "SDO write pos_gain_rad_s=60",
+   "data": {
+    "written": [
+     "pos_gain_rad_s"
+    ],
+    "failed": [],
+    "skipped": []
+   }
+  },
+  {
+   "t": 52.489,
+   "phase": "measure",
+   "kind": "measurement",
+   "message": "pos_60.0rads: peak=0.03670 rms=0.01398 score=0.06466 stable dom=72.1Hz tq=42%",
+   "data": {
+    "meta": {
+     "aborted": false,
+     "abort_reason": "",
+     "tripped_ferr": null,
+     "position_drift": 0.0038909912109375,
+     "fs_hz": 1000.0,
+     "machine_fault": false,
+     "capture_error": null,
+     "capture": "realtime-sampler"
+    },
+    "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20261127_234614_Z/09_pos_60.0rads.csv",
+    "gains": {
+     "speed_gain_hz": 34.385,
+     "pos_gain_rad_s": 60.0,
+     "integral_ms": 3.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "torque_ff_pct": 200.0,
+     "manual_mode": 0.0
+    },
+    "fft": {
+     "n_samples": 4477,
+     "peak_abs": 0.0366973876953125,
+     "rms": 0.013980610702214829,
+     "hf_energy_ratio": 0.0027213748574067232,
+     "ring_score": 0.032335445462968126,
+     "gate_stable": false,
+     "gate_reason": "peak at 72.1 Hz",
+     "peaks": [
+      {
+       "freq_hz": 72.14652669198124,
+       "magnitude": 0.00022109253041939354,
+       "prominence": 67.95361588847614
+      },
+      {
+       "freq_hz": 70.13625195443377,
+       "magnitude": 0.00020894254273363317,
+       "prominence": 64.21927174450296
+      },
+      {
+       "freq_hz": 74.1568014295287,
+       "magnitude": 0.0001558086673198789,
+       "prominence": 47.88837646874067
+      },
+      {
+       "freq_hz": 84.65490283672102,
+       "magnitude": 0.00015234084291139527,
+       "prominence": 46.82252767061181
+      },
+      {
+       "freq_hz": 69.0194326557963,
+       "magnitude": 0.00014204555045849068,
+       "prominence": 43.658231041154814
+      }
+     ],
+     "gate_min_hz": 60.0,
+     "fs_hz": 1000.0,
+     "sensitivity": "|S| n/a (only 1 coherent bins (the move did not excite enough frequencies))",
+     "ms": null
+    }
+   }
+  },
+  {
+   "t": 52.498,
+   "phase": "position",
+   "kind": "accept",
+   "message": "60.0 rad/s accepted (pos_60.0rads: peak=0.03670 rms=0.01398 score=0.06466 stable dom=72.1Hz tq=42%)"
+  },
+  {
+   "t": 53.257,
+   "phase": "position",
+   "kind": "write",
+   "message": "SDO write pos_gain_rad_s=72",
+   "data": {
+    "written": [
+     "pos_gain_rad_s"
+    ],
+    "failed": [],
+    "skipped": []
+   }
+  },
+  {
+   "t": 57.917,
+   "phase": "measure",
+   "kind": "measurement",
+   "message": "pos_72.0rads: peak=0.03105 rms=0.01178 score=0.05461 stable dom=60.6Hz tq=43%",
+   "data": {
+    "meta": {
+     "aborted": false,
+     "abort_reason": "",
+     "tripped_ferr": null,
+     "position_drift": 0.0055694580078125,
+     "fs_hz": 1000.0,
+     "machine_fault": false,
+     "capture_error": null,
+     "capture": "realtime-sampler"
+    },
+    "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20261127_234614_Z/10_pos_72.0rads.csv",
+    "gains": {
+     "speed_gain_hz": 34.385,
+     "pos_gain_rad_s": 72.0,
+     "integral_ms": 3.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "torque_ff_pct": 200.0,
+     "manual_mode": 0.0
+    },
+    "fft": {
+     "n_samples": 4475,
+     "peak_abs": 0.0310516357421875,
+     "rms": 0.011777806144100999,
+     "hf_energy_ratio": 0.0026931840820753803,
+     "ring_score": 0.03383056166995079,
+     "gate_stable": false,
+     "gate_reason": "peak at 60.6 Hz",
+     "peaks": [
+      {
+       "freq_hz": 60.55865921787709,
+       "magnitude": 0.00015528333675493878,
+       "prominence": 46.40071392790506
+      },
+      {
+       "freq_hz": 62.56983240223463,
+       "magnitude": 0.0001131803367321783,
+       "prominence": 33.81978090322522
+      },
+      {
+       "freq_hz": 85.13966480446926,
+       "magnitude": 0.00010268545640377359,
+       "prominence": 30.68377191473717
+      },
+      {
+       "freq_hz": 87.37430167597765,
+       "magnitude": 0.00010244550059460884,
+       "prominence": 30.61206994665051
+      },
+      {
+       "freq_hz": 69.72067039106145,
+       "magnitude": 9.9292432724565e-05,
+       "prominence": 29.66989158230956
+      }
+     ],
+     "gate_min_hz": 60.0,
+     "fs_hz": 1000.0,
+     "sensitivity": "|S| n/a (only 1 coherent bins (the move did not excite enough frequencies))",
+     "ms": null
+    }
+   }
+  },
+  {
+   "t": 57.922,
+   "phase": "position",
+   "kind": "accept",
+   "message": "72.0 rad/s accepted (pos_72.0rads: peak=0.03105 rms=0.01178 score=0.05461 stable dom=60.6Hz tq=43%)"
+  },
+  {
+   "t": 58.677,
+   "phase": "position",
+   "kind": "write",
+   "message": "SDO write pos_gain_rad_s=82.524",
+   "data": {
+    "written": [
+     "pos_gain_rad_s"
+    ],
+    "failed": [],
+    "skipped": []
+   }
+  },
+  {
+   "t": 63.293,
+   "phase": "measure",
+   "kind": "measurement",
+   "message": "pos_82.5rads: peak=0.02838 rms=0.01037 score=0.04913 stable dom=63.1Hz tq=42%",
+   "data": {
+    "meta": {
+     "aborted": false,
+     "abort_reason": "",
+     "tripped_ferr": null,
+     "position_drift": 0.005340576171875,
+     "fs_hz": 1000.0,
+     "machine_fault": false,
+     "capture_error": null,
+     "capture": "realtime-sampler"
+    },
+    "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20261127_234614_Z/11_pos_82.5rads.csv",
+    "gains": {
+     "speed_gain_hz": 34.385,
+     "pos_gain_rad_s": 82.52399999999999,
+     "integral_ms": 3.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "torque_ff_pct": 200.0,
+     "manual_mode": 0.0
+    },
+    "fft": {
+     "n_samples": 4436,
+     "peak_abs": 0.02838134765625,
+     "rms": 0.010374445438801132,
+     "hf_energy_ratio": 0.0025053650848238357,
+     "ring_score": 0.03501065936897601,
+     "gate_stable": false,
+     "gate_reason": "peak at 63.1 Hz",
+     "peaks": [
+      {
+       "freq_hz": 63.11992786293958,
+       "magnitude": 0.00013138889072799285,
+       "prominence": 40.100587471075514
+      },
+      {
+       "freq_hz": 80.70333633904418,
+       "magnitude": 0.00010314051185773211,
+       "prominence": 31.479032166616047
+      },
+      {
+       "freq_hz": 61.09107303877367,
+       "magnitude": 0.00010030612264428675,
+       "prominence": 30.613961520604246
+      },
+      {
+       "freq_hz": 78.67448151487827,
+       "magnitude": 9.196569047027752e-05,
+       "prominence": 28.06841731144553
+      },
+      {
+       "freq_hz": 61.992786293958524,
+       "magnitude": 8.933721907100868e-05,
+       "prominence": 27.266193876286078
+      }
+     ],
+     "gate_min_hz": 60.0,
+     "fs_hz": 1000.0,
+     "sensitivity": "|S| n/a (only 1 coherent bins (the move did not excite enough frequencies))",
+     "ms": null
+    }
+   }
+  },
+  {
+   "t": 63.297,
+   "phase": "position",
+   "kind": "accept",
+   "message": "82.5 rad/s accepted (pos_82.5rads: peak=0.02838 rms=0.01037 score=0.04913 stable dom=63.1Hz tq=42%)"
+  },
+  {
+   "t": 63.301,
+   "phase": "position",
+   "kind": "done",
+   "message": "reached cap"
+  },
+  {
+   "t": 63.306,
+   "phase": "integral",
+   "kind": "start",
+   "message": "integral tighten from 3.00 ms toward 3.00 ms (lower = stronger)"
+  },
+  {
+   "t": 63.314,
+   "phase": "integral",
+   "kind": "skip",
+   "message": "already at/below floor"
+  },
+  {
+   "t": 63.318,
+   "phase": "feedforward",
+   "kind": "start",
+   "message": "torque FF 200% (search 50-200%)"
+  },
+  {
+   "t": 64.094,
+   "phase": "feedforward",
+   "kind": "write",
+   "message": "SDO write torque_ff_pct=173.9",
+   "data": {
+    "written": [
+     "torque_ff_pct"
+    ],
+    "failed": [],
+    "skipped": []
+   }
+  },
+  {
+   "t": 68.768,
+   "phase": "measure",
+   "kind": "measurement",
+   "message": "ff_173.9pct: peak=0.02777 rms=0.01022 score=0.04821 stable dom=63.5Hz tq=42%",
+   "data": {
+    "meta": {
+     "aborted": false,
+     "abort_reason": "",
+     "tripped_ferr": null,
+     "position_drift": 0.0048828125,
+     "fs_hz": 1000.0,
+     "machine_fault": false,
+     "capture_error": null,
+     "capture": "realtime-sampler"
+    },
+    "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20261127_234614_Z/12_ff_173.9pct.csv",
+    "gains": {
+     "speed_gain_hz": 34.385,
+     "pos_gain_rad_s": 82.52399999999999,
+     "integral_ms": 3.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "torque_ff_pct": 173.9,
+     "manual_mode": 0.0
+    },
+    "fft": {
+     "n_samples": 4489,
+     "peak_abs": 0.02777099609375,
+     "rms": 0.010220711299587841,
+     "hf_energy_ratio": 0.002868160161950058,
+     "ring_score": 0.03514658688124072,
+     "gate_stable": false,
+     "gate_reason": "peak at 63.5 Hz",
+     "peaks": [
+      {
+       "freq_hz": 63.48852751169525,
+       "magnitude": 0.00014147622611702853,
+       "prominence": 43.87221269352662
+      },
+      {
+       "freq_hz": 65.49342838048562,
+       "magnitude": 0.00013074125842495141,
+       "prominence": 40.543266207101674
+      },
+      {
+       "freq_hz": 64.37959456449097,
+       "magnitude": 8.968663547125066e-05,
+       "prominence": 27.812101404985803
+      },
+      {
+       "freq_hz": 81.9781688572065,
+       "magnitude": 8.812316304724866e-05,
+       "prominence": 27.32726379934074
+      },
+      {
+       "freq_hz": 83.53753619959902,
+       "magnitude": 8.627045466706814e-05,
+       "prominence": 26.75273323441655
+      }
+     ],
+     "gate_min_hz": 60.0,
+     "fs_hz": 1000.0,
+     "sensitivity": "|S| n/a (only 1 coherent bins (the move did not excite enough frequencies))",
+     "ms": null
+    }
+   }
+  },
+  {
+   "t": 68.774,
+   "phase": "feedforward",
+   "kind": "stall",
+   "message": "173.9% no better \u2014 back to 200%"
+  },
+  {
+   "t": 69.528,
+   "phase": "feedforward",
+   "kind": "write",
+   "message": "SDO write torque_ff_pct=200",
+   "data": {
+    "written": [
+     "torque_ff_pct"
+    ],
+    "failed": [],
+    "skipped": []
+   }
+  },
+  {
+   "t": 75.36,
+   "phase": "rest",
+   "kind": "standstill",
+   "message": "verify: rest FERR rms 0.06 um, torque rms 0.25% (about mean 12.0%)",
+   "data": {
+    "ferr_rms": 6.380940651984381e-05,
+    "ferr_peak": 0.0002288818359375,
+    "torque_rms_pct": 0.2547958160926497,
+    "torque_mean_pct": 11.959303482587066,
+    "torque_peak_pct": 12.700000000000001,
+    "n": 1005.0
+   }
+  },
+  {
+   "t": 75.372,
+   "phase": "measure",
+   "kind": "measurement",
+   "message": "verify: peak=0.02823 rms=0.01036 score=0.04895 stable dom=65.5Hz tq=42%",
+   "data": {
+    "meta": {
+     "aborted": false,
+     "abort_reason": "",
+     "tripped_ferr": null,
+     "position_drift": 0.0048828125,
+     "fs_hz": 1000.0,
+     "machine_fault": false,
+     "capture_error": null,
+     "capture": "realtime-sampler"
+    },
+    "csv": "/home/jon/linuxcnc/configs/ethercat_mill/logs/tuning/one_click/20261127_234614_Z/13_verify.csv",
+    "gains": {
+     "speed_gain_hz": 34.385,
+     "pos_gain_rad_s": 82.52399999999999,
+     "integral_ms": 3.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "torque_ff_pct": 200.0,
+     "manual_mode": 0.0
+    },
+    "fft": {
+     "n_samples": 4457,
+     "peak_abs": 0.028228759765625,
+     "rms": 0.010361432871118615,
+     "hf_energy_ratio": 0.0032342644484343232,
+     "ring_score": 0.03743669605740358,
+     "gate_stable": false,
+     "gate_reason": "peak at 65.5 Hz",
+     "peaks": [
+      {
+       "freq_hz": 65.51492035001122,
+       "magnitude": 0.00013687216921607988,
+       "prominence": 40.68232349405776
+      },
+      {
+       "freq_hz": 64.39308952210007,
+       "magnitude": 0.0001314576700998207,
+       "prominence": 39.07297949178511
+      },
+      {
+       "freq_hz": 63.94435719093561,
+       "magnitude": 0.0001270519640240386,
+       "prominence": 37.76347763453211
+      },
+      {
+       "freq_hz": 74.71393313888267,
+       "magnitude": 0.00012261587607476868,
+       "prominence": 36.44494541549946
+      },
+      {
+       "freq_hz": 86.1566075835764,
+       "magnitude": 0.0001203909734371953,
+       "prominence": 35.7836407151871
+      }
+     ],
+     "gate_min_hz": 60.0,
+     "fs_hz": 1000.0,
+     "sensitivity": "|S| n/a (only 1 coherent bins (the move did not excite enough frequencies))",
+     "ms": null
+    }
+   }
+  },
+  {
+   "t": 75.379,
+   "phase": "verify",
+   "kind": "ok",
+   "message": "verify: peak=0.02823 rms=0.01036 score=0.04895 stable dom=65.5Hz tq=42%"
+  },
+  {
+   "t": 75.392,
+   "phase": "finalize",
+   "kind": "preset",
+   "message": "final tune saved as preset one_click_20261127_234730",
+   "data": {
+    "path": "/home/jon/linuxcnc/configs/ethercat_mill/config/tuning/presets/Z/one_click_20261127_234730.json"
+   }
+  },
+  {
+   "t": 75.405,
+   "phase": "finalize",
+   "kind": "result",
+   "message": "campaign status: improved",
+   "data": {
+    "reason": "score improved 43.6%",
+    "baseline_score": 0.08676215013535943,
+    "final_score": 0.04895162550786223,
+    "improvement_pct": 43.57951545519356,
+    "baseline_values": {
+     "speed_gain_hz": 26.0,
+     "pos_gain_rad_s": 50.0,
+     "integral_ms": 3.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "torque_ff_pct": 200.0,
+     "manual_mode": 0.0
+    },
+    "final_values": {
+     "speed_gain_hz": 34.385,
+     "pos_gain_rad_s": 82.52399999999999,
+     "integral_ms": 3.0,
+     "notch3_freq_hz": 8000.0,
+     "notch3_width_pct": 0.0,
+     "notch3_depth_pct": 100.0,
+     "torque_ff_pct": 200.0,
+     "manual_mode": 0.0
+    },
+    "measurements": 13,
+    "notch_applied": false,
+    "preset": "one_click_20261127_234730"
+   }
+  },
+  {
+   "t": 75.854,
+   "phase": "finalize",
+   "kind": "ferr-window",
+   "message": "6065 restored to 0.5 production window"
+  }
+ ]
+}

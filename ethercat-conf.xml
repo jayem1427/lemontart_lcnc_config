@@ -10,8 +10,8 @@
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="FA 00"/></sdoConfig>
       <!-- DO NOT push C00/C01 loop gains here. lcec sdoConfig runs on EVERY
            bus claim and was overwriting bench tuning (pos/speed/integral/inertia).
-           Tune via Servo Tuning tab (or ethercat download) and store to EEPROM
-           on the drive if you want values to survive power loss. See docs/SERVO_TUNING.md.
+           Tune via Servo Tuning tab (or ethercat download). The drive stores
+           every SDO write in EEPROM itself (C13.10 = 1), so tuning persists. See docs/SERVO_TUNING.md.
            Exception: C01.10 speed feedback filter = 3 (speed observer) is intentional. -->
       <!-- C01.10 speed feedback filter: 3 = speed observer -->
       <sdoConfig idx="2001" subIdx="11"><sdoDataRaw data="03 00"/></sdoConfig>
@@ -54,8 +54,8 @@
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="FA 00"/></sdoConfig>
       <!-- DO NOT push C00/C01 loop gains here. lcec sdoConfig runs on EVERY
            bus claim and was overwriting bench tuning (pos/speed/integral/inertia).
-           Tune via Servo Tuning tab (or ethercat download) and store to EEPROM
-           on the drive if you want values to survive power loss. See docs/SERVO_TUNING.md.
+           Tune via Servo Tuning tab (or ethercat download). The drive stores
+           every SDO write in EEPROM itself (C13.10 = 1), so tuning persists. See docs/SERVO_TUNING.md.
            Exception: C01.10 speed feedback filter = 3 (speed observer) is intentional. -->
       <!-- C01.10 speed feedback filter: 3 = speed observer -->
       <sdoConfig idx="2001" subIdx="11"><sdoDataRaw data="03 00"/></sdoConfig>
@@ -98,8 +98,8 @@
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="FA 00"/></sdoConfig>
       <!-- DO NOT push C00/C01 loop gains here. lcec sdoConfig runs on EVERY
            bus claim and was overwriting bench tuning (pos/speed/integral/inertia).
-           Tune via Servo Tuning tab (or ethercat download) and store to EEPROM
-           on the drive if you want values to survive power loss. See docs/SERVO_TUNING.md.
+           Tune via Servo Tuning tab (or ethercat download). The drive stores
+           every SDO write in EEPROM itself (C13.10 = 1), so tuning persists. See docs/SERVO_TUNING.md.
            Exception: C01.10 speed feedback filter = 3 (speed observer) is intentional. -->
       <!-- C01.10 speed feedback filter: 3 = speed observer -->
       <sdoConfig idx="2001" subIdx="11"><sdoDataRaw data="03 00"/></sdoConfig>
@@ -142,8 +142,8 @@
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="FA 00"/></sdoConfig>
       <!-- DO NOT push C00/C01 loop gains here. lcec sdoConfig runs on EVERY
            bus claim and was overwriting bench tuning (pos/speed/integral/inertia).
-           Tune via Servo Tuning tab (or ethercat download) and store to EEPROM
-           on the drive if you want values to survive power loss. See docs/SERVO_TUNING.md.
+           Tune via Servo Tuning tab (or ethercat download). The drive stores
+           every SDO write in EEPROM itself (C13.10 = 1), so tuning persists. See docs/SERVO_TUNING.md.
            Exception: C01.10 speed feedback filter = 3 (speed observer) is intentional. -->
       <!-- C01.10 speed feedback filter: 3 = speed observer -->
       <sdoConfig idx="2001" subIdx="11"><sdoDataRaw data="03 00"/></sdoConfig>

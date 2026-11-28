@@ -336,7 +336,7 @@ def test_machine_fault_stops(tmp: str) -> None:
 def test_baseline_repeats_set_threshold(tmp: str) -> None:
     io = SimTuneIO()
     _tuner, result = run_campaign(io, tmp, dry_run=True)
-    assert io.measure_calls == 3, io.measure_calls
+    assert io.measure_calls == 4, io.measure_calls  # 1 warm-up + 3 repeats
     noise = [e for e in _events(result.journal_dir)
              if e["phase"] == "baseline" and e["kind"] == "noise"]
     assert noise, "noise event missing"
@@ -344,6 +344,48 @@ def test_baseline_repeats_set_threshold(tmp: str) -> None:
     assert data["improve_pct"] >= 3.0, data
     print(f"  repeats: spread {data['spread_pct']:.1f}% -> threshold "
           f"{data['improve_pct']:.1f}%")
+
+
+class _FirstMoveSpikeIO(SimTuneIO):
+    """Z 2026-11-27: the campaign's first move carried a 10x transient."""
+
+    def run_stimulus(self, *a, **kw):
+        samples, meta = super().run_stimulus(*a, **kw)
+        if self.measure_calls == 1:
+            samples = [10.0 * v for v in samples]
+        return samples, meta
+
+
+def test_warmup_absorbs_first_move_spike(tmp: str) -> None:
+    def improve(warmup):
+        io = _FirstMoveSpikeIO()
+        _t, result = run_campaign(io, os.path.join(tmp, str(warmup)),
+                                  dry_run=True, baseline_warmup=warmup)
+        ev = [e for e in _events(result.journal_dir)
+              if e["phase"] == "baseline" and e["kind"] == "noise"]
+        return ev[0]["data"]["improve_pct"]
+    without, with_ = improve(0), improve(1)
+    assert without >= 15.0, without
+    assert with_ < 10.0, with_
+    print(f"  warm-up: improvement bar {without:.1f}% -> {with_:.1f}% with warm-up")
+
+
+class _HoldingTorqueIO(SimTuneIO):
+    """Vertical axis: steady +12 % gravity torque at rest, tiny ripple."""
+
+    def capture_rest(self, axis, seconds):
+        data = super().capture_rest(axis, seconds)
+        data["torque_pct"] = [12.0 + v for v in data["torque_pct"]]
+        return data
+
+
+def test_rest_gate_ignores_holding_torque(tmp: str) -> None:
+    io = _HoldingTorqueIO()
+    _tuner, result = run_campaign(io, tmp)
+    msgs = " ".join(e["message"] for e in _events(result.journal_dir))
+    assert "standstill torque" not in msgs, msgs[:300]
+    assert result.status == "improved", result.summary()
+    print(f"  holding torque: 12 % DC at rest not flagged -> {result.status}")
 
 
 def test_torque_guard(tmp: str) -> None:
@@ -516,6 +558,8 @@ def main() -> int:
         test_verify_fail_keeps_best,
         test_machine_fault_stops,
         test_baseline_repeats_set_threshold,
+        test_warmup_absorbs_first_move_spike,
+        test_rest_gate_ignores_holding_torque,
         test_torque_guard,
         test_rest_noise_gate,
         test_true_fs_used,
