@@ -14,7 +14,7 @@ New to Modbus in LinuxCNC? Read [MODBUS.md](MODBUS.md) first.
 
 | G-code | Does |
 |--------|------|
-| `M201 P<Hz> Q<duty%>` | Set pulse rate (1–50 Hz) and duty (0–100 %) |
+| `M201 P<Hz> Q<duty%>` | Set pulse rate (0.1–50 Hz) and duty (0–100 %) |
 | `M202` | Load the current tool's recipe from `probe_basic/coolant_tools.ini`, then same as M201 |
 | `M7` or `M8` | Injector on |
 | `M9` | Injector off. Aborts also issue M9 |
@@ -44,7 +44,7 @@ Probe Basic's **MQL** tab is a front end for the same commands:
 
 | Control | Does |
 |---------|------|
-| P slider | Pulse rate 1–50 Hz in 0.5 Hz steps |
+| P slider | Pulse rate 0.1–50 Hz in 0.1 Hz steps. Squared mapping, so the slow end gets more of the travel |
 | Q slider | Duty 0–100 % in 0.1 % steps. The first half of the slider covers 0–25 %, where MQL actually runs |
 | Pulse preview | Draws the valve timing for the first 500 ms to scale. Blue while spraying |
 | APPLY | Sends `M201 P… Q…`. Outlined amber when the screen doesn't match the machine |
@@ -66,7 +66,7 @@ under 1 ms as a hint that the injector may not fully open.
 M201 P Q  ──►  analog outputs E4 (Hz), E5 (duty %)
                          │
                    coolant.hal
-                   clamp Hz to 1–50
+                   clamp Hz to 0.1–50
                    period_ms = 1000 / Hz
                    pulse_ms  = period_ms × duty / 100   (forced to 0 when off)
                          │
@@ -102,6 +102,20 @@ Each of the four injector ports N has its own coil and two holding registers:
 The numbers above are 1-based, as the Microject docs and `mbpoll` count.
 `microject.mb2hal` uses 0-based addresses, so port 1 is coil 0, pulse 0,
 period 1. To use port 4, change them to 3 / 6 / 7.
+
+### Slow pulse rates
+
+The board's firmware (github.com/dan-mills/microJect, `firmware/src/main.rs`)
+runs a 1 ms tick with a 16-bit counter per channel: the period register is
+whole milliseconds, 1–65535, with no clamp. So rates down to about 0.016 Hz
+would work; this config stops at **0.1 Hz** (one shot every 10 s). The board
+fires a pulse as soon as the coil turns on, so slow rates don't wait a full
+period for the first shot.
+
+At slow rates duty turns into a big shot: at 0.2 Hz the period is 5000 ms, so
+1 % is a 50 ms pulse. Use small duties (0.1 % = 5 ms there). Pulses under
+1 ms are truncated to 0 (no spray). The tab's pulse-train preview widens its
+window (up to 20 s) so at least two periods show.
 
 Registers are treated as milliseconds. If yours turn out to be 0.1 ms units,
 set `[COOLANT]PULSE_SCALE` and `PERIOD_SCALE` to 10 in the INI.

@@ -23,8 +23,9 @@ addf coolant-pulse-gate servo-thread
 addf microject-pulse-scale servo-thread
 addf microject-period-scale servo-thread
 
-# Pulse rate 1-50 Hz (automotive injector, not kHz PWM).
-setp limit1.4.min 1
+# Pulse rate 0.1-50 Hz (automotive injector, not kHz PWM). The Microject period
+# register is whole ms in 16 bits (max 65535 ms = 0.016 Hz); 0.1 Hz = 10000 ms.
+setp limit1.4.min 0.1
 setp limit1.4.max 50
 net coolant-freq-cmd motion.analog-out-04 => limit1.4.in
 

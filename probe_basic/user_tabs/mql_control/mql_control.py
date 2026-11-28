@@ -57,17 +57,21 @@ from coolant_profiles import load_profiles, recipe_for_tool, save_tool_recipe  #
 PRESETS_PATH = os.path.join(CONFIG_DIR, "probe_basic", "mql_presets.json")
 DEFAULT_PROFILE_FILE = "probe_basic/coolant_tools.ini"
 
-# limit1.4 in coolant.hal clamps E4 to this range.
-FREQ_MIN = 1.0
+# limit1.4 in coolant.hal clamps E4 to this range. The Microject firmware counts
+# whole ms in a 16-bit period register, so anything >= ~0.016 Hz would work;
+# 0.1 Hz (one shot every 10 s) is the floor here.
+FREQ_MIN = 0.1
 FREQ_MAX = 50.0
-FREQ_STEP = 0.5
+FREQ_STEP = 0.1
+# Squared slider mapping gives the slow end (0.1-5 Hz) a usable share of the travel.
+FREQ_CURVE = 2.0
 DUTY_MIN = 0.0
 DUTY_MAX = 100.0
 DUTY_STEP = 0.1
 # Squared slider mapping puts most of the travel in the useful 0-25 % band.
 DUTY_CURVE = 2.0
 SHORT_PULSE_MS = 1.0
-PREVIEW_WINDOW_MS = 500.0
+PREVIEW_WINDOWS_MS = (500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0)
 SLIDER_STEPS = 1000
 POLL_MS = 250
 LIVE_DEBOUNCE_MS = 300
@@ -297,10 +301,20 @@ class PulsePreview(QWidget):
         self._spraying = bool(spraying)
         self.update()
 
+    def _window_ms(self):
+        """Smallest preset window that shows at least two periods (500 ms minimum)."""
+        period = 1000.0 / max(self._freq, 1e-3)
+        for w in PREVIEW_WINDOWS_MS:
+            if w >= 2.0 * period:
+                return w
+        return PREVIEW_WINDOWS_MS[-1]
+
     def paintEvent(self, event):  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         plot = QRectF(self.rect()).adjusted(8, 6, -8, -22)
+        window = self._window_ms()
+        in_s = window >= 2000.0
 
         painter.setPen(QPen(QColor("#4a4f51"), 1))
         painter.setBrush(QColor("#23282a"))
@@ -308,15 +322,19 @@ class PulsePreview(QWidget):
 
         label_font = QFont(PB_FONT, 10)
         painter.setFont(label_font)
-        grid_ms = 100.0
-        steps = int(PREVIEW_WINDOW_MS / grid_ms)
+        grid_ms = window / 5.0
+        steps = 5
         for i in range(steps + 1):
-            x = plot.left() + plot.width() * (i * grid_ms / PREVIEW_WINDOW_MS)
+            x = plot.left() + plot.width() * (i * grid_ms / window)
             if 0 < i < steps:
                 painter.setPen(QPen(QColor("#363c3e"), 1, Qt.DashLine))
                 painter.drawLine(int(x), int(plot.top() + 4), int(x), int(plot.bottom() - 4))
             painter.setPen(QColor("#9a9e9f"))
-            text = "{:.0f} MS".format(i * grid_ms) if i == steps else "{:.0f}".format(i * grid_ms)
+            if in_s:
+                val = "{:g}".format(round(i * grid_ms / 1000.0, 2))
+                text = val + " S" if i == steps else val
+            else:
+                text = "{:.0f} MS".format(i * grid_ms) if i == steps else "{:.0f}".format(i * grid_ms)
             align = Qt.AlignRight if i == steps else (Qt.AlignLeft if i == 0 else Qt.AlignHCenter)
             box = QRectF(x - 40, plot.bottom() + 3, 80, 16)
             if i == 0:
@@ -332,7 +350,7 @@ class PulsePreview(QWidget):
         pulse = _pulse_ms(self._freq, self._duty)
 
         def x_at(t_ms):
-            return plot.left() + plot.width() * (t_ms / PREVIEW_WINDOW_MS)
+            return plot.left() + plot.width() * (t_ms / window)
 
         path = QPainterPath()
         path.moveTo(plot.left() + 1, low_y)
@@ -341,9 +359,9 @@ class PulsePreview(QWidget):
             fill = QColor(color)
             fill.setAlpha(60)
             t = 0.0
-            while t < PREVIEW_WINDOW_MS:
+            while t < window:
                 x0 = x_at(t)
-                x1 = max(x_at(min(t + pulse, PREVIEW_WINDOW_MS)), x0 + 1.5)
+                x1 = max(x_at(min(t + pulse, window)), x0 + 1.5)
                 painter.fillRect(QRectF(x0, high_y, x1 - x0, low_y - high_y), fill)
                 path.lineTo(x0, low_y)
                 path.lineTo(x0, high_y)
@@ -509,7 +527,7 @@ class UserTab(QWidget):
         body.addLayout(left, 3)
 
         self.freq = SetpointControl(
-            "P", "PULSE RATE", "HZ", FREQ_MIN, FREQ_MAX, FREQ_STEP, 1,
+            "P", "PULSE RATE", "HZ", FREQ_MIN, FREQ_MAX, FREQ_STEP, 1, curve=FREQ_CURVE,
             hint="INJECTOR OPENINGS PER SECOND",
         )
         self.duty = SetpointControl(
@@ -521,7 +539,7 @@ class UserTab(QWidget):
             ctrl.committed.connect(self._on_committed)
             left.addWidget(ctrl)
 
-        preview_card, preview_box = self._card("previewCard", "PULSE TRAIN \u00b7 FIRST 500 MS")
+        preview_card, preview_box = self._card("previewCard", "PULSE TRAIN")
         self.preview = PulsePreview()
         preview_box.addWidget(self.preview, 1)
         tiles = QHBoxLayout()

@@ -137,7 +137,7 @@ their own machine: plain language, short sections, real values from the config.
   spindle it just applies `G43` and returns. Built-in M6 motion is off. Tool-length Z must come out positive.
 - **Spindle:** M3/M4 are swapped in `custom.hal` (VFD wiring). On this machine
   G-code `M3` means VFD reverse.
-- **Coolant (MQL):** `M201 P<Hz 1–50> Q<duty 0–100> R<psi, stored only>`, `M202`
+- **Coolant (MQL):** `M201 P<Hz 0.1–50> Q<duty 0–100> R<psi, stored only>`, `M202`
   is the per-tool recipe, `M8`/`M9` turn it on/off. There's a Probe Basic tab in `user_tabs/mql_control/`.
 - **Key params:** `#3004–3039` are probe/toolsetter settings (`#3014=99` is the probe tool),
   `#5181–5183` is the setter position, `#5501/5502` beam XY, `#5503` probe RPM, `#5516` beam
