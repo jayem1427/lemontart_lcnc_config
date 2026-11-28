@@ -20,10 +20,11 @@ REF ALL (probe still loaded, do not jog first):
 
     python3 scripts/home_repeat_test.py logs/homing_repeat/<date>_powercycle.csv --measure-only --note "restart 3"
 
-Safety: the only moves below the start height are G38 probing moves. XY moves
-are made 12 mm or more above the block top, so a home that is one screw turn
+Safety: after a home it travels in XY at the height homing left Z, then comes
+down over the block to 14 mm above its top, so a home that is one screw turn
 (10 mm) off still does not rapid into the block; it shows up as a ~10 mm
-result and the script stops.
+result and the script stops. Everything below that is a G38 probing move.
+Keep the path between the home position and the block clear at that height.
 """
 import argparse, json, os, random, statistics, time
 import linuxcnc
@@ -87,8 +88,8 @@ def measure(tag):
     """Probe at the saved spot; append one row. Returns the row as floats."""
     mdi_mode()
     run('G90 G54 G43 G21')
+    run('G53 G0 X%.4f Y%.4f' % (st['x'], st['y']))        # XY first, at the height homing left Z
     run('G53 G0 Z%.4f' % min(st['z'] + 12.0, -1.0))       # 14 mm above the top if home is right
-    run('G53 G0 X%.4f Y%.4f' % (st['x'], st['y']))
     run('G91 G38.3 Z-30 F600'); run('G90')
     s.poll()
     if not s.probe_tripped:
