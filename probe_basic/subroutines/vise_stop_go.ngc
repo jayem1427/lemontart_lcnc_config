@@ -41,6 +41,9 @@ o<vise_stop_go> sub
   o106 if [#<length> LE 0]
     (ABORT, Vise stop: enter the part length along the jaws)
   o106 endif
+  o109 if [#<stop_z> LE 0]
+    (ABORT, Vise stop: STOP Z must be above the parallels - set it in the tab)
+  o109 endif
 
   #<base> = [5201 + 20 * #<wcs>]
   o107 if [[ABS[#[#<base>]] LT 0.0001] OR [ABS[#[#<base> + 1]] LT 0.0001]]

@@ -72,6 +72,7 @@ The macro refuses to move if any of these is true:
 - No tool is loaded, or T99 (the touch probe) is loaded.
 - The tool has no diameter in the tool table.
 - The part length is 0.
+- PIN TIP Z is 0 or below (unset, or the pin would feed into the parallels).
 - The vise WCS X, Y or Z is still zero (not probed).
 - PIN TIP Z would put the spindle above machine Z0.
 
