@@ -8,7 +8,7 @@ you're working on.
 
 | Page | What's in it |
 |------|--------------|
-| [SETUP.md](SETUP.md) | Installing the software, getting the config, step-by-step bring-up |
+| [SETUP.md](SETUP.md) | Installing the software, getting the config, step-by-step bring-up, EtherCAT driver choice (native vs generic) and realtime timing |
 | [HARDWARE.md](HARDWARE.md) | Parts list, wiring, drive inputs, RS-485, E-stop |
 | [CONFIG_TOUR.md](CONFIG_TOUR.md) | How the files fit together, homing, following error, differences from stock |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Symptoms and their real causes |
@@ -25,13 +25,13 @@ you're working on.
 | [COOLANT.md](COOLANT.md) | Microject MQL coolant, `M201`/`M202`, the MQL tab |
 | [MODBUS.md](MODBUS.md) | mb2hal basics, adapters, bench testing |
 | [PROBE_BASIC_UI.md](PROBE_BASIC_UI.md) | UI settings, SET Z, ABORT dialog, custom tabs, macro fixes |
-| [SIGNAL_LOGGING.md](SIGNAL_LOGGING.md) | Logging HAL signals to CSV |
+| [SIGNAL_LOGGING.md](SIGNAL_LOGGING.md) | Logging HAL signals to CSV (and why it's not a 1 kHz recorder) |
 
 ## Servo tuning
 
 | Page | What's in it |
 |------|--------------|
-| [SERVO_TUNING.md](SERVO_TUNING.md) | Start here: the tab, the three ways to tune, test programs, presets, installing on another machine |
+| [SERVO_TUNING.md](SERVO_TUNING.md) | Start here: the tab, the three ways to tune, current gains and results, test programs, the reversal/clunk test, presets, installing on another machine |
 | [ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md) | How the automatic tuner works and how to read its journal |
 | [INERTIA_TUNING.md](INERTIA_TUNING.md) | Measuring the inertia ratio (work in progress) |
 | [SERVO_TUNING_LLM.md](SERVO_TUNING_LLM.md) | Prompt to give an AI for tuning help |

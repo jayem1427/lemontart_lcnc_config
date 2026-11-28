@@ -34,8 +34,10 @@ It automates the manual zone ladder in [SERVO_TUNING.md](SERVO_TUNING.md).
 4. **ONE-CLICK TUNE <axis>** → read the confirmation → Yes.
 5. Watch the plot with your hand near the E-stop. **CANCEL** stops the motion
    and restores the original gains.
-6. When it's done, read the summary and try the axis. If you like it, store it
-   to the drive's EEPROM (the tuner only writes RAM).
+6. When it's done, read the summary and try the axis. There's nothing to
+   save: the drive stores every SDO write in EEPROM itself (C13.10 = 1, see
+   [SERVO_TUNING.md](SERVO_TUNING.md#three-rules)). If you don't like it, LOAD
+   the `pre_one_click_*` preset and APPLY.
 
 The same engine runs from the command line:
 
@@ -125,9 +127,9 @@ Ctrl+C cancels the same way the CANCEL button does.
   torque FF % (only when the drive's torque FF source is already on).
 - **Not touched:** LinuxCNC's following-error settings, the 2nd gain set,
   torque filter, speed feedforward, FF source and FF filters, stiffness,
-  inertia, EEPROM. (Drive-homing work
-  found that some A6 SDO writes persist; restore from the `pre_one_click_*`
-  preset if a run was interrupted by a power loss.)
+  inertia. (Every write persists: the drive stores SDO writes in EEPROM,
+  C13.10 = 1. Restore from the `pre_one_click_*` preset if a run was
+  interrupted by a power loss.)
 - C00.04 (gain mode) is set to manual if it wasn't, so the drive's own
   auto-tuner can't fight it.
 
@@ -142,7 +144,7 @@ PREFLIGHT → BASELINE → [RESCUE] → SPEED → [NOTCH] → POSITION → [INTE
 | Step | What happens |
 |------|--------------|
 | Preflight | Machine on, idle, numpy installed, stroke fits, drive in CSP. Reads the drive torque limit 0x6072 and sets the torque guard to min(250 %, 0.8 × that limit). Fails here = nothing written |
-| Baseline | Read all parameters, save the backup preset, measure **3 times** (spread sets the improvement bar), record standstill noise |
+| Baseline | Read all parameters, save the backup preset, make **one unscored warm-up move** (`baseline_warmup`, default 1), then measure **3 times** (spread sets the improvement bar), record standstill noise |
 | Rescue | Only if the axis already rings: try a notch, else soften speed gain up to 3 times |
 | Speed | Speed gain (C01.01) × 1.25 per step until unstable or no longer improving. **When a step rings, settle at margin × that gain** (balanced 0.55, ≈5 dB) and re-measure |
 | Notch | If the unstable step shows a clear resonance at 40–500 Hz, put notch 3 there and retry |
@@ -170,7 +172,10 @@ coherent bins" and has no effect.
 **"Unstable"** means any of: the move was aborted; the FFT shows a sharp peak
 (≥ 4× the noise floor and ≥ 10 % of the RMS); more than 35 % of the energy is
 above 40 Hz; the ring score is ≥ 0.85; torque reached the guard; or (verify
-only) standstill torque RMS > 5 % or standstill FERR RMS > 2 µm. Frequencies below
+only) standstill torque RMS > 5 % or standstill FERR RMS > 2 µm. The
+standstill torque RMS is taken **about its mean**: a vertical axis holds a
+steady gravity torque (Z ≈ 12 %) that isn't noise. The journal shows both,
+e.g. `torque rms 0.25% (about mean 12.0%)`. Frequencies below
 `max(25 Hz, 6 / stroke time)` are ignored, because a short fast stroke
 naturally puts energy there. See the lessons below.
 
@@ -194,8 +199,8 @@ the filter's lag destabilises the speed loop.
 
 ## The journal
 
-Every run writes `logs/tuning/one_click/<time>_<axis>/` (not in git, so copy
-out anything worth keeping):
+Every run writes `logs/tuning/one_click/<time>_<axis>/` (committed to git:
+`.gitignore` lets the CSV, JSON and MD through):
 
 | File | Contents |
 |------|----------|
@@ -309,7 +314,7 @@ start ± a third of the travel. On Z, start low and use positive offsets only.
 |---------------|-----|
 | Torque filter, speed feedforward, FF filters, switching FF on, 2nd gain set | Trade-offs that need judgment. Use the AI-assisted loop |
 | Inertia | Needs its own measurement: [INERTIA_TUNING.md](INERTIA_TUNING.md) |
-| Storing to EEPROM | Kept manual for safety |
+| Choosing what reaches EEPROM | The drive stores every write itself (C13.10 = 1), including each ladder step. The backup preset is the undo. Writing a lot of parameters often can raise ALF1.3 ("too frequent writing of EEPROM by host controller SDO"); not seen so far |
 | More than one notch | Notches 1–2 belong to the drive's adaptive notch; a second failed notch usually means mechanics |
 
 Limits: resonances above ~500 Hz are invisible to it (1 kHz sampling). It
@@ -328,6 +333,11 @@ Failed runs are data. Add a row when a run teaches you something.
 | 2026-11-27, review | v1 "1 kHz" sampler really ran at 250–300 Hz (X) and 650–750 Hz (Y): sample counts vs stimulus time in the July journals. FFT frequencies were wrong by 1.4–4×. Fix: realtime `sampler.0` capture, true fs passed to the FFT | `test_true_fs_used` |
 | 2026-11-27, review | Z run 2026-07-16: first move after a write tripped at 1.0 mm in 13 samples; every later move returned RCS_ERROR and the engine kept writing for 1.4 s. Cause not proven (Z sag on re-enable vs instability). Fix: settle check, stop on fault, `--live-writes` option | `test_machine_fault_stops` |
 | 2026-11-27, review | "Back off one step" left ~2 dB gain margin, measured with unloaded moves. Fix: margin × first ringing gain; best steps above the margin are discarded | `test_happy_path`, `test_verify_fail_keeps_best` |
+| 2026-11-27, Z | Standstill check failed every Z tune: "torque rms 12 % > 5 %". Peak was 13–15 % against RMS 12–13 %, so it was steady gravity hold, not hiss (FERR at rest 0.1 µm). The backoff "failed" too and the tuner fell back to an early step. Fix: torque RMS about the mean (`_ac_rms`); verify then read 0.25 % about a 12 % mean | Z `20261127_233710_Z` vs `20261127_234614_Z`; `test_rest_gate_ignores_holding_torque` |
+| 2026-11-27, Z | The campaign's first move spiked (Z: 405 µm, 198 % torque; the next two baselines 49 µm), so the baseline spread read 416 % and every step needed 15 % improvement. The speed ladder stalled at 26 Hz. Fix: one unscored warm-up move before the baselines; spread then 2.0 %, bar 4.1 % | `01_warmup_1.csv` in `20261127_234614_Z`; `test_warmup_absorbs_first_move_spike` |
+| 2026-11-27, Z | The fixed run passed every check (34.4 Hz / 82.5 rad/s, FERR 1.9× better) but **whined** audibly. Reverted to 26 / 50. The tuner can't hear above 500 Hz (1 kHz sampling) and only gates standstill torque ripple. On Z, listen before keeping a result | Z presets `one_click_20261127_234730` (don't use), `pre_one_click_20261127_233712` (in use) |
+| 2026-11-27, Y | First Y run tripped the **A** drive (0x8611 following error) 0.4 s after the first gain write: A is mechanically unconnected and its 0.5° window was too tight for the machine OFF→ON cycle. Fix: A's 6065 widened to 10° while unconnected | `20261127_232720_Y`; commit "Widen A drive following-error window" |
+| 2026-11-28, all | The drive stores every SDO write in EEPROM (C13.10 = 1). The tuner's writes were never "RAM only" as documented; each ladder step persisted | `ethercat upload -p N -t uint16 0x2013 0x11` → 1 on all four drives |
 | 2026-07-12, sim | Short fast strokes (Y: 0.09 s per leg) put normal tracking-error harmonics at 30–60 Hz that look like resonance. The check called a healthy axis unstable and "rescued" it into mush. Fix: ignore below `6 / leg time`, and require a peak to carry ≥ 10 % of RMS | `test_short_stroke_gate_not_fooled` |
 
 ---
@@ -351,6 +361,11 @@ Failed runs are data. Add a row when a run teaches you something.
 phase, torque guard from 0x6072, optional multi-position verify
 (`test_feedforward_phase`, `test_drive_torque_limit_guard`,
 `test_multi_position_verify`, `test_sensitivity_estimator`).
+
+**First machine runs, 2026-11-27:** X 3.2× and Y 1.7× lower RMS following
+error, Z 1.9× but whined and was reverted. Two fixes came out of the Z runs:
+the warm-up move and the mean-removed standstill torque (see Lessons). Results
+table and plots: [SERVO_TUNING.md](SERVO_TUNING.md#first-machine-runs-of-engine-v21-2026-11-27).
 
 **Still not done, on purpose:**
 

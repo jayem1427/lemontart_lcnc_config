@@ -68,8 +68,8 @@ is a separate file marked `#NOTWOPASS` and listed first.
 
 **Never put loop gains (C00/C01 parameters) in this file.** lcec writes these
 SDOs every time LinuxCNC starts, so any gains here overwrite your tuning on
-every launch. Tune with the Servo Tuning tab and store the result to the
-drive's EEPROM instead. The only exceptions are the two above (`C01.10`, and
+every launch (and the drive stores each of those writes in EEPROM, C13.10 = 1).
+Tune with the Servo Tuning tab instead; its writes persist the same way. The only exceptions are the two above (`C01.10`, and
 the 6065/6066 fault windows).
 
 The DC clock runs in M2R mode (`refClockSyncCycles="-1"`). Don't switch it to

@@ -27,6 +27,8 @@ errors.
 | Symptom | Cause / fix |
 |---------|-------------|
 | `lcec_conf` fails, no slaves | EtherCAT master not running (`systemctl status ethercat`), wrong MAC in `/etc/ethercat.conf`, drives not powered |
+| `ethercat master`: 0 slaves, Tx errors climbing, Tx frames 0 (after changing `DEVICE_MODULES`) | The old driver module is still loaded: `systemctl restart` reads the new config for its stop step. Stop the service, `sudo rmmod ec_generic ec_e1000e ec_master`, then start. See [SETUP.md](SETUP.md#ethercat-driver-and-timing) |
+| `halcmd` says `HAL: ERROR: version code mismatch`, or `linuxcnc.stat()` reads all zeros, from a terminal script | LinuxCNC is the tpnext build. `source ~/src/linuxcnc-tpnext/scripts/rip-environment` first |
 | HAL components "fail to load" (lowpass, limit1, …) | Usually stale LinuxCNC processes from a crash, not the component. Reboot, or `halrun -U` |
 | A HAL file errors on a `net` line | Two writers on one signal, or `count=` and `names=` mixed for one component. See [CONFIG_TOUR.md](CONFIG_TOUR.md#hal-conventions-in-this-config) |
 | "Parameter file out of order" | `linuxcnc.var` must be sorted by number. Sort it, or open the Laser Setter tab once |
@@ -47,6 +49,8 @@ errors.
 | Can't jog Z before homing | The saved position (`position.txt`) is outside the soft limits |
 | A 100 mm move never reaches full speed | Stock 2.9 planner gives only half acceleration under `G64`. Test with `G61` |
 | Need to re-home before jogging after a job | Known open issue: after `M30` the machine stays in AUTO with jog stuck. Switch to Manual |
+| Rare single spike in drive following error: the same 60F4 value twice, then about ±(speed × 1 ms) for 2–3 cycles and a few ms of ringing. Possibly an occasional "tick" | A late EtherCAT frame. The drive missed one position update, then got two at once. Seen once in 102 s on the `generic` driver; none in a 5 min stress run on native `ec_e1000e`. Check `halcmd show thread` max time and the drives' C13.04 / C13.12 counters. See [SETUP.md](SETUP.md#ethercat-driver-and-timing) |
+| A tune (or any gain change) is still there after a power cycle | Expected. The A6 stores every SDO write in EEPROM (C13.10 = 1). Undo by LOAD of the `pre_one_click_*` preset + APPLY |
 
 ## Homing and switches
 
@@ -107,6 +111,23 @@ After the machine OFF→ON that each gain write needs, the axis moved more than
 0.02 mm. On Z this is probably sag with the drive disabled. Park Z low or on a
 support, or run `scripts/test_live_gain_write.py --axis Z`; if it passes, tune
 with `--live-writes` so the drive never disables.
+
+## One-click tune on Z: "standstill torque rms 12% > 5%", or the ladder stalls early
+
+Both fixed 2026-11-27. The standstill check counted Z's steady gravity hold
+(~12 % torque) as hiss; it now measures RMS about the mean. And the first move
+of a campaign can spike (Z: 405 µm, 198 % torque) and blow the baseline spread
+up to a 15 % improvement bar; one unscored warm-up move (`baseline_warmup`)
+now runs before the baselines. After restarting Probe Basic, the journal's
+standstill line shows `(about mean …%)`, and `warmup_1` appears before the
+baselines.
+
+## Z whines after a one-click tune
+
+The tuner passed it (34.4 Hz / 82.5 rad/s on 2026-11-27) but you can hear it.
+It samples at 1 kHz, so anything above 500 Hz is invisible to it. LOAD
+`pre_one_click_20261127_233712` and APPLY (26 Hz / 50 rad/s). Listen to Z
+before keeping any tune.
 
 ### Servo tuning: "sampler.0 is already capturing"
 

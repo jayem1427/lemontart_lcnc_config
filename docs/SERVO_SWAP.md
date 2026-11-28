@@ -100,7 +100,7 @@ The EL8 list says `6064h * gear ratio = 6063h` (internal encoder position). `SCA
 3. Recompute `[JOINT_*] SCALE` from command counts per mm (or deg). Recompute startup `6065` as `0.5 mm × SCALE` (A axis: `0.5° × SCALE`). Confirm `6065` / `6066` accept a write with `ethercat upload` / `ethercat download` on one slave before putting them in XML. The EL8 list’s default window is 30000 command units, not this mill’s 0.5 mm.
 4. Leave position, velocity, integral, torque-filter, notch, and inertia SDOs **out** of `ethercat-conf.xml`. Same rule as [SERVO_TUNING.md](SERVO_TUNING.md#three-rules): startup SDO writes land on every bus claim and wipe a tune.
 5. Add a new parameter catalog (a sibling of `PARAM_DEFS`, not an edit that reuses C01 indexes). Units come from the manual row: Pr1.04 stays a time constant. One-click, notch auto-write, and the inertia panel stay off until that catalog exists and a person has applied one change by hand.
-6. Tune on the machine. Do not load `config/tuning/presets/`. Store to the drive’s EEPROM from the vendor panel after the tune is good. APPLY on the A6 path is RAM-only; confirm the EL8 save path in the EL8 manual (parameter saving chapter) before assuming the same.
+6. Tune on the machine. Do not load `config/tuning/presets/`. On the A6, SDO writes are stored to EEPROM by the drive (C13.10 "EtherCAT parameter storage" = 1); confirm what the EL8 does with SDO writes in its manual (parameter saving chapter) before assuming the same.
 7. Homing and the first probe happen after DI bits have been checked with `halcmd show pin`.
 
 ## EL7

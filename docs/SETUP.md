@@ -37,10 +37,18 @@ This is what the mill runs today. Matching it closely saves a lot of grief.
 
    ```bash
    MASTER0_DEVICE="aa:bb:cc:dd:ee:ff"   # MAC of the NIC the drives plug into (ip link)
-   DEVICE_MODULES="generic"
+   DEVICE_MODULES="generic"             # start here; see "Native driver" below
    ```
 
    Use a NIC dedicated to EtherCAT. Start it with `sudo systemctl enable --now ethercat`.
+   Get everything working on `generic` first, then switch to the native driver.
+   See [EtherCAT driver and timing](#ethercat-driver-and-timing).
+
+   **Note:** this mill runs the **tpnext** LinuxCNC build. Any script that talks
+   to the running machine (`halcmd`, `import linuxcnc`, `scripts/clunk_*.py`,
+   `rt_capture.py`) must run after
+   `source ~/src/linuxcnc-tpnext/scripts/rip-environment`. Without it you get
+   `HAL: ERROR: version code mismatch` and `linuxcnc.stat()` returns all zeros.
 4. **Let normal users talk to the master.** The servo tuning tab calls the
    `ethercat` command without sudo. Create `/etc/udev/rules.d/99-ethercat.rules`:
 
@@ -89,6 +97,111 @@ tpnext. The `main` branch doesn't have these keys.
 One stock 2.9 quirk worth knowing: with `G64` blending, a stop-to-stop move
 only gets **half** of `MAX_ACCELERATION` (LinuxCNC issue #4220). Put `G61` in
 test programs when you're measuring acceleration.
+
+### EtherCAT driver and timing
+
+**This mill runs the native `ec_e1000e` driver** on the PC's onboard Intel
+I219-LM (PCI `8086:15b7`), since 2026-11-28. Before that it ran `generic`.
+
+| Driver | How frames travel | Trade-off |
+|--------|-------------------|-----------|
+| `generic` | Through the normal Linux network stack. The NIC interrupt and packet handling run on the shared (non-isolated) CPUs | Works with any NIC. The servo thread can get stuck waiting on network-stack locks held by busy tasks on those CPUs |
+| native (`e1000e`, `igb`, `r8169`, …) | The master drives the NIC directly from the servo thread. No network stack, no NIC interrupt | Lower, steadier latency. Only for NICs IgH has a driver for, and the NIC disappears as a normal interface |
+
+**Why it was switched.** A realtime following-error capture on Y found one
+glitch in 102 s on `generic`: the drive's 60F4 repeated a sample, then swung
+−11 / +20 µm for 3 ms and rang for ~5 ms. At 20 mm/s, one servo cycle of
+travel is exactly 20 µm, so the drive missed one position update (frame
+arrived outside its sync window), then got two at once. The EtherCAT master
+showed 0 lost frames, and the servo thread's worst cycle was 557 µs against a
+29 µs typical. On the native driver, a 303 s stress run (same Y program three
+times, all three shared cores pinned at 100 % plus disk scanning, load average
+up to 12.6) showed 0 glitches, largest single-cycle jump 3.4 µm, and the
+worst servo cycle stayed at 332 µs (from startup) through the whole run.
+
+![Generic vs native driver](assets/ethercat_timing/ethercat_driver_before_after.png)
+
+Not proof: on `generic` the glitch was rare (1 in ~9 minutes of capture), so
+5 clean minutes fits the fix without proving it. The same stress run on
+`generic` would settle it. Data: `logs/clunk/`, test method:
+[SERVO_TUNING.md](SERVO_TUNING.md#reversal--clunk-test).
+
+**What `/etc/ethercat.conf` has now** (backup of the generic version:
+`/etc/ethercat.conf.bak-generic`):
+
+```bash
+MASTER0_DEVICE="00:23:24:d6:7e:3d"
+DEVICE_MODULES="e1000e"
+#UPDOWN_INTERFACES="eno1"      # commented out: eno1 no longer exists as a netdev
+```
+
+**Switching drivers: stop, edit, start. Never edit-then-restart.** LinuxCNC
+must be closed.
+
+```bash
+sudo systemctl stop ethercat
+sudo rmmod ec_generic ec_e1000e ec_master 2>/dev/null; lsmod | grep '^ec_'   # must print nothing
+sudo sed -i 's/^DEVICE_MODULES="generic"/DEVICE_MODULES="e1000e"/; s/^UPDOWN_INTERFACES="eno1"/#UPDOWN_INTERFACES="eno1"/' /etc/ethercat.conf
+sudo systemctl start ethercat
+```
+
+`systemctl restart ethercat` after editing does **not** work. The stop half
+reads the *new* config, so it never unloads the old driver module. The new
+driver then binds the NIC but the master can't use it: `ethercat master` shows
+Tx errors climbing, 0 Tx frames, 0 slaves (seen 2026-11-28, and wrongly
+blamed on the I219 at first). Fix: the `rmmod` line above, then start.
+
+Check before starting LinuxCNC:
+
+```bash
+readlink /sys/bus/pci/devices/0000:00:1f.6/driver   # .../ec_e1000e
+ethercat master | grep -E "Slaves|Tx errors"        # Slaves: 4, Tx errors: 0
+ethercat slaves                                     # 4 lines, PREOP
+```
+
+Then start LinuxCNC with the machine **off** and check `ethercat slaves` (all
+OP), `halcmd show pin lcec.0 | grep dc-` (`dc-sync-converged` TRUE) and
+`halcmd show thread` before enabling. Measured on native: DC reference error
+30–44 µs (19 µs on generic), servo thread 40–70 µs typical (29 µs on generic,
+because the thread now does the NIC work itself).
+
+**Going back to generic** (same rule, stop first):
+
+```bash
+sudo systemctl stop ethercat; sudo rmmod ec_e1000e ec_master 2>/dev/null
+sudo cp /etc/ethercat.conf.bak-generic /etc/ethercat.conf && sudo systemctl start ethercat
+```
+
+The IgH DKMS package builds every native driver for the running kernel
+(`ls /lib/modules/$(uname -r)/updates/dkms/ec_*`). To check that yours covers
+your NIC, look for its PCI ID in the driver's table:
+`python3 -c "import lzma;print(lzma.open('/lib/modules/$(uname -r)/updates/dkms/ec_e1000e.ko.xz').read().count(bytes.fromhex('86800000b7150000')))"`
+(1 = listed; the bytes are vendor 8086 + device 15b7, little-endian).
+
+**Other realtime settings on this PC:**
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| Kernel command line | `isolcpus=3 intel_idle.max_cstate=0 processor.max_cstate=0` | Servo thread (`rtapi_app:T#0`, FIFO 98) runs alone on CPU 3. C-states limited to C1 |
+| CPU governor | `performance` on all cores | One-shot unit `/etc/systemd/system/cpu-performance.service` writes it at boot (`cpupower` isn't installed). Was `powersave`, which lets cores drop to 800 MHz |
+| Turbo | off (`intel_pstate/no_turbo = 1`) | Steadier clock |
+| Not set | `nohz_full`, `rcu_nocbs`, `irqaffinity` | Possible next steps if latency still shows up |
+
+The governor unit:
+
+```ini
+# /etc/systemd/system/cpu-performance.service
+[Unit]
+Description=CPU governor performance (LinuxCNC realtime)
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > $g; done'
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable with `sudo systemctl daemon-reload && sudo systemctl enable --now cpu-performance.service`.
 
 ---
 

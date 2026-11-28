@@ -78,3 +78,6 @@ logs/laser_hits/**/*.csv
 # Signal logs picked for offline analysis are committed compressed
 !logs/signals/*.csv.gz
 !logs/signals/*.summary.txt
+
+# Clunk / EtherCAT timing captures: committed compressed (plots, reports kept as-is)
+!logs/clunk/*.csv.gz

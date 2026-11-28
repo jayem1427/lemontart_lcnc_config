@@ -23,7 +23,7 @@ Order: inertia first, then switch the tab back to **GAINS** and tune.
    torque limit **0**.
 4. Home, park mid-travel, machine on.
 5. **BEGIN INERTIA AUTO-TUNE** → confirm.
-6. If the quality is **good**, C00.06 is written (RAM only). Marginal and bad
+6. If the quality is **good**, C00.06 is written (the drive stores it in EEPROM, C13.10 = 1). Marginal and bad
    results are shown but not written.
 
 During the move it temporarily lowers the axis acceleration so the speed-up

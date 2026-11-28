@@ -76,8 +76,9 @@ their own machine: plain language, short sections, real values from the config.
 | LinuxCNC | stock apt **2.9.8** (`launch.sh`, Desktop "Launch_Mill") **and** experimental **tpnext-ma** run-in-place build at `~/src/linuxcnc-tpnext` (`launch-tpnext.sh`, Desktop "EtherCAT Mill (tpnext / jerk)") |
 | OS / RT | Debian, PREEMPT_RT kernel 6.12.x-rt |
 | UI | Probe Basic 0.6.6 / QtPyVCP 5.1.0 (Debian pkg). Log: `~/qtpyvcp.log` |
-| EtherCAT | IgH master + linuxcnc-ethercat **v1.41.0** built from source in `~/linuxcnc-ethercat` |
-| Drives | 4× StepperOnline **A6-EC** (CiA402 CSP, `6060=8`), firmware `AS715N_sAxis_V0.10`, 17-bit encoders |
+| EtherCAT | IgH master 1.6.8 + linuxcnc-ethercat **v1.41.0** built from source in `~/linuxcnc-ethercat`. **Native `ec_e1000e` driver** on the onboard I219-LM since 2026-11-28 (was `generic`; backup `/etc/ethercat.conf.bak-generic`). Switch drivers with stop → rmmod → edit → start, never `restart`. CPU governor `performance` via `cpu-performance.service`. Details: `docs/SETUP.md#ethercat-driver-and-timing` |
+| Scripts vs tpnext | With the tpnext build running, any terminal `halcmd` / `import linuxcnc` needs `source ~/src/linuxcnc-tpnext/scripts/rip-environment` first (else "HAL version code mismatch", stat all zeros) |
+| Drives | 4× StepperOnline **A6-EC** (CiA402 CSP, `6060=8`), firmware `AS715N_sAxis_V0.10`, 17-bit encoders. **Every SDO write is stored to drive EEPROM** (C13.10 `0x2013:11` = 1 on all four): APPLY/one-click persist across power cycles; undo = LOAD backup preset + APPLY |
 | Spindle | H100 VFD over Modbus (`h100.mb2hal`), max 24 000 RPM. Own **CH340** USB-RS485 adapter, 38400 8N1 slave 1 |
 | Coolant | Microject PWM MQL board over Modbus (`microject.mb2hal`, `coolant.hal`). Own **FTDI** adapter, 19200 8E1 slave 8. Both `.mb2hal` files use `/dev/serial/by-id/` paths |
 | Pendant | XHC WHB04B-6 wireless (`xhc-whb04b-6.hal`, `-HsfB`) |
@@ -155,7 +156,10 @@ their own machine: plain language, short sections, real values from the config.
   branch switch, delete leftover tab dirs that only contain `__pycache__`, or PB crashes.
   Don't `deleteLater()` QtPyVCP `MDIButton`s. Use standard checkable Qt buttons
   instead of custom click logic. Don't block the Qt thread. The font family is `BebasKai`
-  (no space). Background `#2e3436`, panels `#363b3d`.
+  (no space). PB's own dark background is `#2e3436` (panels `#363b3d`), but
+  for new tabs Jon prefers the **CONVERSATIONAL page look**: page `#818584`,
+  panels with the conversational gradient (`rgb(81,86,85)`→`rgb(109,115,118)`)
+  and a 2 px black border (see `vise_stop.qss`).
 - **In-process HAL reads:** `hal.get_value` only works on the thread that created
   the component, and it returns NaN for some pins (e.g. `joint.N.f-error`). Read the raw
   `lcec.0.N.*-fb` pins through `a6_servo_tune`'s component, and get host values from
@@ -163,21 +167,29 @@ their own machine: plain language, short sections, real values from the config.
 - **Startup noise you can ignore:** the Qt segfault in `QPlainTextEdit::focusOutEvent`
   on exit, "Failed to get reference clock time", and mb2hal transaction errors at shutdown.
 
-## Open threads (as of 2026-11-18)
+## Open threads (as of 2026-11-28)
 
-- **Servo tuning engine v2 (2026-11-27, `dev-jerk-testing`).** Realtime
-  `sampler.0` capture (end of `custom.hal`, `rt_capture.py`), stability margin,
-  baseline repeats, fault stop, settle check, torque and standstill gates. All
-  sim tests pass; **not yet run on the machine.** Before tuning: fix the Y ball
-  nut, restart LinuxCNC (new HAL block), bench-check
-  `python3 probe_basic/python/rt_capture.py X 1`, run
-  `scripts/test_live_gain_write.py --axis <X|Y|Z>`, then `--dry-run`, then a
-  real run. Expect lower gains than the July presets (margin 0.55 vs ~0.8).
-  Engine 2.1 added |S| sensitivity (Ms), torque-FF phase, 0x6072 torque guard,
-  `--verify-at` multi-position; the tab's ANALYZE reads a realtime
-  `RtStream`. Deferred on purpose: chirp injection (command path) and 0x60B2
-  load rejection (PDO map) — both collide with `dev-drive-homing`, do them
-  after that merges.
+- **Servo tuning engine v2.1: run on the machine 2026-11-27.** Gains on the
+  drives now: X 150 Hz / 360 rad/s / 3 ms (RMS FERR 3.2× lower), Y 37.5 / 90 /
+  3 (1.7×), **Z kept at 26 / 50 / 3**. Z's tune (34.4 / 82.5) whined audibly
+  and was reverted. Don't load Z `new_tuning` / `one_click_20261127_234730`.
+  Two engine fixes from the Z runs: an unscored warm-up move before the
+  baselines (first-move spike inflated the bar to 15 %), and standstill
+  torque RMS about the mean (gravity hold read as 12 % hiss). The tuner can't
+  hear a whine above 500 Hz, so Z needs a listen. Results and plots:
+  `docs/SERVO_TUNING.md` (First machine runs), lessons in
+  `docs/ONE_CLICK_TUNING.md`. Deferred on purpose: chirp injection (command
+  path) and 0x60B2 load rejection (PDO map). Both collide with
+  `dev-drive-homing`, so do them after that merges.
+- **The "clunk" (heard on the 2026-11-25 Reducer job): not mechanical on Y.**
+  The reversal test (`scripts/clunk_*.py`, `docs/SERVO_TUNING.md#reversal--clunk-test`)
+  found no backlash or loose-nut signature on Y with the new gains: every
+  reversal overlays, asymmetry ≤ 1.7 µm. The only event was a one-cycle
+  EtherCAT timing glitch on the generic driver (a late frame, missed position
+  update, ±20 µm for 3 ms). It was gone in a 5 min stress run on the native
+  driver, but that's not proven (it was rare on generic too). Not yet run on X
+  or Z, or with a microphone. The drive's C13.09 invalid-frame counter read
+  24 064 on slave 0 (others 0) on 2026-11-28. Check whether it grows.
 - **Drive homing vs upstream (checked 2026-11-27).** `cia402_homecomp` has no
   commits after the pinned `b13bf72`; lcec after v1.49.0 only changed the
   Delta ASDA driver. LinuxCNC master/tpnext-ma moved to the 64-bit HAL API

@@ -29,9 +29,15 @@ it.
 2. **Never put loop gains in `ethercat-conf.xml`.** lcec writes those SDOs on
    every LinuxCNC start, so they'd overwrite your tuning every launch. The XML
    only sets the fault window (6065/6066) and `C01.10`.
-3. **APPLY writes to drive RAM only.** A power cycle reverts to what's stored
-   in the drive. When you like a result, store it to EEPROM from the drive's
-   front panel or the vendor tool.
+3. **Every write is permanent.** The A6-EC stores SDO writes in its EEPROM
+   by itself: **C13.10 "EtherCAT parameter storage" = 1** (`0x2013:11`, the
+   factory default; all four drives read 1 on 2026-11-28). APPLY, one-click
+   and the inertia tool all persist across a power cycle, so a bad tune
+   doesn't go away on its own. LOAD the backup preset and APPLY to undo.
+   Check it with `ethercat upload -p 0 -t uint16 0x2013 0x11`. (Older docs
+   here said "RAM only". That was an assumption, never tested.) Writing many
+   parameters very often can raise **ALF1.3** "too frequent writing of EEPROM
+   by host controller SDO".
 
 ---
 
@@ -102,6 +108,33 @@ anything goes wrong or you cancel. Since engine v2 (2026-11-27) it needs the
 realtime capture block in `custom.hal` and settles at a fixed stability
 margin, so results land lower than the July presets. Full details:
 [ONE_CLICK_TUNING.md](ONE_CLICK_TUNING.md).
+
+### First machine runs of engine v2.1 (2026-11-27)
+
+| Axis | Before (speed / position / integral) | After | Following error, same test move | Kept? |
+|------|--------------------------------------|-------|---------------------------------|-------|
+| X | 80 Hz / 130 rad/s / 5 ms | **150 Hz / 360 rad/s / 3 ms** (position hit the BALANCED cap) | RMS 2.15 → 0.67 µm (3.2×), peak 8.7 → 3.2 µm (2.7×) | Yes |
+| Y | 30 Hz / 90 rad/s / 10 ms | **37.5 Hz / 90 rad/s / 3 ms** | RMS 17.7 → 10.3 µm (1.7×), peak 51 → 24 µm (2.1×) | Yes |
+| Z | 26 Hz / 50 rad/s / 3 ms | 34.4 Hz / 82.5 rad/s / 3 ms | RMS 19.3 → 10.4 µm (1.9×), peak 49 → 28 µm (1.7×) | **No: audible whine.** Back on 26 / 50 / 3 |
+
+Torque FF stayed where it was (X 120 %, Y 125 %, Z 200 %). Each axis used its
+own default test move (X 40 mm F3000, Y 15 mm F10000, Z 10 mm F6000), so
+compare before/after within a row, not across rows.
+
+![X and Y before/after](assets/tuning_20261127/x_y_before_after.png)
+
+- **The new X and Y gains are already saved** in the drives' EEPROM (rule 3:
+  C13.10 = 1), and so is Z's revert. The `new_tuning` presets are the
+  file copies.
+- **Z needed two tuner fixes first** (warm-up move, gravity-aware standstill
+  check; see ONE_CLICK_TUNING.md lessons). The fixed run then passed every
+  check, but the result whined. The tuner listens up to 500 Hz (1 kHz
+  sampling) and to standstill torque *ripple*; a whine above that is
+  invisible to it. Your ears are the last check on Z.
+- Make before/after plots of any runs with
+  `python3 scripts/plot_tune_before_after.py <run dirs…> -o out.png`
+  (run from `logs/tuning/one_click/`; `DIR:before.csv,after.csv` picks
+  captures by hand, e.g. a baseline from an earlier run).
 
 ## AI-assisted
 
@@ -193,16 +226,112 @@ first. One-click doesn't need these. It generates its own moves.
 
 ---
 
+## Reversal / clunk test
+
+A repeatable air-move test that looks for a "clunk" (backlash, a loose ball
+nut, a timing glitch) in the drive's following error at direction reversals.
+It uses only 60F4 and the commanded position, captured every servo cycle.
+
+**1. Program.** `python3 scripts/clunk_test_gcode.py Y` writes
+`~/linuxcnc/nc_files/clunk_test_Y.ngc` (any of X/Y/Z). One axis only, `G91`,
+every stroke goes + then −, so the axis stays between the start point and
+start + 20 mm. Six blocks of 10 cycles, 0.5 s dwell between blocks, first
+with `G61` then with `G64 P0.01`, about 100 s in all:
+
+| Block | Stroke | Feed |
+|-------|--------|------|
+| a | ±20 mm | F1000 |
+| b | ±20 mm | F3000 |
+| c | ±20 mm | F6000 |
+| d | ±20 mm | F12000 (Z clamps to its 10000 max) |
+| e | ±2 mm | F3000 (reversal-heavy) |
+| f | ±0.1 mm | F500 (tiny strokes: backlash on its own) |
+
+`clunk_test_gcode.py Y 3` writes `clunk_stress_Y.ngc`, the same thing three
+times (about 5 minutes). For Z, start low enough that start + 20 mm stays at
+or below G53 Z0 (the generator assumes + first).
+
+**2. Capture.** Raise Z, jog the axis to where it has 20 mm of room, machine on,
+Servo Tuning plot stopped, then:
+
+```bash
+source ~/src/linuxcnc-tpnext/scripts/rip-environment
+python3 scripts/clunk_capture.py Y                 # checks only
+python3 scripts/clunk_capture.py Y --run           # runs the program and captures
+python3 scripts/clunk_capture.py Y --program clunk_stress_Y.ngc --tag stress --run
+```
+
+The checks refuse to run unless the machine is on and idle, the axis is homed,
+the spindle is off, `sampler.0` is free and start..start+20 is inside the soft
+limits. The capture uses `rt_capture.RtCapture` and saves
+`logs/clunk/<time>_<AXIS>[_tag].csv` with `t_s, pos_cmd_mm, ferr_mm` plus the
+X/Y/Z following error of the same cycle (a timing glitch hits every axis, a
+mechanical one only the moving axis). The first line holds the health check:
+samples vs expected, overruns. A FIFO overrun or a sample-count mismatch saves
+the file as `..._UNTRUSTED.csv` and exits 1.
+
+**3. Analysis.** `python3 scripts/clunk_analyze.py logs/clunk/<file>.csv[.gz]`
+finds every reversal (sign change of the commanded velocity), takes −50 to
++150 ms around it, and reports per block: peak |FERR|, the largest
+single-cycle jump, and ringing (RMS after removing a 20 ms moving average,
+20–150 ms after). It writes `_report.md`, `_reversals.json`, `_run.png` (whole
+run, reversals marked) and `_overlay.png` (all reversals of each block
+aligned). Read these columns with care:
+
+- **`n >3x base`** compares against cruising mid-stroke, so a reversal on a
+  fast block always exceeds it. It can't single out a clunk on its own.
+- **`n >med+5MAD`** flags outliers within a block. FERR comes in whole counts
+  (0.076 µm), so the median spread is tiny and one count over gets flagged.
+  Look at the size, not the count.
+- **Asymmetry** (+→− minus −→+): backlash or a loose nut shows as a
+  consistent difference. Expect gravity to add some on Z.
+
+**Results on Y (2026-11-27/28), new gains:** no mechanical clunk signature.
+Every block's reversals overlay on one line, and the asymmetry is ≤ 1.7 µm on
+peak, ≤ 0.5 µm on jump. One event on the generic EtherCAT driver (88.7 s,
+c-G64) was a one-cycle timing glitch, not mechanics: see
+[SETUP.md](SETUP.md#ethercat-driver-and-timing).
+
+![The glitch, one dot per servo cycle](assets/ethercat_timing/glitch_zoom.png)
+
+Typical numbers to compare against (Y, new gains): reversal peak FERR 23–27 µm
+with `G61`, 17 µm (F1000) to 42 µm (F6000+) with `G64`; largest single-cycle
+jump 1.4–3.4 µm; cruising baseline 2 µm peak, 0.7 µm jump.
+
+---
+
 ## Presets
 
 Presets are JSON files in `config/tuning/presets/<axis>/`. **LOAD** only fills
-Pending, so you still have to press APPLY. Validated sets on this mill
-(2026-07-12):
+Pending, so you still have to press APPLY. What's on the drives now
+(2026-11-28):
+
+| Axis | Preset | Speed / position / integral / torque FF |
+|------|--------|-----------------------------------------|
+| X | `new_tuning` (= `one_click_20261127_233624`) | 150 Hz / 360 rad/s / 3.0 ms / 120 % |
+| Y | `new_tuning` (= `one_click_20261127_233343`) | 37.5 Hz / 90 rad/s / 3.0 ms / 125 % |
+| Z | `pre_one_click_20261127_233712` (the pre-tune values) | 26 Hz / 50 rad/s / 3.0 ms / 200 % |
+
+Z's `new_tuning` and `one_click_20261127_234730` hold the 34.4 Hz / 82.5 rad/s
+tune that whined. Don't load them.
+
+Older sets (2026-07-12, engine v1, sampled at the wrong rate):
 
 | Axis | Preset | Speed / position / integral |
 |------|--------|-----------------------------|
 | X | `one_click_best_20260712` | 150 Hz / 224.6 rad/s / 5.0 ms |
 | Y | `one_click_best_20260712` | 164.6 Hz / 60 rad/s / 3.5 ms |
+
+To write a preset's gains from a script (same path as APPLY: machine off,
+write, read back, machine on):
+
+```bash
+source ~/src/linuxcnc-tpnext/scripts/rip-environment
+cd probe_basic/python && python3 -c "
+import a6_servo_tune as t
+p = t.load_preset('Z', 'pre_one_click_20261127_233712').params
+print(t.apply_axis_params('Z', p, keys=['pos_gain_rad_s', 'speed_gain_hz']))"
+```
 
 One-click also saves timestamped `pre_one_click_*` (backup) and
 `one_click_*` (result) presets every run.
@@ -219,6 +348,10 @@ One-click also saves timestamped `pre_one_click_*` (backup) and
 | `0x2001:02` | C01.01 | Speed loop gain, 0.1 Hz |
 | `0x2001:03` | C01.02 | Speed integral, 0.01 ms |
 | `0x2001:31` | C01.30 | Adaptive notch mode |
+| `0x2013:05` | C13.04 | EtherCAT sync loss count (read only) |
+| `0x2013:0A` | C13.09 | Invalid EtherCAT frames (read only). Slave 0 read 24 064 on 2026-11-28, the others 0. Watch whether it grows |
+| `0x2013:11` | C13.10 | EtherCAT parameter storage: 1 = SDO writes go to EEPROM (default) |
+| `0x2013:13` | C13.12 | EtherCAT IRQ loss count (read only) |
 | `0x6065` | | Following-error window, counts (6554 = 0.5 mm. A: 3641 = 10°, widened while A is unconnected; normally 182 = 0.5°) |
 | `0x6066` | | Following-error time, ms (250) |
 
@@ -268,7 +401,10 @@ On the machine: the tab's Current column should fill in (not "READ FAIL"), and
 | `probe_basic/python/frf_analysis.py` | Sensitivity \|S\| (Ms, implied gain/phase margin) from command vs FERR |
 | `probe_basic/python/rt_capture.py` | Realtime capture via `sampler.0` + `halsampler` |
 | `scripts/test_live_gain_write.py` | Checks whether gains can be written with the drive enabled |
+| `scripts/plot_tune_before_after.py` | Before/after FERR plot of one-click runs |
+| `scripts/clunk_test_gcode.py`, `clunk_capture.py`, `clunk_analyze.py` | Reversal / clunk test: program, realtime capture, analysis |
 | `probe_basic/python/tune_trial.py` | Clipboard text and images |
 | `custom.hal` (end) | Drive telemetry → `tune-*` pins; `sampler.0` realtime capture |
 | `config/tuning/presets/` | Saved gain sets |
-| `logs/tuning/` | One-click and inertia journals (not in git) |
+| `logs/tuning/one_click/` | One-click journals and FERR captures (in git) |
+| `logs/clunk/` | Clunk test captures (`.csv.gz` in git), reports and plots |

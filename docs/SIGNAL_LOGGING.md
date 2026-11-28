@@ -31,11 +31,30 @@ From a terminal instead: `python3 scripts/run_signal_logger.py --live`
 
 ### What rate to use
 
-The servo thread runs at 1 kHz, so HAL pins change at most 1000 times a
-second. Sampling faster gains nothing, and you don't need 2× for Nyquist:
-the pins are already sampled values. 100–200 Hz is plenty for tuning and keeps
-Probe Basic responsive. The logger runs on the UI thread, and at 1000 Hz
-jogging can start to lag. Use 1000 Hz only for short captures.
+**Leave it at 100 Hz. Higher settings don't give real data.** The logger
+runs on Probe Basic's UI thread, which wakes every 10 ms (`POLL_MS_LOGGING`
+in `signal_monitor.py`). At each wake-up it takes however many samples the
+rate says are due, back to back within microseconds, and stamps them as if
+they were evenly spaced. So:
+
+- **The values are real.** Each one is a true read of the pin at that moment.
+- **The timestamps aren't.** In a 100 Hz job log every gap reads exactly
+  10.0 ms, even across a 46 ms UI stall: the stall is hidden and the catch-up
+  samples are stamped back into it.
+- **At 1000 Hz you get 100 Hz data, ten times bigger.** Each 10 ms wake-up
+  reads ~10 nearly identical values. File size is ~23 MB per minute (~1.4 GB
+  per hour of program, uncompressed) with nothing gained, and jogging can lag.
+- **Short events are missed or under-read.** A following-error spike lasting
+  ~20 ms (a direction change on X) can fall between samples, and a 1 ms one
+  almost always does. Nothing above ~50 Hz can be trusted.
+
+That's fine for what this tab is for: spindle sag under load, trends over a
+job, following error size across a program. For exact peaks, timing or
+frequencies use the realtime capture (`rt_capture.py`, `sampler.0`, one row
+per servo cycle) as the tuner and the clunk test do. See
+[SERVO_TUNING.md](SERVO_TUNING.md#reversal--clunk-test). It can't run at the
+same time as the tuner (one FIFO); giving the logger its own realtime sampler
+would mean a `sampler.1` block in `custom.hal`.
 
 ---
 
