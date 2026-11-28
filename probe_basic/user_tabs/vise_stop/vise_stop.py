@@ -49,7 +49,9 @@ VAR_FILE = os.path.join(CONFIG_DIR, "linuxcnc.var")
 # 5582, 5584 and 5587 belonged to the old "captured stop" design and are unused.
 P_AXIS, P_SIDE, P_LENGTH, P_WCS = 5580, 5581, 5585, 5586
 VISE_PARAMS = (P_AXIS, P_SIDE, P_LENGTH, P_WCS)
-DEFAULTS = {P_AXIS: 0.0, P_SIDE: 1.0, P_LENGTH: 0.0, P_WCS: 2.0}
+# Default view: jaws along Y, pin at the back (+Y side, away from the operator)
+# = vise_Y_neg.png. REVERT: was {P_AXIS: 0.0, P_SIDE: 1.0} (jaws along X, pin on -X).
+DEFAULTS = {P_AXIS: 1.0, P_SIDE: -1.0, P_LENGTH: 0.0, P_WCS: 2.0}
 # Set-and-forget, edited in linuxcnc.var only (the tab never writes them):
 # 5583 pin depth below the vise WCS Z0, 5587 spindle-nose clearance above it.
 P_DEPTH, P_NOSE_CLR = 5583, 5587

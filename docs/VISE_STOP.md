@@ -170,5 +170,9 @@ they sit on whatever the panel colour is.
   pin-position readout, then GO TO STOP and RETRACT. The line above the buttons
   shows the result of the last press, or a machine problem (E-stop, machine
   off, not homed). It is blank when there's nothing to say.
+- **Default** (fresh `linuxcnc.var`, or `DEFAULTS` in `vise_stop.py`): jaws
+  along Y, pin at the back (+Y side, away from the operator), i.e.
+  `#5580 = 1`, `#5581 = −1`, render `vise_Y_neg.png`. The tab remembers the
+  last choice in `linuxcnc.var`.
 - **PIN POSITION** (right): the render. Tap a side of the vise to put the pin
   there.
