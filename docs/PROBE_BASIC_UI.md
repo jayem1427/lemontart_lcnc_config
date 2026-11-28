@@ -3,7 +3,7 @@
 [Probe Basic](https://github.com/kcjengr/probe_basic) 0.6.6 is the UI. This
 page covers what's different from a stock install: INI display settings, a
 custom DRO with a **SET Z** shortcut, a tool-change dialog with an **ABORT**
-button, four custom tabs, and a few fixes to Probe Basic's own macros.
+button, five custom tabs, and a few fixes to Probe Basic's own macros.
 
 ---
 
@@ -98,6 +98,7 @@ changes in postgui HAL. Behaviour around it: [TOOL_CHANGE.md](TOOL_CHANGE.md).
 | Logging | `probe_basic/user_tabs/signal_monitor/` | [SIGNAL_LOGGING.md](SIGNAL_LOGGING.md) |
 | Laser Setter | `probe_basic/user_tabs/laser_setter/` | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) |
 | MQL | `probe_basic/user_tabs/mql_control/` | [COOLANT.md](COOLANT.md#the-mql-tab) |
+| Vise Stop | `probe_basic/user_tabs/vise_stop/` | [VISE_STOP.md](VISE_STOP.md) |
 
 `template_main/` and `template_sidebar/` are Probe Basic's empty templates.
 

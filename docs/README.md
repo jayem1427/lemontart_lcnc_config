@@ -19,6 +19,7 @@ you're working on.
 |------|--------------|
 | [TOOL_CHANGE.md](TOOL_CHANGE.md) | `M600` tool change, tool length, probe routing, Stop behaviour |
 | [CAM.md](CAM.md) | The Fusion 360 post |
+| [VISE_STOP.md](VISE_STOP.md) | Self-centering vise: WCS fixed at the vise center, a pin in the spindle as the stop |
 | [LASER_TOOL_SETTER.md](LASER_TOOL_SETTER.md) | Tool diameter with a laser beam sensor |
 | [SPINDLE.md](SPINDLE.md) | H100 VFD over Modbus |
 | [COOLANT.md](COOLANT.md) | Microject MQL coolant, `M201`/`M202`, the MQL tab |
