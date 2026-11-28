@@ -5,8 +5,11 @@ Sliders set M201 P<Hz> Q<duty %>. coolant.hal turns analog E4/E5 into
 period_ms = 1000 / Hz and pulse_ms = period_ms * duty / 100 on the Modbus
 holding registers; M8/M9 switch the injector coil. See docs/COOLANT.md.
 
-Named presets live in probe_basic/mql_presets.json. SAVE TO TOOL writes
-[T<n>] in [COOLANT]PROFILE_FILE, which M202 re-reads on every call.
+Presets are tool-agnostic named recipes stored as [PRESET <name>] in
+[COOLANT]PROFILE_FILE (coolant_tools.ini). Any preset can be assigned to any
+tool ([T<n>] PRESET = <name>); editing a preset changes every tool using it.
+M202 re-reads the file on every call. The old probe_basic/mql_presets.json is
+imported once into the file and renamed *.imported.
 MDI dispatch uses linuxcnc.command() directly (same as Laser Setter).
 """
 
@@ -52,9 +55,18 @@ PYTHON_DIR = os.path.join(CONFIG_DIR, "probe_basic", "python")
 if PYTHON_DIR not in sys.path:
     sys.path.insert(0, PYTHON_DIR)
 
-from coolant_profiles import load_profiles, recipe_for_tool, save_tool_recipe  # noqa: E402
+from coolant_profiles import (  # noqa: E402
+    assign_preset,
+    check_preset_name,
+    clear_tool,
+    delete_preset,
+    import_presets,
+    load_library,
+    save_preset,
+)
 
-PRESETS_PATH = os.path.join(CONFIG_DIR, "probe_basic", "mql_presets.json")
+# Old tab-only preset store; imported into coolant_tools.ini once, then renamed.
+LEGACY_PRESETS_PATH = os.path.join(CONFIG_DIR, "probe_basic", "mql_presets.json")
 DEFAULT_PROFILE_FILE = "probe_basic/coolant_tools.ini"
 
 # limit1.4 in coolant.hal clamps E4 to this range. The Microject firmware counts
@@ -409,7 +421,10 @@ class UserTab(QWidget):
         self._active = None
         self._spraying = False
         self._tool_in_spindle = 0
-        self._presets = self._load_presets()
+        self._lib = None
+        self._presets = []
+        self._import_legacy_presets()
+        self._reload_library()
 
         self._live_timer = QTimer(self)
         self._live_timer.setSingleShot(True)
@@ -612,8 +627,8 @@ class UserTab(QWidget):
         preset_box.addLayout(preset_btns)
         right.addWidget(preset_card, 3)
 
-        tool_card, tool_box = self._card("toolCard", "TOOL RECIPE \u00b7 M202")
-        hint = QLabel("M202 LOADS THE RECIPE FOR THE TOOL IN THE SPINDLE")
+        tool_card, tool_box = self._card("toolCard", "TOOL \u00b7 M202")
+        hint = QLabel("ANY PRESET ON ANY TOOL: PICK A PRESET ABOVE, THEN ASSIGN")
         hint.setObjectName("setpointHint")
         hint.setWordWrap(True)
         tool_box.addWidget(hint)
@@ -643,9 +658,16 @@ class UserTab(QWidget):
         tool_box.addWidget(self.lbl_tool_info)
         tool_btns = QHBoxLayout()
         self.btn_tool_load = QPushButton("LOAD")
-        self.btn_tool_save = QPushButton("SAVE TO TOOL")
+        self.btn_tool_load.setToolTip("Put this tool's recipe on the sliders")
+        self.btn_tool_assign = QPushButton("ASSIGN PRESET")
+        self.btn_tool_assign.setObjectName("btnAssign")
+        self.btn_tool_assign.setToolTip("Give this tool the preset selected above")
+        self.btn_tool_clear = QPushButton("CLEAR")
+        self.btn_tool_clear.setObjectName("btnDelete")
+        self.btn_tool_clear.setToolTip("Remove this tool's entry: it goes back to [DEFAULT]")
         tool_btns.addWidget(self.btn_tool_load, 1)
-        tool_btns.addWidget(self.btn_tool_save, 1)
+        tool_btns.addWidget(self.btn_tool_assign, 2)
+        tool_btns.addWidget(self.btn_tool_clear, 1)
         tool_box.addLayout(tool_btns)
         right.addWidget(tool_card, 0)
 
@@ -664,7 +686,8 @@ class UserTab(QWidget):
         self.spin_tool.valueChanged.connect(self._refresh_tool_info)
         self.btn_in_spindle.clicked.connect(self._select_spindle_tool)
         self.btn_tool_load.clicked.connect(self._load_tool_recipe)
-        self.btn_tool_save.clicked.connect(self._save_tool_recipe)
+        self.btn_tool_assign.clicked.connect(self._assign_preset_to_tool)
+        self.btn_tool_clear.clicked.connect(self._clear_tool)
 
     # ---- visibility ------------------------------------------------------
 
@@ -857,38 +880,42 @@ class UserTab(QWidget):
             self._set_controls(*self._active)
             self._message("LOADED MACHINE SETPOINT", "info")
 
-    # ---- presets ---------------------------------------------------------
+    # ---- presets (tool-agnostic, stored in coolant_tools.ini) -------------
 
-    def _load_presets(self):
+    def _reload_library(self):
+        """Re-read coolant_tools.ini: presets, tool assignments, [DEFAULT]."""
         try:
-            with open(PRESETS_PATH, "r", encoding="utf-8") as fh:
-                data = json.load(fh)
-            presets = []
-            for entry in data.get("presets", []):
-                presets.append({
-                    "name": str(entry["name"]),
-                    "freq": float(entry["freq"]),
-                    "duty": float(entry["duty"]),
-                })
-            return presets
-        except FileNotFoundError:
-            return [{"name": "Default", "freq": self._default_freq, "duty": self._default_duty}]
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            LOG.error("mql: cannot read %s: %s", PRESETS_PATH, exc)
-            return []
-
-    def _write_presets(self):
-        tmp = PRESETS_PATH + ".tmp"
-        try:
-            with open(tmp, "w", encoding="utf-8") as fh:
-                json.dump({"presets": self._presets}, fh, indent=2)
-                fh.write("\n")
-            os.replace(tmp, PRESETS_PATH)
-            return True
-        except OSError as exc:
-            LOG.error("mql: cannot write %s: %s", PRESETS_PATH, exc)
-            self._message("ERROR: cannot write presets ({})".format(exc), "error")
+            self._lib = load_library(self._profile_path)
+        except Exception as exc:
+            LOG.error("mql: cannot read %s: %s", self._profile_path, exc)
+            self._lib = None
+            self._presets = []
+            self._message("ERROR: cannot read {} ({})".format(
+                os.path.basename(self._profile_path), exc), "error")
             return False
+        self._presets = [
+            {"name": name, "freq": r.freq, "duty": r.duty}
+            for name, r in self._lib.presets.items()
+        ]
+        return True
+
+    def _import_legacy_presets(self):
+        """One-time import of the old tab-only mql_presets.json."""
+        if not os.path.exists(LEGACY_PRESETS_PATH):
+            return
+        try:
+            with open(LEGACY_PRESETS_PATH, "r", encoding="utf-8") as fh:
+                entries = json.load(fh).get("presets", [])
+            added = import_presets(self._profile_path, entries)
+            os.replace(LEGACY_PRESETS_PATH, LEGACY_PRESETS_PATH + ".imported")
+            if added:
+                LOG.info("mql: imported presets %s from %s", added, LEGACY_PRESETS_PATH)
+        except Exception as exc:
+            LOG.error("mql: preset import from %s failed: %s", LEGACY_PRESETS_PATH, exc)
+
+    def _users_text(self, name):
+        users = self._lib.tools_using(name) if self._lib else []
+        return " ".join("T{}".format(t) for t in users)
 
     def _refresh_preset_list(self, select_name=None):
         self.preset_list.blockSignals(True)
@@ -896,8 +923,10 @@ class UserTab(QWidget):
         select_row = -1
         for row, preset in enumerate(self._presets):
             pulse = _pulse_ms(preset["freq"], preset["duty"])
-            item = QListWidgetItem("{}\n{} HZ  \u00b7  {} %  \u00b7  {:.2f} MS PULSE".format(
-                preset["name"], _fmt(preset["freq"]), _fmt(preset["duty"]), pulse))
+            users = self._users_text(preset["name"])
+            item = QListWidgetItem("{}\n{} HZ  \u00b7  {} %  \u00b7  {:.2f} MS PULSE{}".format(
+                preset["name"], _fmt(preset["freq"]), _fmt(preset["duty"]), pulse,
+                "  \u00b7  " + users if users else ""))
             self.preset_list.addItem(item)
             if select_name is not None and preset["name"].lower() == select_name.lower():
                 select_row = row
@@ -915,69 +944,98 @@ class UserTab(QWidget):
         if 0 <= row < len(self._presets):
             self.le_name.setText(self._presets[row]["name"])
 
+    def _after_file_change(self, select_name=None):
+        self._reload_library()
+        self._refresh_preset_list(select_name=select_name)
+        self._refresh_tool_info()
+
     def _save_preset(self):
-        name = self.le_name.text().strip()
-        if not name:
-            self._message("ENTER A PRESET NAME FIRST", "error")
+        try:
+            name = check_preset_name(self.le_name.text())
+        except ValueError as exc:
+            self._message(str(exc).upper(), "error")
             self.le_name.setFocus()
             return
-        entry = {"name": name, "freq": self.freq.value(), "duty": self.duty.value()}
-        for idx, preset in enumerate(self._presets):
-            if preset["name"].lower() == name.lower():
-                self._presets[idx] = entry
-                verb = "UPDATED"
-                break
-        else:
-            self._presets.append(entry)
-            verb = "SAVED"
-        if self._write_presets():
-            self._refresh_preset_list(select_name=name)
-            self._message("{} PRESET \"{}\": {}".format(verb, name, self._gcode()), "ok")
+        existed = self._lib is not None and self._lib.preset_named(name) is not None
+        try:
+            users = save_preset(self._profile_path, name,
+                                {"FREQ": self.freq.value(), "DUTY": self.duty.value()})
+        except Exception as exc:
+            LOG.error("mql: save preset %s failed: %s", name, exc)
+            self._message("ERROR: {}".format(exc), "error")
+            return
+        stored = name
+        self._after_file_change()
+        if self._lib is not None:
+            stored = self._lib.preset_named(name) or name
+        self._refresh_preset_list(select_name=stored)
+        follow = " - {} FOLLOW".format(" ".join("T{}".format(t) for t in users)) if users else ""
+        self._message("{} PRESET \"{}\": {}{}".format(
+            "UPDATED" if existed else "SAVED", stored, self._gcode(), follow), "ok")
 
     def _load_selected_preset(self):
         _row, preset = self._selected_preset()
         if preset is None:
             self._message("SELECT A PRESET FIRST", "error")
             return
-        self._set_controls(preset["freq"], preset["duty"])
+        self._set_controls(max(FREQ_MIN, preset["freq"]), preset["duty"])
         self._message("LOADED PRESET \"{}\"{}".format(
             preset["name"], "" if self.btn_live.isChecked() else " - PRESS APPLY TO SEND"), "info")
         self._on_committed()
 
     def _delete_selected_preset(self):
-        row, preset = self._selected_preset()
+        _row, preset = self._selected_preset()
         if preset is None:
             self._message("SELECT A PRESET FIRST", "error")
             return
+        users = self._users_text(preset["name"])
+        text = "Delete preset \"{}\"?".format(preset["name"])
+        if users:
+            text += "\n\nUsed by {}. Those tools go back to [DEFAULT].".format(users)
         answer = QMessageBox.question(
-            self, "Delete preset", "Delete preset \"{}\"?".format(preset["name"]),
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            self, "Delete preset", text, QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if answer != QMessageBox.Yes:
             return
-        del self._presets[row]
-        if self._write_presets():
-            self._refresh_preset_list()
-            self.le_name.clear()
-            self._message("DELETED PRESET \"{}\"".format(preset["name"]), "ok")
+        try:
+            delete_preset(self._profile_path, preset["name"])
+        except Exception as exc:
+            LOG.error("mql: delete preset %s failed: %s", preset["name"], exc)
+            self._message("ERROR: {}".format(exc), "error")
+            return
+        self.le_name.clear()
+        self._after_file_change()
+        self._message("DELETED PRESET \"{}\"{}".format(
+            preset["name"], " - {} NOW ON [DEFAULT]".format(users) if users else ""), "ok")
 
-    # ---- per-tool recipes (M202) ------------------------------------------
+    # ---- tools (M202) ------------------------------------------------------
 
     def _tool_recipe(self, tool):
-        default, tools = load_profiles(self._profile_path)
-        return recipe_for_tool(default, tools, tool), tool in tools
+        """(resolved recipe, ToolEntry or None) for one tool."""
+        if self._lib is None:
+            raise RuntimeError("cannot read {}".format(os.path.basename(self._profile_path)))
+        entry = self._lib.tools.get(tool)
+        return (entry.recipe if entry is not None else self._lib.default), entry
 
     def _refresh_tool_info(self, *_args):
         tool = self.spin_tool.value()
         try:
-            recipe, own = self._tool_recipe(tool)
+            recipe, entry = self._tool_recipe(tool)
         except Exception as exc:
-            self.lbl_tool_info.setText("CANNOT READ {}: {}".format(
-                os.path.basename(self._profile_path), exc))
+            self.lbl_tool_info.setText(str(exc).upper())
             return
-        self.lbl_tool_info.setText("T{}: {} HZ \u00b7 {} %  ({})".format(
-            tool, _fmt(recipe.freq), _fmt(recipe.duty),
-            "OWN ENTRY" if own else "USES [DEFAULT]"))
+        nums = "{} HZ \u00b7 {} %".format(_fmt(recipe.freq), _fmt(recipe.duty))
+        if entry is None:
+            where = "[DEFAULT]"
+        elif entry.missing_preset:
+            where = "PRESET \"{}\" MISSING, USES [DEFAULT]".format(entry.preset)
+        elif entry.preset is not None:
+            where = entry.preset.upper()
+            if entry.overrides:
+                where += " + OWN " + "/".join(sorted(entry.overrides))
+        else:
+            where = "OWN VALUES"
+        self.lbl_tool_info.setText("T{} \u2192 {}  ({})".format(tool, where, nums))
 
     def _select_spindle_tool(self):
         if self._tool_in_spindle > 0:
@@ -986,7 +1044,7 @@ class UserTab(QWidget):
     def _load_tool_recipe(self):
         tool = self.spin_tool.value()
         try:
-            recipe, _own = self._tool_recipe(tool)
+            recipe, _entry = self._tool_recipe(tool)
         except Exception as exc:
             self._message("ERROR: {}".format(exc), "error")
             return
@@ -994,23 +1052,40 @@ class UserTab(QWidget):
         self._message("LOADED T{} RECIPE".format(tool), "info")
         self._on_committed()
 
-    def _save_tool_recipe(self):
+    def _assign_preset_to_tool(self):
         tool = self.spin_tool.value()
-        freq, duty = self.freq.value(), self.duty.value()
+        _row, preset = self._selected_preset()
+        if preset is None:
+            self._message("SELECT A PRESET IN THE LIST FIRST", "error")
+            return
         try:
-            save_tool_recipe(self._profile_path, tool, {"FREQ": freq, "DUTY": duty})
+            assign_preset(self._profile_path, tool, preset["name"])
         except Exception as exc:
-            LOG.error("mql: save T%d failed: %s", tool, exc)
+            LOG.error("mql: assign %s to T%d failed: %s", preset["name"], tool, exc)
             self._message("ERROR: {}".format(exc), "error")
             return
-        self._refresh_tool_info()
-        self._message("SAVED T{}: {} HZ / {} % - M202 USES IT NEXT CALL".format(
-            tool, _fmt(freq), _fmt(duty)), "ok")
+        self._after_file_change(select_name=preset["name"])
+        self._message("T{} NOW USES \"{}\" - M202 USES IT NEXT CALL".format(
+            tool, preset["name"]), "ok")
+
+    def _clear_tool(self):
+        tool = self.spin_tool.value()
+        try:
+            found = clear_tool(self._profile_path, tool)
+        except Exception as exc:
+            self._message("ERROR: {}".format(exc), "error")
+            return
+        _row, sel = self._selected_preset()
+        self._after_file_change(select_name=sel["name"] if sel else None)
+        self._message("T{} {}".format(
+            tool, "BACK ON [DEFAULT]" if found else "HAD NO ENTRY (ALREADY [DEFAULT])"), "ok")
 
     # ---- status line -----------------------------------------------------
 
     def _message(self, text, state="info"):
         LOG.info("mql: %s", text)
+        if not hasattr(self, "lbl_message"):  # before the UI is built
+            return
         self.lbl_message.setText(text)
         self.lbl_message.setToolTip(text)
         self.lbl_message.setProperty("state", state)

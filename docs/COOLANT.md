@@ -15,13 +15,13 @@ New to Modbus in LinuxCNC? Read [MODBUS.md](MODBUS.md) first.
 | G-code | Does |
 |--------|------|
 | `M201 P<Hz> Q<duty%>` | Set pulse rate (0.1–50 Hz) and duty (0–100 %) |
-| `M202` | Load the current tool's recipe from `probe_basic/coolant_tools.ini`, then same as M201 |
+| `M202` | Look up the current tool's preset in `probe_basic/coolant_tools.ini`, then same as M201 |
 | `M7` or `M8` | Injector on |
 | `M9` | Injector off. Aborts also issue M9 |
 
 ```
 T3 M600
-M202        (use T3's recipe)
+M202        (use T3's preset)
 M8
 ...
 M9
@@ -31,12 +31,42 @@ M9
 default. These are custom M-codes in the 200s because LinuxCNC can't remap
 M100–M199 (they're reserved for user M-files).
 
-### Per-tool recipes
+### Presets and tools
 
-`probe_basic/coolant_tools.ini` holds a `[T<n>]` section per tool with its Hz
-and duty. Tools without a section use `[COOLANT]DEFAULT_FREQ` /
-`DEFAULT_DUTY` from the INI (10 Hz, 1 %). M202 re-reads the file every time,
-so edits take effect without a restart.
+Presets are **tool-agnostic**: a preset is a named Hz/duty recipe, any preset
+can go on any tool, and editing a preset changes every tool that uses it. All
+of it lives in `probe_basic/coolant_tools.ini`, which M202 re-reads every call
+(no restart needed after edits):
+
+```ini
+[DEFAULT]                 ; tools with no entry, and keys a preset leaves out
+FREQ = 10
+DUTY = 1
+PRESSURE = 0
+
+[PRESET Heavy]            ; a named recipe
+FREQ = 10
+DUTY = 2
+
+[T12]                     ; tool 12 uses it
+PRESET = Heavy
+```
+
+A tool's recipe resolves as `[DEFAULT]` ← its `[PRESET …]` ← any `FREQ` /
+`DUTY` / `PRESSURE` written in the tool's own section (a per-tool tweak;
+older files had only these, and they still work). Tools with no section use
+`[DEFAULT]`, and T0 (empty spindle) is always dry. If a tool names a preset
+that doesn't exist, M202 uses `[DEFAULT]` and shows one message saying so.
+
+Shipped presets (converted 2026-11-28 from the old per-tool numbers, every
+tool kept its values):
+
+| Preset | Hz / duty | Tools |
+|--------|-----------|-------|
+| Standard | 10 / 1 % | T9, T10, T14, T17 |
+| Heavy | 10 / 2 % | T3, T12, T18 |
+| Light pulse | 1 / 0.3 % | T1 |
+| Dry | 0 / 0 % | T99 (touch probe) |
 
 ### The MQL tab
 
@@ -51,8 +81,14 @@ Probe Basic's **MQL** tab is a front end for the same commands:
 | LIVE | Sends M201 automatically about 0.3 s after you let go of a slider |
 | REVERT | Reloads what the machine is using now |
 | M8 SPRAY ON / M9 OFF | Sends the on-screen M201 and then M8, or M9 |
-| Presets | Named Hz/duty pairs, saved in `probe_basic/mql_presets.json` |
-| Tool recipe | LOAD / SAVE TO TOOL reads and writes `[T<n>]` in `coolant_tools.ini`, keeping your comments |
+| PRESETS list | Every `[PRESET …]` in `coolant_tools.ini`, with the tools using it. **SAVE** writes the sliders under the typed name (same name = update; the tools using it follow), **LOAD** puts a preset on the sliders, **DELETE** removes it (tools using it go back to `[DEFAULT]`; it asks first and lists them) |
+| TOOL · M202 | Pick a tool number (or IN SPINDLE). The line under it shows what M202 will use, e.g. `T12 → HEAVY (10 HZ · 2 %)`. **ASSIGN PRESET** gives that tool the preset selected in the list (and drops any per-tool numbers), **LOAD** puts the tool's recipe on the sliders, **CLEAR** removes the tool's entry (back to `[DEFAULT]`) |
+
+The tab edits `coolant_tools.ini` line by line, so your comments stay. It
+never sends anything to the machine from these buttons. Only APPLY, LIVE and
+M8/M9 do. Presets saved by the old tab in `probe_basic/mql_presets.json` are
+imported into the ini the first time the new tab opens, and the JSON is
+renamed `mql_presets.json.imported`.
 
 The buttons are disabled while a program runs (put M201/M202 in the G-code
 instead) and when the machine is off. The pulse-length readout turns amber
@@ -142,8 +178,9 @@ Without LinuxCNC (stop it first), see [MODBUS.md](MODBUS.md#bench-testing).
 | `microject.mb2hal` | Coil + pulse + period transactions |
 | `coolant.hal` | Hz/duty → ms, M7/M8 → coil |
 | `probe_basic/subroutines/m201.ngc` | The `M201` remap |
-| `probe_basic/python/coolant_remap.py`, `coolant_profiles.py` | The `M202` remap, and the recipe file reader/writer |
-| `probe_basic/coolant_tools.ini` | Per-tool recipes |
+| `probe_basic/python/coolant_remap.py`, `coolant_profiles.py` | The `M202` remap, and the preset/tool file reader/writer |
+| `probe_basic/python/test_coolant_profiles.py` | Tests: `python3 probe_basic/python/test_coolant_profiles.py` |
+| `probe_basic/coolant_tools.ini` | Presets and which preset each tool uses |
 | `probe_basic/user_tabs/mql_control/` | MQL tab |
 
 This isn't Probe Basic's programmable coolant nozzle feature

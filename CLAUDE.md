@@ -139,7 +139,12 @@ their own machine: plain language, short sections, real values from the config.
 - **Spindle:** M3/M4 are swapped in `custom.hal` (VFD wiring). On this machine
   G-code `M3` means VFD reverse.
 - **Coolant (MQL):** `M201 P<Hz 0.1–50> Q<duty 0–100> R<psi, stored only>`, `M202`
-  is the per-tool recipe, `M8`/`M9` turn it on/off. There's a Probe Basic tab in `user_tabs/mql_control/`.
+  applies the tool's preset, `M8`/`M9` turn it on/off. There's a Probe Basic tab in `user_tabs/mql_control/`.
+  Presets are **tool-agnostic** (2026-11-28): `[PRESET <name>]` sections in
+  `probe_basic/coolant_tools.ini`, and tools point at one with `[T<n>] PRESET = <name>`.
+  Any preset can go on any tool, and editing a preset moves every tool using it.
+  The python remap is imported at LinuxCNC start, so changes to
+  `coolant_profiles.py` / `coolant_remap.py` need a LinuxCNC restart. Edits to the ini don't.
 - **Key params:** `#3004–3039` are probe/toolsetter settings (`#3014=99` is the probe tool),
   `#5181–5183` is the setter position, `#5501/5502` beam XY, `#5503` probe RPM, `#5516` beam
   width cal, `#5517` master pin, `#5518` reverse-spindle flag, `#5580–5586` vise stop (docs/VISE_STOP.md). Max user param is **5599**.
