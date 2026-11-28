@@ -6,15 +6,17 @@
 (Set by the VISE STOP tab - persistent in linuxcnc.var:)
 (  #5580 axis along the jaws: 0 = X, 1 = Y)
 (  #5581 part side of the pin: +1 = part toward +, -1 = part toward -)
-(  #5583 pin tip Z in the vise WCS - negative = below WCS Z0, e.g. below the jaw tops)
+(  #5583 pin depth: tip parks this far BELOW the vise WCS Z0, mm, default 10 - set and forget)
 (  #5585 part length along the jaws)
 (  #5586 vise WCS: 1 = G54 ... 6 = G59)
-(  #5582, #5584, #5587 are no longer used)
+(  #5587 spindle nose clearance: nose must stay this far ABOVE the vise WCS Z0, mm, default 5)
+(  #5582 and #5584 are no longer used)
 
 o<vise_stop_go> sub
   #<axis> = #5580
   #<side> = #5581
-  #<stop_z> = #5583
+  #<depth> = #5583
+  #<nose_clr> = #5587
   #<length> = #5585
   #<wcs> = #5586
 
@@ -41,9 +43,16 @@ o<vise_stop_go> sub
   o106 if [#<length> LE 0]
     (ABORT, Vise stop: enter the part length along the jaws)
   o106 endif
-  o109 if [ABS[#<stop_z>] LT 0.0001]
-    (ABORT, Vise stop: PIN TIP Z is not set - enter it in the tab)
+  o109 if [#<depth> LE 0]
+    (ABORT, Vise stop: pin depth #5583 is not set - see docs/VISE_STOP.md)
   o109 endif
+  o110 if [#<nose_clr> LE 0]
+    (ABORT, Vise stop: spindle nose clearance #5587 is not set - see docs/VISE_STOP.md)
+  o110 endif
+  (tool lengths are measured from the spindle nose, so stickout = tool length)
+  o111 if [[#5403 - #<depth>] LT #<nose_clr>]
+    (ABORT, Vise stop: pin sticks out too little - the spindle nose would come below the nose clearance over the vise Z0. Use a longer pin)
+  o111 endif
 
   #<base> = [5201 + 20 * #<wcs>]
   o107 if [[ABS[#[#<base>]] LT 0.0001] OR [ABS[#[#<base> + 1]] LT 0.0001]]
@@ -55,11 +64,12 @@ o<vise_stop_go> sub
   o108 endif
 
   G21 G90 G94 G40
-  G43 H#5400
-  (WCS Z + tool length + active G92 = machine Z of the tip at vise Z0)
-  #<z_to_mach> = [#<wcs_z> + #5403 + [#5210 * #5213]]
-  o115 if [[#<stop_z> + #<z_to_mach>] GT -1]
-    (ABORT, Vise stop: stop Z lands above machine Z0 - check STOP Z and the tool length)
+  (all Z moves are G53. Machine Z of the vise WCS Z0 incl. any active G92:)
+  #<z0_mach> = [#<wcs_z> + [#5210 * #5213]]
+  (G53 Z is the spindle nose: nose = tip + tool length)
+  #<nose_z> = [#<z0_mach> - #<depth> + #5403]
+  o115 if [#<nose_z> GT -1]
+    (ABORT, Vise stop: the stop would put the spindle above machine Z0 - check the vise WCS Z and the tool length)
   o115 endif
 
   (--- pin position in the vise WCS ---)
@@ -91,10 +101,10 @@ o<vise_stop_go> sub
   o120 endif
 
   (rapid to 25 mm above the stop only if that stays below machine Z0, then feed)
-  o135 if [[#<stop_z> + 25 + #<z_to_mach>] LT -1]
-    G0 Z[#<stop_z> + 25]
+  o135 if [[#<nose_z> + 25] LT -1]
+    G53 G0 Z[#<nose_z> + 25]
   o135 endif
-  G1 Z#<stop_z> F600
+  G53 G1 Z#<nose_z> F600
 
   (restore the coordinate system that was active before)
   o140 if [#<old_wcs> EQ 1]

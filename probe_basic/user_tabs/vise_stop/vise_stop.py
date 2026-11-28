@@ -47,9 +47,12 @@ CONFIG_DIR = os.path.abspath(
 VAR_FILE = os.path.join(CONFIG_DIR, "linuxcnc.var")
 
 # 5582, 5584 and 5587 belonged to the old "captured stop" design and are unused.
-P_AXIS, P_SIDE, P_STOP_Z, P_LENGTH, P_WCS = 5580, 5581, 5583, 5585, 5586
-VISE_PARAMS = (P_AXIS, P_SIDE, P_STOP_Z, P_LENGTH, P_WCS)
-DEFAULTS = {P_AXIS: 0.0, P_SIDE: 1.0, P_STOP_Z: 5.0, P_LENGTH: 0.0, P_WCS: 2.0}
+P_AXIS, P_SIDE, P_LENGTH, P_WCS = 5580, 5581, 5585, 5586
+VISE_PARAMS = (P_AXIS, P_SIDE, P_LENGTH, P_WCS)
+DEFAULTS = {P_AXIS: 0.0, P_SIDE: 1.0, P_LENGTH: 0.0, P_WCS: 2.0}
+# Set-and-forget, edited in linuxcnc.var only (the tab never writes them):
+# 5583 pin depth below the vise WCS Z0, 5587 spindle-nose clearance above it.
+P_DEPTH, P_NOSE_CLR = 5583, 5587
 PROBE_TOOL = 99  # #3014
 WCS_NAMES = ["G54", "G55", "G56", "G57", "G58", "G59"]
 POLL_MS = 250
@@ -128,7 +131,7 @@ class ViseRenderView(QWidget):
         st = self.st
         w, h = self.width(), self.height()
         bad_tool = st.get("bad_tool", False) or st.get("dia", 0) <= 0
-        low_z = st.get("stop_z", 5.0) <= 0.5
+        low_z = st.get("depth", 0.0) <= 0
         bad = bad_tool or low_z
 
         pm = self._pixmap(self._name())
@@ -159,8 +162,8 @@ class ViseRenderView(QWidget):
         p.drawText(QRectF(8, 2, w / 2.0, 26), Qt.AlignLeft | Qt.AlignVCenter, pin_txt)
         p.setFont(_font(12))
         p.setPen(C_BAD if low_z else C_TEXT)
-        z_txt = ("PIN TIP Z {:.3f} - AT OR BELOW Z0, WILL HIT THE PARALLELS".format(st.get("stop_z", 0))
-                 if low_z else "PIN TIP Z {:.3f} ABOVE Z0 (PARALLEL TOP)".format(st.get("stop_z", 0)))
+        z_txt = ("PIN DEPTH #5583 NOT SET" if low_z else
+                 "PIN TIP {:.1f} MM BELOW {} Z0".format(st.get("depth", 0), st.get("wcs", "")))
         p.drawText(QRectF(8, h - 28, w - 16, 26), Qt.AlignLeft | Qt.AlignVCenter, z_txt)
         if not low_z:
             p.setPen(C_DIM)
@@ -198,6 +201,7 @@ class UserTab(QWidget):
 
         self._vals = dict(DEFAULTS)
         self._vals.update({k: v for k, v in self._read_var().items() if k in VISE_PARAMS})
+        self._depth = self._read_var().get(P_DEPTH, 0.0)  # read once; edit in linuxcnc.var
         self._pending = None  # "go" / "retract" while an MDI is running
         self._loading = True
 
@@ -300,10 +304,6 @@ class UserTab(QWidget):
         grid.addWidget(self._field_label("VISE WCS (VISE CENTER)"), 1, 0)
         grid.addWidget(self.cmbWcs, 1, 1)
 
-        self.spnStopZ = self._spin(-200.0, 200.0)
-        grid.addWidget(self._field_label("PIN TIP Z (VISE WCS)"), 2, 0)
-        grid.addWidget(self.spnStopZ, 2, 1)
-
         part_title = QLabel("THIS PART")
         part_title.setObjectName("cardTitle")
         part_title.setAlignment(Qt.AlignCenter)
@@ -362,7 +362,6 @@ class UserTab(QWidget):
         self.grpAxis.buttonClicked.connect(self._on_axis)
         self.grpSide.buttonClicked.connect(self._on_edit)
         self.cmbWcs.currentIndexChanged.connect(self._on_edit)
-        self.spnStopZ.valueChanged.connect(self._on_edit)
         self.spnLength.valueChanged.connect(self._on_edit)
         self.btnGo.clicked.connect(self._go)
         self.btnRetract.clicked.connect(self._retract)
@@ -374,7 +373,6 @@ class UserTab(QWidget):
         self.grpSide.button(1 if v[P_SIDE] < 0 else 0).setChecked(True)
         wcs = int(round(v[P_WCS]))
         self.cmbWcs.setCurrentIndex(min(max(wcs, 1), 6) - 1)
-        self.spnStopZ.setValue(v[P_STOP_Z])
         self.spnLength.setValue(v[P_LENGTH])
         self._relabel_side()
 
@@ -392,7 +390,6 @@ class UserTab(QWidget):
         v[P_AXIS] = float(max(self.grpAxis.checkedId(), 0))
         v[P_SIDE] = -1.0 if self.grpSide.checkedId() == 1 else 1.0
         v[P_WCS] = float(self.cmbWcs.currentIndex() + 1)
-        v[P_STOP_Z] = float(self.spnStopZ.value())
         v[P_LENGTH] = float(self.spnLength.value())
         return v
 
@@ -450,7 +447,7 @@ class UserTab(QWidget):
         tn, tdia = self._tool()
         probe = self._stat is not None and tn == PROBE_TOOL
         view = dict(axis=int(v[P_AXIS] >= 0.5), side=1 if v[P_SIDE] > 0 else -1,
-                    dia=0.0 if probe else tdia, length=v[P_LENGTH], stop_z=v[P_STOP_Z],
+                    dia=0.0 if probe else tdia, length=v[P_LENGTH], depth=self._depth,
                     wcs=wcs, tool=tn, bad_tool=probe)
         self.viewTop.set_state(**view)
         pin = None if probe else self._pin_pos(tdia)

@@ -13,7 +13,7 @@ retract, run. Op 2 flips need no probing at all.
 Files:
 - Tab: `probe_basic/user_tabs/vise_stop/`
 - Macros: `probe_basic/subroutines/vise_stop_go.ngc` and `vise_stop_retract.ngc`
-- Settings: `#5580`, `#5581`, `#5583`, `#5585`, `#5586` in `linuxcnc.var`
+- Settings: `#5580`, `#5581`, `#5585`, `#5586` (tab) and `#5583`, `#5587` (set and forget) in `linuxcnc.var`
 - Pictures: `probe_basic/user_tabs/vise_stop/images/`, made by `tools/vise_render/`
 
 ## Where the pin goes
@@ -40,8 +40,8 @@ the front, swung toward the pin. The +X / +Y indicator in the bottom-left corner
 shows the machine axes as that camera sees them, so you can match the picture to
 the table.
 
-The tool number and diameter and the pin tip height are painted on top live. The frame turns red if the probe is loaded, the tool has no
-diameter, or the pin tip is at or below Z0. The picture is drawn with a 6 mm
+The tool number and diameter and the pin depth are painted on top live. The frame turns red if the probe is loaded, the tool has no
+diameter, or `#5583` is not set. The picture is drawn with a 6 mm
 pin and a fixed part size. The numbers are the real ones.
 
 ## Setup (once per vise mount)
@@ -51,20 +51,32 @@ pin and a fixed part size. The numbers are the real ones.
    boss/pocket probing. Across the jaws, the self-centering vise puts every
    part on that line. Along the jaws, this is the point the part will be
    centered on.
-2. Set the vise WCS **Z** once, somewhere you can touch off again: usually the
-   **top of the jaws**.
+2. Set the vise WCS **Z0 on the top of the jaws**.
 3. On the tab, pick **JAWS RUN ALONG** (X or Y) so the picture matches the
-   table, then **VISE WCS** and **PIN TIP Z**. PIN TIP Z is measured from that
-   WCS Z0, so with Z0 on the jaw tops it is usually **negative**: low enough to
-   touch the side of your thinnest part, but still above the parallels (the
-   machine doesn't know where they are).
+   table, then **VISE WCS**.
+
+The pin always parks its tip **10 mm below the vise Z0** (`#5583`), i.e. 10 mm
+below the jaw tops: deep enough to catch a part clamped in the jaws, and the
+same every time. The machine doesn't know where your parallels are, so keep
+them lower than that. To change it, edit `#5583` in `linuxcnc.var` with
+LinuxCNC closed.
+
+**Spindle-nose check.** Tool lengths on this machine are measured from the
+spindle nose (`#3010`, see TOOL_CHANGE.md), so the pin's tool length is its
+stickout. With the tip 10 mm down, the nose sits (length − 10) above the jaw
+tops, and that must be at least `#5587` (default 5 mm). So the stop pin needs
+**at least 15 mm of stickout**, or the macro refuses. This doesn't know about a
+part sticking up above the jaws: the collet nut overhangs the part end, so with
+a tall part use a longer pin.
 
 ## Every part
 
 1. Enter the **PART LENGTH ALONG JAWS** and pick the pin side.
 2. Load the stop pin with `M600`.
-3. Press **GO TO STOP**: `G53 Z0` → vise WCS → over the pin spot → rapid to
-   PIN TIP Z + 25 → feed down at F600. The WCS is not touched.
+3. Press **GO TO STOP**: `G53 Z0` → vise WCS XY over the pin spot → `G53`
+   rapid to 25 mm above the stop → `G53 G1` down at F600. All Z moves are in
+   machine coordinates (vise Z0 + G92 − depth + tool length); the WCS is not
+   changed.
 4. Push the part against the pin **gently**, keep light pressure toward it,
    and clamp.
 5. Press **RETRACT** (`G53 Z0`, Z only). Load your cutting tool and run in the
@@ -74,9 +86,10 @@ The macro refuses to move if any of these is true:
 - No tool is loaded, or T99 (the touch probe) is loaded.
 - The tool has no diameter in the tool table.
 - The part length is 0.
-- PIN TIP Z is exactly 0 (never set). Negative is allowed: it means below the vise WCS Z0, e.g. below the jaw tops.
+- `#5583` (depth) or `#5587` (nose clearance) is 0 or less (not set).
+- Tool length − depth is less than the nose clearance (pin too short).
 - The vise WCS X, Y or Z is still zero (not probed).
-- PIN TIP Z would put the spindle above machine Z0.
+- The stop would put the spindle above machine Z0.
 
 ## Getting good numbers
 
@@ -101,10 +114,11 @@ The macro refuses to move if any of these is true:
 |---|---|
 | 5580 | Axis the jaws run along: 0 = X, 1 = Y |
 | 5581 | Part side of the pin: +1 = part toward +, pin on the − side; −1 = the reverse |
-| 5583 | PIN TIP Z: tool tip height in the vise WCS |
+| 5583 | Pin depth: tip parks this far below the vise WCS Z0 (mm, default 10). Not on the tab |
 | 5585 | Part length along the jaws |
 | 5586 | Vise WCS: 1 = G54 … 6 = G59 |
-| 5582, 5584, 5587 | Unused (left over from the first version) |
+| 5587 | Spindle-nose clearance above the vise WCS Z0 (mm, default 5). Not on the tab |
+| 5582, 5584 | Unused (left over from the first version) |
 
 The tab pushes these to the interpreter by MDI and merges them into
 `linuxcnc.var` (kept sorted) when you press GO TO STOP. Other edits are
