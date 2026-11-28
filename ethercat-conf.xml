@@ -136,8 +136,8 @@
     <slave idx="3" type="generic" vid="00400000" pid="00000715" configPdos="true">
       <dcConf assignActivate="300" sync0Cycle="*1" sync0Shift="300000"/>
       <sdoConfig idx="6060" subIdx="0"><sdoDataRaw data="08"/></sdoConfig>
-      <!-- 6065: position deviation limit (encoder counts). 182 = 0.5 deg @ 364.09 counts/deg -->
-      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="B6 00 00 00"/></sdoConfig>
+      <!-- 6065: position deviation limit (encoder counts). REVERT: 3641 = 10 deg @ 364.09 counts/deg, widened 2026-11-27 while A is unconnected (was 182 = 0.5 deg, "B6 00 00 00") -->
+      <sdoConfig idx="6065" subIdx="00"><sdoDataRaw data="39 0E 00 00"/></sdoConfig>
       <!-- 6066: ms deviation must persist before Er47.0 (250 ms) -->
       <sdoConfig idx="6066" subIdx="00"><sdoDataRaw data="FA 00"/></sdoConfig>
       <!-- DO NOT push C00/C01 loop gains here. lcec sdoConfig runs on EVERY

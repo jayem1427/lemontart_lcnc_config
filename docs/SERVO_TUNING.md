@@ -219,7 +219,7 @@ One-click also saves timestamped `pre_one_click_*` (backup) and
 | `0x2001:02` | C01.01 | Speed loop gain, 0.1 Hz |
 | `0x2001:03` | C01.02 | Speed integral, 0.01 ms |
 | `0x2001:31` | C01.30 | Adaptive notch mode |
-| `0x6065` | | Following-error window, counts (6554 = 0.5 mm; A: 182 = 0.5°) |
+| `0x6065` | | Following-error window, counts (6554 = 0.5 mm. A: 3641 = 10°, widened while A is unconnected; normally 182 = 0.5°) |
 | `0x6066` | | Following-error time, ms (250) |
 
 Read one by hand (the A6 doesn't describe its own types, so `-t` is required):

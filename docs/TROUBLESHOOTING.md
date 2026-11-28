@@ -40,6 +40,7 @@ errors.
 | Symptom | Cause / fix |
 |---------|-------------|
 | Whole machine shakes violently on enable | DC clock in R2M mode. Use M2R (`refClockSyncCycles="-1"`) |
+| "joint 3 amplifier fault" at startup or mid-tune, drive error `0x8611` (following error) | The unconnected A motor tripped its 0.5° window. A's `6065` is widened to 3641 counts (10°) in `ethercat-conf.xml`. Put it back to 182 when A is reconnected. Read a drive's last error with `ethercat upload -p 3 -t uint16 0x603F 0` |
 | Machine turns off right after enable | Software E-stop open (slave 3 DI1), a drive fault, or a VFD fault code of 64/92 |
 | Drive fault Er47.0 | Following error over 0.5 mm for 250 ms. Tune, or check for binding. See [CONFIG_TOUR.md](CONFIG_TOUR.md#following-error) |
 | Drive tuning lost on every restart | Gain SDOs in `ethercat-conf.xml`. Remove them |

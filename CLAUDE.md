@@ -102,7 +102,7 @@ their own machine: plain language, short sections, real values from the config.
   `MAX_ACCELERATION` (LinuxCNC #4220), so a 100 mm move tops out around 23 m/min.
   Put `G61` in test programs. Jogging gets full acceleration.
 - **Following error is split on purpose.** LinuxCNC `FERROR 1270 / MIN_FERROR 254` is
-  effectively off. The drive enforces it: `6065 = 0.5 mm` (6554 counts; A 182 counts) and
+  effectively off. The drive enforces it: `6065 = 0.5 mm` (6554 counts; A widened to 3641 counts = 10° while unconnected, normally 182) and
   `6066 = 250 ms` → Er47.0 → `amp-fault-in`. The tuning tools raise 6065
   temporarily (inertia ID 2.0, one-click 1.0) and restore it in a `finally` block.
 - **Digital inputs:** lcec reads raw DI from PDO `0x2040:05` → `lcec.0.N.di-1..5`
