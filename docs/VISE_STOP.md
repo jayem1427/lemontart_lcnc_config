@@ -23,25 +23,27 @@ pin center (vise WCS) = -side x (part length / 2 + pin diameter / 2)   along the
                         0                                               across the jaws
 ```
 
-`side` is the side of the pin the part sits on. Pick it on the tab as **PIN ON
+`side` is the side of the pin the part sits on. Pick it on the tab as **PIN SIDE
 -X / +X** (or Y), or tap that side of the picture. The pin diameter comes from the
-tool table for the tool in the spindle. The tab shows the result under PIN GOES TO,
-for example `G55 X-28.000 Y0`.
+tool table for the tool in the spindle. The dark readout under the fields shows
+where the pin will park in the vise WCS, for example `G55 X -33.000 / Y 0.000 /
+Z -10.000`. If something is missing (no pin loaded, no diameter, pin too short)
+the readout says so in amber instead.
 
 **In CAM, put the op 2 origin at the part center in X and Y, and at the part
 bottom (parallel top) in Z.**
 
 ## The picture
 
-The middle of the tab shows the H67 the way it sits on the table (jaws along X
+The right panel shows the H67 the way it sits on the table (jaws along X
 or Y), with the part centered, the stop pin in the spindle on the chosen side,
 and a red arrow for which way to push the part. The camera always looks from
 the front, swung toward the pin. The +X / +Y indicator in the bottom-left corner
 shows the machine axes as that camera sees them, so you can match the picture to
 the table.
 
-The tool number and diameter and the pin depth are painted on top live. The frame turns red if the probe is loaded, the tool has no
-diameter, or `#5583` is not set. The picture is drawn with a 6 mm
+The picture's frame turns red if the touch probe is loaded or the tool has no
+diameter. The picture is drawn with a 6 mm
 pin and a fixed part size. The numbers are the real ones.
 
 ## Setup (once per vise mount)
@@ -52,7 +54,7 @@ pin and a fixed part size. The numbers are the real ones.
    part on that line. Along the jaws, this is the point the part will be
    centered on.
 2. Set the vise WCS **Z0 on the top of the jaws**.
-3. On the tab, pick **JAWS RUN ALONG** (X or Y) so the picture matches the
+3. On the tab, pick **JAW AXIS** (X or Y) so the picture matches the
    table, then **VISE WCS**.
 
 The pin always parks its tip **10 mm below the vise Z0** (`#5583`), i.e. 10 mm
@@ -71,7 +73,7 @@ a tall part use a longer pin.
 
 ## Every part
 
-1. Enter the **PART LENGTH ALONG JAWS** and pick the pin side.
+1. Enter the **PART LENGTH** (along the jaws) and pick the pin side.
 2. Load the stop pin with `M600`.
 3. Press **GO TO STOP**: `G53 Z0` → vise WCS XY over the pin spot → `G53`
    rapid to 25 mm above the stop → `G53 G1` down at F600. All Z moves are in
@@ -152,3 +154,15 @@ python3 make_images.py vise.stl jaws.stl ../../probe_basic/user_tabs/vise_stop/i
 
 Scene numbers (jaw face position, parallel height, part size, pin stickout)
 are at the top of `make_images.py`.
+
+## Layout
+
+Two panels, styled like the rest of Probe Basic (grey gradient buttons, white
+fields, green text on a selected toggle):
+
+- **VISE STOP** (left): JAW AXIS, VISE WCS, PART LENGTH, PIN SIDE, the
+  pin-position readout, then GO TO STOP and RETRACT. The line above the buttons
+  shows the result of the last press, or a machine problem (E-stop, machine
+  off, not homed). It is blank when there's nothing to say.
+- **PIN POSITION** (right): the render. Tap a side of the vise to put the pin
+  there.

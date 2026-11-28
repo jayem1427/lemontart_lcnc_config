@@ -1,68 +1,67 @@
-/* VISE STOP - Probe Basic dark theme (BebasKai), matches the MQL tab */
+/* VISE STOP - Probe Basic look: PB's grey gradient buttons with black borders,
+   white entry fields with black text, BebasKai, #2e3436 / #363b3d.
+   Colour only means state: green text = selected, amber = attention, red = blocked. */
 
 QWidget#VISE {
     background-color: #2e3436;
     color: rgb(238, 238, 236);
-    font: 13pt "BebasKai";
-}
-
-QFrame#headerBar,
-QFrame#setupCard,
-QFrame#originCard,
-QFrame#runCard {
-    background-color: #363b3d;
-    border: 1px solid #8a8484;
-    border-radius: 8px;
-}
-
-QFrame#headerBar QLabel,
-QFrame#setupCard QLabel,
-QFrame#originCard QLabel,
-QFrame#runCard QLabel {
-    background: transparent;
-    border: none;
-}
-
-QLabel#lblTitle { color: white; font: 22pt "BebasKai"; }
-QLabel#lblSubtitle { color: #9a9e9f; font: 13pt "BebasKai"; padding-top: 6px; }
-
-QFrame#headerBar QLabel#pill {
-    color: rgb(238, 238, 236);
     font: 14pt "BebasKai";
-    padding: 8px 16px 6px 16px;
-    background-color: #4a4f51;
-    border: 1px solid #8a8484;
-    border-radius: 16px;
 }
-QFrame#headerBar QLabel#pill[state="on"] { color: #0b2a3a; background-color: #5ec8ff; border-color: #2a8fc4; }
-QFrame#headerBar QLabel#pill[state="warn"] { color: #fcaf3e; border-color: #fcaf3e; }
 
-QLabel#cardTitle { color: white; font: 17pt "BebasKai"; }
-QLabel#fieldLabel { color: #b8bcbe; font: 14pt "BebasKai"; }
-QLabel#value { color: #5ec8ff; font: 18pt "BebasKai"; }
-QLabel#bigValue { color: #5ec8ff; font: 32pt "BebasKai"; padding: 10px 0; }
-QLabel#hint { color: #9a9e9f; font: 12pt "BebasKai"; }
-QLabel#steps { color: rgb(238, 238, 236); font: 15pt "BebasKai"; }
-QLabel#lblStatus { color: #fcaf3e; font: 15pt "BebasKai"; padding: 2px 6px; }
+QFrame#panel {
+    background-color: #363b3d;
+    border: 1px solid #1e2122;
+    border-radius: 5px;
+}
+QFrame#panel QLabel { background: transparent; border: none; }
+
+QLabel#panelTitle {
+    color: white;
+    font: 16pt "BebasKai";
+    padding: 6px 14px 4px 14px;
+    background-color: #3d4244;
+    border: none;
+    border-bottom: 1px solid #1e2122;
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+}
+
+QLabel#fieldLabel { color: #d3d7cf; font: 14pt "BebasKai"; }
+
+QFrame#sep {
+    border: none;
+    border-top: 1px solid #1e2122;
+    border-bottom: 1px solid #4a4f51;
+}
+
+QFrame#dro {
+    background-color: #1e2122;
+    border: 1px solid black;
+    border-radius: 4px;
+}
+QLabel#droAxis { color: #9a9e9f; font: 16pt "BebasKai"; }
+QLabel#droValue { color: white; font: 24pt "BebasKai"; }
+QLabel#droMsg { color: #fcaf3e; font: 15pt "BebasKai"; padding: 6px 0; }
+
+QLabel#lblStatus { color: #fcaf3e; font: 16pt "BebasKai"; }
 
 QDoubleSpinBox, QComboBox {
     color: black;
     background: white;
-    border: 1px solid #4a4f51;
-    border-radius: 6px;
+    border: 1px solid black;
+    border-radius: 4px;
     padding: 2px 8px;
     font: 16pt "BebasKai";
     selection-background-color: rgb(85, 85, 238);
 }
 QDoubleSpinBox:focus, QComboBox:focus { border: 2px solid #5555ee; }
-QDoubleSpinBox:disabled { background: #4a4f51; color: rgb(170, 170, 170); }
 QComboBox QAbstractItemView { background: white; color: black; font: 16pt "BebasKai"; }
 
 QPushButton {
     color: white;
     border: 2px solid black;
-    border-radius: 6px;
-    padding: 5px 14px;
+    border-radius: 5px;
+    padding: 4px 12px;
     background: qlineargradient(spread:pad, x1:0, y1:1, x2:0, y2:0,
         stop:0 rgba(46, 52, 54, 255), stop:0.5 rgba(82, 82, 83, 255),
         stop:0.86 rgba(82, 82, 83, 255), stop:1 rgba(213, 218, 216, 255));
@@ -70,24 +69,12 @@ QPushButton {
     min-height: 40px;
 }
 QPushButton:pressed {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5a5f61, stop:1 #2e3436);
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3a3f41, stop:1 #2e3436);
 }
 QPushButton#toggle:checked {
-    color: #0b2a3a;
-    background: qlineargradient(x1:0, y1:1, x2:0, y2:0,
-        stop:0 #2a8fc4, stop:0.5 #5ec8ff, stop:1 #c8ecff);
-    border-color: #1d6a92;
+    color: #8ae234;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #202425, stop:0.4 #2e3436, stop:1 #3a3f41);
 }
-QPushButton#btnGo {
-    font: 22pt "BebasKai";
-    background: qlineargradient(x1:0, y1:1, x2:0, y2:0,
-        stop:0 #3a3f9e, stop:0.5 #5555ee, stop:1 #9a9eff);
-    border-color: #2222aa;
-}
-QPushButton#btnRetract {
-    font: 18pt "BebasKai";
-    background: qlineargradient(x1:0, y1:1, x2:0, y2:0,
-        stop:0 #4e9a06, stop:0.5 #73d216, stop:1 #c4f08a);
-    color: #0f2a05;
-    border-color: #2f5d03;
-}
+QPushButton#btnGo { font: 20pt "BebasKai"; }
+QPushButton#btnRetract { font: 17pt "BebasKai"; }
