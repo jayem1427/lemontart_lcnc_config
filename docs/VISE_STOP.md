@@ -38,7 +38,8 @@ bottom (parallel top) in Z.**
 The right panel shows the H67 the way it sits on the table (jaws along X
 or Y), with the part centered, the stop pin in the spindle on the chosen side,
 and a red arrow for which way to push the part. Every picture uses the same
-camera (front-left, 45° down), so for jaws along Y the whole vise is simply
+camera (just right of front, 45° down, +Y pointing up and leaning right, the way
+the machine looks from the screen), so for jaws along Y the whole vise is simply
 turned 90° and the +X / +Y indicator in the bottom-left corner points the same
 way in all of them.
 

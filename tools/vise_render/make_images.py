@@ -90,7 +90,7 @@ def scene(vise, jaws, side):
     return objs, fit, u_pin
 
 
-CAM_AZIMUTH = -25.0     # front-left, the operator's side of the table
+CAM_AZIMUTH = 10.0      # just right of front: +Y points up, leaning right (operator at the screen)
 CAM_ELEVATION = 45.0    # high enough to see the pin over the part
 
 
@@ -113,8 +113,8 @@ def draw_axes(d, cam, size):
     """Corner indicator: +X and +Y machine directions as the camera sees them."""
     from PIL import ImageFont
     font = ImageFont.load_default(size=int(22 * SS))
-    o2 = np.array([92.0, size[1] - 78.0]) * SS          # bottom-left corner
-    L = 62.0 * SS
+    o2 = np.array([48.0, size[1] - 52.0]) * SS          # bottom-left corner
+    L = 50.0 * SS
     zero = cam.project(np.zeros(3))[:2]
     for vec, label in (((1.0, 0, 0), "+X"), ((0, 1.0, 0), "+Y")):
         dv = cam.project(np.array(vec) * 10.0)[:2] - zero
