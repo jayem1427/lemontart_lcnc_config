@@ -51,11 +51,13 @@ pin and a fixed part size. The numbers are the real ones.
    boss/pocket probing. Across the jaws, the self-centering vise puts every
    part on that line. Along the jaws, this is the point the part will be
    centered on.
-2. Set the vise WCS **Z** on the parallel top (= part bottom).
+2. Set the vise WCS **Z** once, somewhere you can touch off again: usually the
+   **top of the jaws**.
 3. On the tab, pick **JAWS RUN ALONG** (X or Y) so the picture matches the
-   table, then **VISE WCS** and **PIN TIP Z**. PIN TIP Z is the pin tip height in
-   the vise WCS: low enough to touch the side of your thinnest part, and above
-   the parallels.
+   table, then **VISE WCS** and **PIN TIP Z**. PIN TIP Z is measured from that
+   WCS Z0, so with Z0 on the jaw tops it is usually **negative**: low enough to
+   touch the side of your thinnest part, but still above the parallels (the
+   machine doesn't know where they are).
 
 ## Every part
 
@@ -72,7 +74,7 @@ The macro refuses to move if any of these is true:
 - No tool is loaded, or T99 (the touch probe) is loaded.
 - The tool has no diameter in the tool table.
 - The part length is 0.
-- PIN TIP Z is 0 or below (unset, or the pin would feed into the parallels).
+- PIN TIP Z is exactly 0 (never set). Negative is allowed: it means below the vise WCS Z0, e.g. below the jaw tops.
 - The vise WCS X, Y or Z is still zero (not probed).
 - PIN TIP Z would put the spindle above machine Z0.
 

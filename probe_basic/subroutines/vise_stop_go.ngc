@@ -6,7 +6,7 @@
 (Set by the VISE STOP tab - persistent in linuxcnc.var:)
 (  #5580 axis along the jaws: 0 = X, 1 = Y)
 (  #5581 part side of the pin: +1 = part toward +, -1 = part toward -)
-(  #5583 stop Z - tool tip height in the vise WCS)
+(  #5583 pin tip Z in the vise WCS - negative = below WCS Z0, e.g. below the jaw tops)
 (  #5585 part length along the jaws)
 (  #5586 vise WCS: 1 = G54 ... 6 = G59)
 (  #5582, #5584, #5587 are no longer used)
@@ -41,8 +41,8 @@ o<vise_stop_go> sub
   o106 if [#<length> LE 0]
     (ABORT, Vise stop: enter the part length along the jaws)
   o106 endif
-  o109 if [#<stop_z> LE 0]
-    (ABORT, Vise stop: STOP Z must be above the parallels - set it in the tab)
+  o109 if [ABS[#<stop_z>] LT 0.0001]
+    (ABORT, Vise stop: PIN TIP Z is not set - enter it in the tab)
   o109 endif
 
   #<base> = [5201 + 20 * #<wcs>]
@@ -51,7 +51,7 @@ o<vise_stop_go> sub
   o107 endif
   #<wcs_z> = #[#<base> + 2]
   o108 if [ABS[#<wcs_z>] LT 0.0001]
-    (ABORT, Vise stop: vise WCS Z is zero - set Z on the parallels once)
+    (ABORT, Vise stop: vise WCS Z is zero - set the vise WCS Z once, e.g. on the jaw tops)
   o108 endif
 
   G21 G90 G94 G40
