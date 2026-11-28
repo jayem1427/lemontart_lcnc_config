@@ -1,0 +1,45 @@
+diff --git a/cia402_homecomp.comp b/cia402_homecomp.comp
+index c668037..fe3c8ec 100644
+--- a/cia402_homecomp.comp
++++ b/cia402_homecomp.comp
+@@ -141,6 +141,8 @@ static int custom_makepins(int id, int njoints)
+         PIN(cia_peer_abort, HAL_BIT, HAL_OUT, 0, "peer-abort");
+         PIN(cia_timeout_ms, HAL_U32, HAL_IN, CIA_DEFAULT_TIMEOUT_MS,
+             "timeout-ms");
++        PIN(cia_home_ref_enable, HAL_BIT, HAL_IN, 0, "home-ref-enable");
++        PIN(cia_home_ref, HAL_FLOAT, HAL_IN, 0, "home-ref");
+ #undef PIN
+     }
+     return 0;
+@@ -198,7 +200,14 @@ static void custom_sync_position(int jno, bool at_home)
+     double actual = LCEC_PIN_FLOAT_GET(c->cia_pos_fb_in);
+ 
+     if (at_home) {
+-        joint->motor_offset = actual - joint->backlash_filt - H[jno].home_offset;
++        /* With 0x60E6 = 0 the drive reports 0x607C at the home point it
++           latched (the index), so its position after homing is the distance
++           it came to rest from that point.  home-ref (= 0x607C in machine
++           units) keeps that distance instead of declaring the resting
++           position to be HOME_OFFSET. */
++        double ref = LCEC_PIN_BIT_GET(c->cia_home_ref_enable) ?
++            LCEC_PIN_FLOAT_GET(c->cia_home_ref) : actual;
++        joint->motor_offset = ref - joint->backlash_filt - H[jno].home_offset;
+     }
+     joint->motor_pos_fb = actual;
+     joint->pos_fb = actual - (joint->backlash_filt + joint->motor_offset);
+diff --git a/cia402_homecomp.h b/cia402_homecomp.h
+index f631f82..aa15dec 100644
+--- a/cia402_homecomp.h
++++ b/cia402_homecomp.h
+@@ -50,6 +50,11 @@ typedef struct {
+     // Zero disables the timeout.  The default is applied at pin creation.
+     hal_u32_t *cia_timeout_ms;         // IN
+ 
++    // Optional: reference the home to the drive's own home point instead of
++    // the position where the drive came to rest after homing.
++    hal_bit_t *cia_home_ref_enable;    // IN
++    hal_float_t *cia_home_ref;         // IN; drive position of the home point
++
+     cia_home_state_t state;
+     int64_t elapsed_ns;
+     bool recover_position;

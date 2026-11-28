@@ -30,7 +30,8 @@ loadrt and2 count=12
 loadrt debounce cfg=1,3
 loadrt oneshot count=2
 loadrt flipflop count=2
-loadrt or2 count=6
+# DRIVE-HOMING: or2.6/7 = shared home bus guard (section 6). REVERT: count=6
+loadrt or2 count=8
 loadrt near count=3
 loadrt comp count=1
 loadrt constant names=probe-tool-num
@@ -86,6 +87,9 @@ addf or2.2 servo-thread
 addf or2.4 servo-thread
 addf flipflop.0 servo-thread
 addf flipflop.1 servo-thread
+# DRIVE-HOMING: guard must run after the flipflops and before motion. REVERT: delete both.
+addf or2.6 servo-thread
+addf or2.7 servo-thread
 setp debounce.0.delay 5
 setp debounce.1.delay 8
 setp oneshot.0.width 0.05
@@ -161,10 +165,10 @@ net x-stat-homing      cia402.0.stat-homing         => joint.0.cia-stat-homing
 net x-stat-home-err    cia402.0.stat-homing-error   => joint.0.cia-stat-homing-error
 net x-stat-fault       cia402.0.stat-fault          => joint.0.cia-stat-fault
 net x-stat-op-en       cia402.0.stat-op-enabled     => joint.0.cia-stat-op-enabled
-# Drive homing for this joint. Without this line cia402_homecomp falls back to LinuxCNC's own
-# homing, which with HOME_SEARCH_VEL = HOME_LATCH_VEL = 0 marks the joint homed WHERE IT STANDS.
-# Check joint.0.is-custom-homing = 1 before homing (test D1).
-setp joint.0.request-custom-homing 1
+# 1 = the drive homes this joint, 0 = LinuxCNC switch homing. TRAP: with 0 here AND
+# HOME_SEARCH_VEL = HOME_LATCH_VEL = 0 in the INI, the joint is marked homed WHERE IT STANDS.
+# Check joint.0.is-custom-homing against the INI before homing (test H1).
+setp joint.0.request-custom-homing [JOINT_0]DRIVE_HOME_ENABLE
 setp joint.0.cia-timeout-ms      [JOINT_0]DRIVE_HOME_TIMEOUT_MS
 # Drive-side homing settings, sent every cycle over the RxPDO (see ethercat-conf.xml)
 setp lcec.0.0.home-method      [JOINT_0]DRIVE_HOME_METHOD
@@ -197,12 +201,16 @@ net y-home             joint.1.cia-home            <=> cia402.1.home
 net y-stat-homed       cia402.1.stat-homed          => joint.1.cia-stat-homed
 net y-stat-homing      cia402.1.stat-homing         => joint.1.cia-stat-homing
 net y-stat-home-err    cia402.1.stat-homing-error   => joint.1.cia-stat-homing-error
-net y-stat-fault       cia402.1.stat-fault          => joint.1.cia-stat-fault
+# Shared bus guard: abort a Y drive home that starts with the Y/Z home bus already closed
+# (flipflop.1, section 6). The module reports it as "drive fault"; the machine stays on.
+net y-stat-fault       cia402.1.stat-fault          => or2.6.in0
+net y-bus-at-start     flipflop.1.out               => or2.6.in1
+net y-home-abort       or2.6.out                    => joint.1.cia-stat-fault
 net y-stat-op-en       cia402.1.stat-op-enabled     => joint.1.cia-stat-op-enabled
-# Drive homing for this joint. Without this line cia402_homecomp falls back to LinuxCNC's own
-# homing, which with HOME_SEARCH_VEL = HOME_LATCH_VEL = 0 marks the joint homed WHERE IT STANDS.
-# Check joint.1.is-custom-homing = 1 before homing (test D1).
-setp joint.1.request-custom-homing 1
+# 1 = the drive homes this joint, 0 = LinuxCNC switch homing. TRAP: with 0 here AND
+# HOME_SEARCH_VEL = HOME_LATCH_VEL = 0 in the INI, the joint is marked homed WHERE IT STANDS.
+# Check joint.1.is-custom-homing against the INI before homing (test H1).
+setp joint.1.request-custom-homing [JOINT_1]DRIVE_HOME_ENABLE
 setp joint.1.cia-timeout-ms      [JOINT_1]DRIVE_HOME_TIMEOUT_MS
 # Drive-side homing settings, sent every cycle over the RxPDO (see ethercat-conf.xml)
 setp lcec.0.1.home-method      [JOINT_1]DRIVE_HOME_METHOD
@@ -235,12 +243,15 @@ net z-home             joint.2.cia-home            <=> cia402.2.home
 net z-stat-homed       cia402.2.stat-homed          => joint.2.cia-stat-homed
 net z-stat-homing      cia402.2.stat-homing         => joint.2.cia-stat-homing
 net z-stat-home-err    cia402.2.stat-homing-error   => joint.2.cia-stat-homing-error
-net z-stat-fault       cia402.2.stat-fault          => joint.2.cia-stat-fault
+# Shared bus guard, as on Y (flipflop.0).
+net z-stat-fault       cia402.2.stat-fault          => or2.7.in0
+net z-bus-at-start     flipflop.0.out               => or2.7.in1
+net z-home-abort       or2.7.out                    => joint.2.cia-stat-fault
 net z-stat-op-en       cia402.2.stat-op-enabled     => joint.2.cia-stat-op-enabled
-# Drive homing for this joint. Without this line cia402_homecomp falls back to LinuxCNC's own
-# homing, which with HOME_SEARCH_VEL = HOME_LATCH_VEL = 0 marks the joint homed WHERE IT STANDS.
-# Check joint.2.is-custom-homing = 1 before homing (test D1).
-setp joint.2.request-custom-homing 1
+# 1 = the drive homes this joint, 0 = LinuxCNC switch homing. TRAP: with 0 here AND
+# HOME_SEARCH_VEL = HOME_LATCH_VEL = 0 in the INI, the joint is marked homed WHERE IT STANDS.
+# Check joint.2.is-custom-homing against the INI before homing (test H1).
+setp joint.2.request-custom-homing [JOINT_2]DRIVE_HOME_ENABLE
 setp joint.2.cia-timeout-ms      [JOINT_2]DRIVE_HOME_TIMEOUT_MS
 # Drive-side homing settings, sent every cycle over the RxPDO (see ethercat-conf.xml)
 setp lcec.0.2.home-method      [JOINT_2]DRIVE_HOME_METHOD
@@ -275,10 +286,10 @@ net a-stat-homing      cia402.3.stat-homing         => joint.3.cia-stat-homing
 net a-stat-home-err    cia402.3.stat-homing-error   => joint.3.cia-stat-homing-error
 net a-stat-fault       cia402.3.stat-fault          => joint.3.cia-stat-fault
 net a-stat-op-en       cia402.3.stat-op-enabled     => joint.3.cia-stat-op-enabled
-# Drive homing for this joint. Without this line cia402_homecomp falls back to LinuxCNC's own
-# homing, which with HOME_SEARCH_VEL = HOME_LATCH_VEL = 0 marks the joint homed WHERE IT STANDS.
-# Check joint.3.is-custom-homing = 1 before homing (test D1).
-setp joint.3.request-custom-homing 1
+# 1 = the drive homes this joint, 0 = LinuxCNC switch homing. TRAP: with 0 here AND
+# HOME_SEARCH_VEL = HOME_LATCH_VEL = 0 in the INI, the joint is marked homed WHERE IT STANDS.
+# Check joint.3.is-custom-homing against the INI before homing (test H1).
+setp joint.3.request-custom-homing [JOINT_3]DRIVE_HOME_ENABLE
 setp joint.3.cia-timeout-ms      [JOINT_3]DRIVE_HOME_TIMEOUT_MS
 # Drive-side homing settings, sent every cycle over the RxPDO (see ethercat-conf.xml)
 setp lcec.0.3.home-method      [JOINT_3]DRIVE_HOME_METHOD
@@ -310,7 +321,11 @@ net tool-number iocontrol.0.tool-prep-number
 #   Z home  lcec.0.1.di-4 (also 0.0.di-3/4 + 0.1.di-3 — shorted together)
 #   Z- lim  gagged (no free DI) | Z+ lim none | A home/limits gagged
 # Y+Z home shorted is OK: home one axis at a time (HOME_SEQUENCE Z->X->Y).
-# If the shared bus is already closed at REF, ignore it until it has been
+# DRIVE-HOMING: with drive homing the DRIVE reads the bus, and it can't ignore anything. A home
+# that starts with the bus closed would send the drive the wrong way looking for the switch to
+# open (Y toward +, Z DOWN), so the same flipflops abort it instead (or2.6/or2.7, section 4):
+# jog whichever of Y/Z is on its switch off it, then home again.
+# Switch homing (DRIVE_HOME_ENABLE = 0): if the shared bus is already closed at REF, ignore it until it has been
 # seen open, then latch the next close. Stops Y latching in place and Z
 # backing off down. not.9 is laser mux; not.3/10 used by that ignore logic.
 

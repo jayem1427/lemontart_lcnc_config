@@ -10,12 +10,20 @@
 #   scripts/install-drive-homing.sh stock      # launch.sh only
 #   scripts/install-drive-homing.sh tpnext     # launch-tpnext.sh only (no sudo)
 #
+# HOMECOMP_HOME_REF_PATCH=1 scripts/install-drive-homing.sh tpnext
+#   also applies patches/cia402_homecomp-home-ref.patch (docs/DRIVE_HOMING.md, "Changes to the
+#   homing module"). Only after test H2 shows it is needed.
+#
+# lcec stays on the v1.49.0 release tag: checked 2026-11-28, it is still the newest release, and
+# the 10 commits after it on master only touch the Delta ASDA driver.
+#
 # Run with LinuxCNC closed. Old modules are copied to ~/drive-homing-backup/<time>/ first.
 # Rollback: copy those files back (sudo for /usr/lib/linuxcnc/modules), or
 #   git -C ~/linuxcnc-ethercat checkout "$(cat ~/drive-homing-backup/<time>/lcec_prev_head)"
 #   and rebuild lcec as docs/SETUP.md describes. HOMEMOD must also come out of the INI.
 set -euo pipefail
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LCEC_TAG=v1.49.0
 HOMECOMP_COMMIT=b13bf72221ba38dfee9e299e8b64587caa29cec2
 LCEC_DIR="${LCEC_DIR:-$HOME/linuxcnc-ethercat}"
@@ -62,6 +70,11 @@ stage_homecomp() {
     echo "#define HOMING_BASE $2"
     if grep -q 'double home_search_dist' "$3"; then echo '#define CIA402_HOMING_HAS_DISTANCES 1'; fi
   } > "$b/homing_config.h"
+  if [[ "${HOMECOMP_HOME_REF_PATCH:-0}" == 1 ]]; then
+    ( cd "$b" && patch -p1 < "$HERE/patches/cia402_homecomp-home-ref.patch" ) \
+      || die "home-ref patch did not apply (cia402_homecomp moved on from $HOMECOMP_COMMIT?)"
+    echo "cia402_homecomp: home-ref patch applied (pins joint.N.cia-home-ref-enable / cia-home-ref)"
+  fi
 }
 
 # ---------- stock apt LinuxCNC (launch.sh) ----------
@@ -133,4 +146,4 @@ if [[ "$WHAT" == all || "$WHAT" == tpnext ]]; then install_tpnext; fi
 
 echo
 echo "Done. Backups and the previous lcec commit are in $BACKUP"
-echo "Next: docs/DRIVE_HOMING.md test D1 (load check with the machine OFF, then jog before any homing)."
+echo "Next: docs/DRIVE_HOMING.md test H1 (load check with the machine OFF, then jog before any homing)."

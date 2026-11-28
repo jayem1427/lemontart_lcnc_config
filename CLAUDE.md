@@ -125,10 +125,15 @@ their own machine: plain language, short sections, real values from the config.
   | Software E-stop (NC) | `lcec.0.3.di-1` | gates `emc-enable-in` |
 
 - **Homing:** REF ALL runs Z(seq 0) → X(1) → Y(2) → A(3, in place). Branch `dev-drive-homing`
-  switches to drive-internal homing (hard stop + Z pulse) via upstream `cia402_homecomp`
-  (`[EMCMOT]HOMEMOD`) + lcec **1.49** `cia402`, which also does position scaling there
-  (`scripts/install-drive-homing.sh`; own-component fallback on `dev-drive-homing-a6home`);
-  see `docs/DRIVE_HOMING.md` and don't home with it before test D0 has passed.
+  (this branch) moves homing into the drives: home switch, then encoder index, via upstream
+  `cia402_homecomp` (`[EMCMOT]HOMEMOD`) + lcec **1.49** `cia402`, which also does position
+  scaling here (`scripts/install-drive-homing.sh`). Staged per joint with
+  `[JOINT_N]DRIVE_HOME_ENABLE`: **X (method 5) and A (34) drive-homed; Y and Z still switch-homed**
+  (Y shares its input with Z; Z's switch isn't wired to its own drive). `DRIVE_HOME_ENABLE = 0`
+  with search/latch velocity 0 homes a joint in place: change the three together. A Y/Z drive
+  home that starts with the shared bus closed is aborted by HAL ("drive fault", no motion).
+  Untested on the machine: follow `docs/DRIVE_HOMING.md` tests H0–H8 in order, and don't home X
+  before H1.5 (switch polarity in the drive) has passed.
   `NO_FORCE_HOMING = 1` (Jon wants to be able to jog unhomed). Same-sign latch,
   `HOME_IGNORE_LIMITS=YES`, and HAL ignores a shared bus that's already closed when
   a home starts. The pendant MPG is wired to both joint and axis jog pins.
@@ -205,7 +210,9 @@ their own machine: plain language, short sections, real values from the config.
   (2026-09-18) and changed `homing.c` (sync groups, bounded moves, abort
   fixes; `homing.h` unchanged). homecomp CI builds against 2.10.0-pre2 (has the
   64-bit API), so build it against the tpnext RIP tree, not the stock 2.9.8
-  headers, and re-run D1/D2 on the tpnext launcher. No conflict with the tuner:
+  headers, and rebuild it after every tpnext update. Re-checked 2026-11-28: v1.49.0 is
+  still the newest lcec release. Optional module patch in `patches/` (home taken from
+  the drive's index, not its resting position), decided by test H2. No conflict with the tuner:
   both branches keep the 60F4/6077/606C PDOs and the `*-s32` signals.
 
 - **Spindle back on Modbus (2026-11-18)** on its own CH340 adapter; fault→E-stop net reconnected. Confirm M3/at-speed/fault read on the machine.

@@ -11,7 +11,7 @@ you're working on.
 | [SETUP.md](SETUP.md) | Installing the software, getting the config, step-by-step bring-up, EtherCAT driver choice (native vs generic) and realtime timing |
 | [HARDWARE.md](HARDWARE.md) | Parts list, wiring, drive inputs, RS-485, E-stop |
 | [CONFIG_TOUR.md](CONFIG_TOUR.md) | How the files fit together, homing, following error, differences from stock |
-| [DRIVE_HOMING.md](DRIVE_HOMING.md) | Drive-internal homing (hard stop + Z pulse) via upstream `cia402_homecomp` + lcec 1.49, its test plan. **Branch `dev-drive-homing`, untested on the machine** |
+| [DRIVE_HOMING.md](DRIVE_HOMING.md) | Drive-internal homing (home switch, then encoder index) via upstream `cia402_homecomp` + lcec 1.49: staged per axis, test plan, repeatability plan, torque-homing research. **Branch `dev-drive-homing`, untested on the machine** |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Symptoms and their real causes |
 
 ## Features

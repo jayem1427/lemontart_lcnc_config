@@ -62,7 +62,7 @@ This is what the mill runs today. Matching it closely saves a lot of grief.
    Drive homing (branch `dev-drive-homing`) needs v1.49.0 and the
    `cia402_homecomp` module. `scripts/install-drive-homing.sh` installs both,
    for stock LinuxCNC and the tpnext build; see
-   [DRIVE_HOMING.md](DRIVE_HOMING.md) test D1.
+   [DRIVE_HOMING.md](DRIVE_HOMING.md) test H1.
 6. **Probe Basic.** Add the QtPyVCP apt repo and `sudo apt install python3-probe-basic`.
    The [Probe Basic docs](https://github.com/kcjengr/probe_basic) cover this.
 7. **Extras.** `sudo apt install python3-pyqtgraph python3-numpy mpg123`.

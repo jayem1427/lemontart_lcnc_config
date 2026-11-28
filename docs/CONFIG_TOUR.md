@@ -93,7 +93,7 @@ is enough.
 
 ## Homing
 
-> **Branch `dev-drive-homing`:** the drives home themselves (hard stop, then Z pulse;
+> **Branch `dev-drive-homing`:** the drives home themselves (home switch, then encoder index; X and A first;
 > A to its Z pulse). LinuxCNC starts and supervises it through the upstream
 > `cia402_homecomp` homing module (`[EMCMOT]HOMEMOD`) and lcec ≥ 1.49 `cia402`,
 > which also takes over position scaling. The table below is the switch homing on
