@@ -1,17 +1,24 @@
-/* VISE STOP - Probe Basic look: PB's grey gradient buttons with black borders,
-   white entry fields with black text, BebasKai, #2e3436 / #363b3d.
-   Colour only means state: green text = selected, amber = attention, red = blocked. */
+/* VISE STOP - Probe Basic look, matched to the CONVERSATIONAL page:
+   page = PB's tab grey #818584, panels = the conversational panel gradient
+   with a 2px black border. PB grey gradient buttons with black borders, white
+   entry fields with black text, BebasKai.
+   Colour only means state: green text = selected, amber = attention, red = blocked.
+   REVERT: dark look (2026-11-27) was page #2e3436, panel #363b3d with a
+   #1e2122 border, title bar #3d4244. */
 
 QWidget#VISE {
-    background-color: #2e3436;
+    background-color: #818584;
     color: rgb(238, 238, 236);
     font: 14pt "BebasKai";
 }
 
 QFrame#panel {
-    background-color: #363b3d;
-    border: 1px solid #1e2122;
-    border-radius: 5px;
+    border: 2px solid black;
+    border-radius: 6px;
+    background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1,
+        stop:0 rgb(81, 86, 85), stop:0.160246 rgb(83, 84, 91),
+        stop:0.489795 rgb(99, 102, 102), stop:0.699799 rgb(85, 88, 94),
+        stop:0.90444 rgb(77, 84, 86), stop:1 rgb(109, 115, 118));
 }
 QFrame#panel QLabel { background: transparent; border: none; }
 
@@ -19,19 +26,17 @@ QLabel#panelTitle {
     color: white;
     font: 16pt "BebasKai";
     padding: 6px 14px 4px 14px;
-    background-color: #3d4244;
+    background: transparent;
     border: none;
-    border-bottom: 1px solid #1e2122;
-    border-top-left-radius: 5px;
-    border-top-right-radius: 5px;
+    border-bottom: 1px solid black;
 }
 
 QLabel#fieldLabel { color: #d3d7cf; font: 14pt "BebasKai"; }
 
 QFrame#sep {
     border: none;
-    border-top: 1px solid #1e2122;
-    border-bottom: 1px solid #4a4f51;
+    border-top: 1px solid black;
+    border-bottom: 1px solid rgb(120, 125, 126);
 }
 
 QFrame#dro {

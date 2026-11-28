@@ -158,8 +158,13 @@ are at the top of `make_images.py`.
 
 ## Layout
 
-Two panels, styled like the rest of Probe Basic (grey gradient buttons, white
-fields, green text on a selected toggle):
+Two panels, styled like Probe Basic's CONVERSATIONAL page (2026-11-28): page
+background is PB's tab grey `#818584`, panels use the conversational panel
+gradient (`rgb(81,86,85)` → `rgb(109,115,118)`) with a 2 px black border and
+6 px corners, grey gradient buttons, white fields, green text on a selected
+toggle. All of it is in `vise_stop.qss`; the old dark look is noted in a
+`REVERT:` comment at the top. The renders have a transparent background, so
+they sit on whatever the panel colour is.
 
 - **VISE STOP** (left): JAW AXIS, VISE WCS, PART LENGTH, PIN SIDE, the
   pin-position readout, then GO TO STOP and RETRACT. The line above the buttons
