@@ -90,11 +90,14 @@ def scene(vise, jaws, side):
     return objs, fit, u_pin
 
 
+CAM_AZIMUTH = -25.0     # front-left, the operator's side of the table
+CAM_ELEVATION = 45.0    # high enough to see the pin over the part
+
+
 def camera(axis, side):
-    """Operator's view from the front, swung toward the pin so it is not hidden by the part."""
-    if axis == "X":
-        return r.Ortho(-38 if side > 0 else 38, 38)   # pin on -X: look from front-left
-    return r.Ortho(30, 50 if side < 0 else 38)          # pin at +Y (back): look over the part
+    """One fixed camera for every picture: only the vise turns between X and Y,
+    so the +X/+Y indicator points the same way in all of them."""
+    return r.Ortho(CAM_AZIMUTH, CAM_ELEVATION)
 
 
 def to_machine(objs, fit, axis):

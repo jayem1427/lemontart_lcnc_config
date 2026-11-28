@@ -37,10 +37,10 @@ bottom (parallel top) in Z.**
 
 The right panel shows the H67 the way it sits on the table (jaws along X
 or Y), with the part centered, the stop pin in the spindle on the chosen side,
-and a red arrow for which way to push the part. The camera always looks from
-the front, swung toward the pin. The +X / +Y indicator in the bottom-left corner
-shows the machine axes as that camera sees them, so you can match the picture to
-the table.
+and a red arrow for which way to push the part. Every picture uses the same
+camera (front-left, 45° down), so for jaws along Y the whole vise is simply
+turned 90° and the +X / +Y indicator in the bottom-left corner points the same
+way in all of them.
 
 The picture's frame turns red if the touch probe is loaded or the tool has no
 diameter. The picture is drawn with a 6 mm
