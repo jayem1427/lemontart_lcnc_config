@@ -240,11 +240,12 @@ def _drop_section(lines, match_fn):
     start, end = _find_section(lines, match_fn)
     if start is None:
         return lines, False
-    # take the blank line before the header with it, keep the rest tidy
-    cut = start
-    if cut > 0 and not lines[cut - 1].strip():
-        cut -= 1
-    return lines[:cut] + lines[end:], True
+    # The section's range already ends with its trailing blank line, so
+    # cutting [start, end) leaves exactly one blank between its neighbours.
+    out = lines[:start] + lines[end:]
+    if 0 < start < len(out) and not out[start - 1].strip() and not out[start].strip():
+        del out[start]
+    return out, True
 
 
 def _tool_match(tool):

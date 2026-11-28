@@ -42,9 +42,9 @@ class CoolantProfileTests(unittest.TestCase):
 
     def test_inherit_unspecified_keys(self):
         default, tools = load_profiles(SHIPPED)
-        self.assertEqual(tools[9].freq, default.freq)
-        self.assertEqual(tools[9].pressure, default.pressure)
-        self.assertEqual(tools[9].duty, 1)
+        self.assertEqual(tools[3].freq, default.freq)          # Heavy leaves PRESSURE out
+        self.assertEqual(tools[3].pressure, default.pressure)
+        self.assertEqual(recipe_for_tool(default, tools, 9), default)  # no entry
 
     def test_unknown_tool_uses_default(self):
         default, tools = load_profiles(SHIPPED)
@@ -209,6 +209,19 @@ class PresetTests(unittest.TestCase):
                 save_preset(path, bad, {"FREQ": 1, "DUTY": 1})
         with self.assertRaises(ValueError):
             assign_preset(path, 0, "Heavy")
+
+    def test_removing_sections_keeps_one_blank_line_between(self):
+        path = self._tmp()
+        delete_preset(path, "Heavy")
+        clear_tool(path, 3)
+        with open(path) as fh:
+            lines = fh.read().splitlines()
+        for idx, line in enumerate(lines):
+            if line.startswith("[") and idx > 0:
+                above = lines[idx - 1]
+                self.assertTrue(above == "" or above.startswith("#"),
+                                "section %s glued to %r" % (line, above))
+        self.assertNotIn("", [a for a, b in zip(lines, lines[1:]) if a == "" and b == ""])
 
     def test_clear_tool_returns_to_default(self):
         path = self._tmp()

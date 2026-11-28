@@ -58,15 +58,16 @@ older files had only these, and they still work). Tools with no section use
 `[DEFAULT]`, and T0 (empty spindle) is always dry. If a tool names a preset
 that doesn't exist, M202 uses `[DEFAULT]` and shows one message saying so.
 
-Shipped presets (converted 2026-11-28 from the old per-tool numbers, every
-tool kept its values):
+Presets on this mill (2026-11-28; every tool kept its old values):
 
 | Preset | Hz / duty | Tools |
 |--------|-----------|-------|
-| Standard | 10 / 1 % | T9, T10, T14, T17 |
 | Heavy | 10 / 2 % | T3, T12, T18 |
 | Light pulse | 1 / 0.3 % | T1 |
 | Dry | 0 / 0 % | T99 (touch probe) |
+
+Every other tool (T9, T10, T14, T17 included) has no entry and uses
+`[DEFAULT]`, 10 Hz / 1 %.
 
 ### The MQL tab
 
