@@ -24,7 +24,7 @@ Where this page and a config file disagree, **the config file wins**:
 | Pendant | XHC WHB04B-6 wireless (USB `10ce:eb93`) | |
 | USB-RS485 #1 | CH340-based (`1a86:7523`) | Spindle VFD |
 | USB-RS485 #2 | FTDI FT232R (`0403:6001`, serial `BG02XIBV`) | Coolant |
-| PC NIC for EtherCAT | Any NIC the IgH `generic` driver supports | Dedicated to the drives |
+| PC NIC for EtherCAT | Onboard Intel I219-LM on the IgH native `ec_e1000e` driver | Dedicated to the drives. Any NIC works on the `generic` driver; see [SETUP.md](SETUP.md#ethercat-driver-and-timing) |
 
 ---
 
@@ -53,9 +53,36 @@ distributed clocks in **M2R** mode (`refClockSyncCycles="-1"` in
 
 ---
 
+## A6-EC drive notes
+
+What has held up on these four drives (vendor `0x00400000`, product
+`0x00000715`, firmware `AS715N_sAxis_V0.10`) with IgH + linuxcnc-ethercat.
+The config that goes with it is [`ethercat-conf.xml`](../ethercat-conf.xml).
+
+| Topic | What works here |
+|-------|-----------------|
+| Distributed clocks | `assignActivate="300"`, SYNC0 = 1 × cycle, shift 300 µs, 1 ms cycle. The master leads (**M2R**, `refClockSyncCycles="-1"`). With the reference clock leading (R2M) the machine shook violently on enable |
+| Mode | CSP, `0x6060 = 8` |
+| Digital inputs | Read raw from PDO `0x2040:05` (bits 0–4 = DI1–DI5). The drive's own input functions are cleared with `0x2004:01/05/09/0D/11 = 0`, so homes and limits are LinuxCNC's business only |
+| Following error | The drive enforces `0x6065` (counts) and `0x6066` (ms): Er47.0, EtherCAT error code `0x8611`. Read the last error with `ethercat upload -p N -t uint16 0x603F 0` |
+| SDO writes persist | C13.10 (`0x2013:11`) = 1 on all four: **every SDO write is stored in EEPROM**. A "temporary" write is permanent unless you write the old value back |
+| Start-up SDOs | lcec writes them on every start, so loop gains (C00/C01) there overwrite your tuning each launch. Only mode, fault windows, input functions and the speed observer (`0x2001:11 = 3`) belong there |
+| Feedback PDOs | `0x6064` position and `0x60F4` following error update every cycle. `0x606C` velocity and `0x6077` torque **stair-step** (held 17–36 ms at a 1 ms cycle): fine for display, not for per-cycle analysis |
+| SDO types | The drive doesn't describe its object types, so `ethercat upload/download` needs `-t` |
+| Bus health counters | C13.04 `0x2013:05` sync loss, C13.09 `0x2013:0A` invalid frames, C13.12 `0x2013:13` IRQ loss (all read only) |
+| Not reachable | Drive-internal inertia identification (C07 / F30) isn't available over EtherCAT on this firmware |
+| Homing | Done by LinuxCNC on switches. `HOME_ABSOLUTE_ENCODER = 1` caused a runaway; don't use it. Drive-side homing is being worked on in branch `dev-drive-homing` (`docs/DRIVE_HOMING.md` there), not yet run on the machine |
+
+Tuning the gains over EtherCAT: [SERVO_TUNING.md](SERVO_TUNING.md). NIC driver
+and timing: [SETUP.md](SETUP.md#ethercat-driver-and-timing).
+
+---
+
 ## Drive inputs
 
-Every A6-EC has the same 15-pin CN1 connector. Each drive's inputs show up in
+Every A6-EC has the same 15-pin CN1 connector. It is the **high-density
+3-row** kind (HD15 / DE-15, VGA size), not a 2-row DB15, although these docs
+call it DB15 for short. Each drive's inputs show up in
 HAL as `lcec.0.<slave>.di-1` … `di-5`, read straight from PDO `0x2040:05`.
 The config clears the drive's own input functions at startup (`0x2004`
 subindexes set to 0), so the drive never acts on these inputs by itself. They
@@ -115,8 +142,9 @@ Two layers:
    with the UI's enable (`and2.2`) into `iocontrol.0.emc-enable-in`, so opening
    it turns the machine off in LinuxCNC.
 
-The drives also enforce their own following-error limit: 0.5 mm (0.5° on A)
-for 250 ms, which trips drive fault Er47.0. See
+The drives also enforce their own following-error limit: 0.5 mm for 250 ms,
+which trips drive fault Er47.0. (A is normally 0.5°, widened to 10° while its
+motor is mechanically unconnected.) See
 [CONFIG_TOUR.md](CONFIG_TOUR.md#following-error).
 
 ---

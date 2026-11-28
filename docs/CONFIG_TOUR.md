@@ -122,12 +122,12 @@ Following error is checked in two places, on purpose:
 | Where | Limit | Role |
 |-------|-------|------|
 | LinuxCNC (INI `FERROR` / `MIN_FERROR`) | 1270 / 254 mm | Effectively off |
-| Drive (SDO 6065 / 6066) | 0.5 mm (0.5° on A) for 250 ms → fault Er47.0 → `amp-fault-in` | **The real protection** |
+| Drive (SDO 6065 / 6066) | 0.5 mm (A: 0.5°, widened to 10° while unconnected) for 250 ms → fault Er47.0 → `amp-fault-in` | **The real protection** |
 
 The drive measures following error at its own servo rate, without the
 EtherCAT round-trip lag LinuxCNC sees, so it's the better place for the limit.
-The tuning tools temporarily raise 6065 to 2.0 during test moves and always
-restore it.
+The tuning tools temporarily raise 6065 during test moves (2.0 mm for inertia
+ID, 1.0 mm for one-click) and always restore it.
 
 If you'd rather have LinuxCNC enforce it too, tighten `FERROR` per joint
 after tuning, and check you don't get false trips under cutting loads.
